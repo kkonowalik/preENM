@@ -13,6 +13,8 @@ Data preparation:
 \item \code{\link[=delimit_m]{delimit_m()}}, \code{\link[=linking_distance]{linking_distance()}}, \code{\link[=m_scenarios]{m_scenarios()}}, \code{\link[=plot_m_area]{plot_m_area()}},
 \code{\link[=write_m_area]{write_m_area()}}, \code{\link[=crop_to_m]{crop_to_m()}}: the accessible area (M).
 \item \code{\link[=crop_rasters]{crop_rasters()}}: cut folders of raster files to M, keeping values exact.
+\item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}}: predictor
+sets uncorrelated in every period, scenario and region, ranked.
 \item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}, \code{\link[=sample_background]{sample_background()}}: one
 record per raster cell and background points.
 }

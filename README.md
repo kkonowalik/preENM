@@ -19,7 +19,7 @@ your own code.
 | **Cutting raster files to M** | **available** | `crop_rasters()`, `crop_to_m()` |
 | **One point per raster cell, background points** | **available** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Environmental thinning | planned | |
-| Correlation analysis | planned | |
+| **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()` |
 
 ### Model evaluation and selection
@@ -196,6 +196,79 @@ env_m <- crop_to_m(env, m)               # predictors clipped to M
 The example above uses simulated records with a hollow between two arms of the
 range. The default Delaunay M leaves the hollow out; an expert polygon or a
 cluster hull includes it.
+
+## Selecting predictor variables across periods and regions
+
+Collinearity between predictors can change through time. A set that is
+uncorrelated today may be collinear at the Last Glacial Maximum or in 2070,
+or inside a mountain range, and a model projected there then rests on
+unstable relationships. `select_variables()` therefore searches **every**
+subset of the candidate variables. It keeps the sets uncorrelated in all
+periods (or scenarios) and regions, scores them on transferability, and
+returns a **ranked list of sets** for you to choose from on ecological
+grounds, instead of one automatic answer.
+
+1. `sample_environment()` draws area-proportional random cells from each
+   data set (e.g. present, LGM, future scenarios), plus cells common to all.
+   It can add anomaly ("delta") data sets at those cells, and assigns cells
+   to regions (polygons such as the Alps, the Carpathians and Scandinavia,
+   or a grid of tiles).
+2. **Screen:** a set passes when every pair has |Spearman rho| < 0.8 and the
+   rank-based VIF is at most 5 in every data set. Inside regions the limits
+   are softer (0.85 and 10). Optionally, every set must contain at least one
+   variable of each group, e.g. one temperature and one moisture variable.
+3. **Scores:**
+   - `novelty`: the share of cells of the target period outside present
+     conditions (MESS < 0);
+   - `gradient_min`: whether each variable keeps its spatial pattern
+     between periods;
+   - `agreement_min`: the agreement of two data sources for the same period;
+   - `worst_vif` and `regional_vif`.
+4. **Ranking:** within each set size, the Pareto front and a transparent
+   mean rank. There is no hand-made total score.
+
+```r
+vars <- c("bio01", "bio04", "bio05", "bio06", "bio07", "bio10", "bio11",
+          "bio12", "bio13", "bio14", "bio15", "bio16", "bio17", "scd")
+regions <- sf::st_read("regions.gpkg")        # e.g. Alps, Carpathians, Scandes
+
+es <- sample_environment(
+  list(CHELSA = "M_area_current",              # folders or SpatRasters;
+       TraCE_present = "M_area_TraCE_present", # layers matched by name,
+       LGM = "M_area_LGM"),                    # e.g. ..._bio01_... -> bio01
+  vars = vars, regions = regions, n = 1e5, seed = 1,
+  anomalies = list(LGM_delta = c(current = "CHELSA", past = "LGM",
+                                 model_present = "TraCE_present")),
+  ratio_vars = c("bio12", "bio13", "bio14", "bio16", "bio17"),
+  bounds = list(scd = c(0, 365)), fix_scale = TRUE)  # TraCE bio07 is x 10
+
+vs <- select_variables(
+  es, sizes = 3:6,
+  targets = c("LGM", "LGM_delta"),               # periods scored for novelty
+  agreement = c("CHELSA", "TraCE_present"),       # same period, two sources
+  require_one_of = list(
+    temperature = c("bio01", "bio05", "bio06", "bio10", "bio11", "scd"),
+    moisture    = c("bio12", "bio13", "bio14", "bio16", "bio17")),
+  reference_sets = list(first_choice = c("bio04", "bio05", "bio06",
+                                         "bio14", "bio15")))
+vs                               # counts per filter, best sets per size
+best_sets(vs, n = 10, size = 4)  # ranked sets with their scores
+vs$frequency                     # how often each variable is in good sets
+vs$pairs                         # each pair: rho per data set, driver, ...
+plot_variable_tree(vs, best_sets(vs)$set[1])
+plot_variable_sets(vs)
+write_variable_selection(vs, "correlation", "dryas")
+```
+
+For future climate, use the scenarios as data sets, e.g.
+`list(present = ..., ssp126_2070 = ..., ssp585_2070 = ...)`. Every scenario
+then enters the screen, and `novelty` reports the worst one.
+
+![Scored variable sets](man/figures/variable_sets.png)
+![Union tree with the best set](man/figures/variable_tree.png)
+
+The figures use simulated climate (present, a second present-day source and
+an LGM with exaggerated gradients).
 
 ## Cutting raster files to M
 

@@ -1,3 +1,24 @@
+# preENM 2.4.0
+
+Selection of predictor variables across periods, scenarios and regions,
+generalised from the correlation workflow for *Dryas octopetala*:
+
+* `sample_environment()`: area-proportional random cells from several data
+  sets (present, past periods, future scenarios), cells common to all,
+  anomaly ("delta") data sets built at those cells, regions from polygons or
+  tiles, layers matched by name, rasters read block by block, and a check for
+  variables stored x 10 in one data set.
+* `select_variables()`: systematic search of every variable subset: a pair
+  and VIF screen in every data set and region, optional required groups
+  (e.g. temperature and moisture), and scores for novelty (MESS),
+  gradient stability, agreement between data sources and VIF. Results: the
+  Pareto front, mean rank, variable frequencies, reference sets, a pair
+  table (rho per data set, driver, sign changes), consistency between data
+  sources, and the union dendrogram.
+* `best_sets()`, `plot_variable_tree()`, `plot_correlation()`,
+  `plot_variable_sets()`, `write_variable_selection()` (CSV, Newick tree,
+  PNG).
+
 # preENM 2.3.0
 
 * `crop_rasters()`: batch cropping and masking of raster files (e.g. all

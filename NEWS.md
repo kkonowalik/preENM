@@ -1,3 +1,9 @@
+# preENM 2.4.1
+
+* Fix: `crop_rasters()` failed for every file with recent GDAL versions
+  ("Failed to parse ' 2' as number"), because numbers passed to GDAL were
+  padded with spaces. Affected 2.3.0 and 2.4.0 on Linux and Windows.
+
 # preENM 2.4.0
 
 Selection of predictor variables across periods, scenarios and regions,

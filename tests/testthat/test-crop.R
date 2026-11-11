@@ -112,5 +112,8 @@ test_that("safety checks", {
                  "failed")
   expect_match(r$status, "^failed")
   expect_equal(default_nodata("INT2S"), "-32768")
+  # GDAL arguments carry no padding (newer GDAL rejects " 2")
+  expect_equal(num_arg(c(2, 42.25, -180, 1 / 120)),
+               c("2", "42.25", "-180", "0.00833333333333333"))
   expect_equal(default_nodata("FLT4S"), "nan")
 })

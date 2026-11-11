@@ -2,7 +2,7 @@ Package: preENM
 Type: Package
 Title: Data Preparation and Model Selection for Ecological Niche and Species
     Distribution Models
-Version: 2.4.0
+Version: 2.4.1
 Authors@R:
     person("Kamil", "Konowalik", role = c("aut", "cre", "cph"),
            email = "kamil.konowalik@gmail.com")

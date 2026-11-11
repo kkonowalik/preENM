@@ -136,10 +136,9 @@ crop_rasters <- function(files, m, out_dir, variables = NULL,
         "no overlap"
       } else {
         e <- terra::align(e, r, snap = "out")
-        opts <- c("-te", format(c(terra::xmin(e), terra::ymin(e),
-                                  terra::xmax(e), terra::ymax(e)),
-                                digits = 15),
-                  "-tr", format(terra::res(r), digits = 15),
+        opts <- c("-te", num_arg(c(terra::xmin(e), terra::ymin(e),
+                                   terra::xmax(e), terra::ymax(e))),
+                  "-tr", num_arg(terra::res(r)),
                   "-r", "near", "-overwrite",
                   "-co", paste0("COMPRESS=", compress), "-co", "TILED=YES",
                   "-co", "BIGTIFF=IF_SAFER")
@@ -192,3 +191,7 @@ default_nodata <- function(datatype) {
          INT8U = "18446744073709551615", INT8S = "-9223372036854775808",
          "nan")
 }
+
+# Numbers as GDAL arguments: full precision and no padding (format() pads a
+# vector to a common width, e.g. " 2", which newer GDAL versions reject)
+num_arg <- function(x) sprintf("%.15g", x)

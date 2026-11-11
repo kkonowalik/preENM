@@ -6,7 +6,16 @@
 \alias{preENM-package}
 \title{preENM: data preparation and model selection for ENM/SDM}
 \description{
-Main functions:
+Data preparation:
+\itemize{
+\item \code{\link[=read_gbif]{read_gbif()}}, \code{\link[=filter_occurrences]{filter_occurrences()}}, \code{\link[=filter_settings]{filter_settings()}},
+\code{\link[=filter_layers]{filter_layers()}}: rule-based filtering of occurrence records.
+\item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}, \code{\link[=sample_background]{sample_background()}}: one
+record per raster cell and background points.
+}
+}
+\details{
+Model evaluation and selection:
 \itemize{
 \item \code{\link[=evaluate_models]{evaluate_models()}}: AUC, MAE and bias for one or many models, Pareto
 ranking and bootstrap robustness.
@@ -15,8 +24,7 @@ ranking and bootstrap robustness.
 \item \code{\link[=pareto_rank]{pareto_rank()}}: generic multi-criteria Pareto ranking.
 \item \code{\link[=simulate_enm_data]{simulate_enm_data()}}: example data.
 }
-}
-\details{
+
 Please cite Konowalik & Nosol (2021) \doi{10.1038/s41598-020-80062-1}
 when using this package (see \code{citation("preENM")}).
 }

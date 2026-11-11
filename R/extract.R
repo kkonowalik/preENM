@@ -100,12 +100,15 @@ as_points <- function(x, coords = NULL, crs = "EPSG:4326") {
 
 guess_coords <- function(nms) {
   low <- tolower(nms)
+  # standard lon/lat first (e.g. merge_occurrences() output, which may also
+  # keep the original GBIF columns), then common alternatives
   candidates <- list(
-    c("decimallongitude", "decimallatitude"),
-    c("longitude", "latitude"),
     c("lon", "lat"),
+    c("longitude", "latitude"),
+    c("decimallongitude", "decimallatitude"),
     c("long", "lat"),
     c("lng", "lat"),
+    c("x_long", "y_lat"),
     c("x", "y")
   )
   for (cand in candidates) {

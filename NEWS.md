@@ -1,3 +1,32 @@
+# preENM 2.1.0
+
+Point filtering, one point per cell and background points, generalised from
+a complete GBIF workflow for *Dryas octopetala*:
+
+* `filter_occurrences()`: rule-based filtering of occurrence records,
+  designed especially for GBIF downloads. 29 tests in a fixed order (each
+  record keeps the first one it fails), each optional, with adjustable
+  thresholds: duplicates, atlas grid cell centres, GBIF issues, basis of
+  record, establishment means, coordinate uncertainty and decimals, garden
+  and settlement text, country names as localities, record year, manual
+  lists, gridded datasets (uncertainty blocks, lattices, stacked datasets),
+  CoordinateCleaner tests, range polygon, distance to the shoreline, water,
+  climate, built-up, cropland and GHS settlement layers, isolation and
+  climate limits with a refuge rule.
+* `filter_settings()` with the presets `"strict"` and `"lenient"`;
+  `filter_layers()` for the optional layers; `filter_tests()`.
+* Results: `kept()`, `removed()`, `filter_report()`, `filter_sensitivity()`,
+  `record_fate()`, `write_filter_results()`.
+* `read_gbif()` reads GBIF downloads (`.csv` or `.zip`) keeping coordinates
+  as written.
+* `merge_occurrences()`, `thin_by_cell()` (one record per raster cell, with
+  source priority, centred in the cell) and `sample_background()` (random
+  background sets from cells valid in all layers).
+* Optional download helpers: `download_shoreline()` (GSHHG),
+  `download_landcover()` (via geodata) and `aggregate_ghs()` (GHS-BUILT-S).
+* `dbscan` is now imported; CoordinateCleaner, countrycode, geodata, readr,
+  rnaturalearth and stringi are suggested.
+
 # preENM 2.0.0
 
 * The package is renamed from `ENMselect` to **`preENM`** and the repository

@@ -1,6 +1,12 @@
 #' preENM: data preparation and model selection for ENM/SDM
 #'
-#' Main functions:
+#' Data preparation:
+#' * [read_gbif()], [filter_occurrences()], [filter_settings()],
+#'   [filter_layers()]: rule-based filtering of occurrence records.
+#' * [merge_occurrences()], [thin_by_cell()], [sample_background()]: one
+#'   record per raster cell and background points.
+#'
+#' Model evaluation and selection:
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto
 #'   ranking and bootstrap robustness.
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.

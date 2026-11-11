@@ -14,8 +14,8 @@ your own code.
 
 | Step | Status | Functions |
 |---|---|---|
-| Point filtering | planned | |
-| Background point selection | planned | |
+| **Point filtering** (especially GBIF) | **available** | `read_gbif()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
+| **One point per raster cell, background points** | **available** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Environmental thinning | planned | |
 | Correlation analysis | planned | |
 | **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()` |
@@ -60,6 +60,99 @@ install.packages("remotes")
 remotes::install_github("kkonowalik/preENM")
 install.packages("ggrepel")   # optional: neater labels in plots
 ```
+
+## Point filtering
+
+`filter_occurrences()` removes records unsuitable for niche modelling with a
+fixed, ordered list of transparent rules. It is designed especially for
+**GBIF downloads**, but works on any table with coordinates: tests whose
+columns are missing are skipped. Nothing is removed silently. Each record
+keeps the **first** test it failed in the `reason` column and is kept only if
+it passes every active test, so every decision can be checked.
+
+| Group | Tests (in order) | Needs |
+|---|---|---|
+| Records and metadata | `invalid_coordinates`, `duplicate`, `grid_cell_centre` (atlas cell centres recognised from the uncertainty), `gbif_issue`, `basis_of_record`, `establishment_means`, `coord_uncertainty`, `coarse_decimals`, `garden_text`, `settlement_text`, `locality_is_country`, `too_old`, `manual_exclude`, `excluded_dataset` | GBIF columns |
+| Gridded datasets | `grid_uncertainty_block`, `lattice_dataset`, `stacked_dataset` (atlas or grid data recognised per dataset) | `datasetKey` |
+| CoordinateCleaner | `country_mismatch`, `coordinatecleaner` (centroids, institutions, zeros, GBIF HQ, urban areas) | the CoordinateCleaner package |
+| Layers | `outside_range`, `at_sea` / `on_water`, `no_climate_data`, `built_up`, `cropland`, `ghs_dense`, `ghs_building_nearby` | range polygon, shoreline, climate, land-cover rasters |
+| Isolation and climate | `isolated_climate_outlier`, `small_isolated_cluster`, `climate_limit`, `climate_soft_limit` (beyond a soft limit, kept only with a climatic refuge nearby, e.g. a valley below cold mountains) | climate raster, thresholds |
+
+**You choose the tests and thresholds.** Two presets give sensible defaults:
+`"strict"` for presence records used in modelling, and `"lenient"` for
+delimiting the accessible area (M). Climate thresholds depend on the species,
+so they are off until you set them.
+
+```r
+library(preENM)
+
+occ <- read_gbif("0020328-260928105237408.zip")       # your GBIF download
+
+settings <- filter_settings(
+  "strict",
+  max_coord_unc_m = 1000,
+  climate_limit = 22, climate_soft_limit = 16,         # deg C, warmest quarter
+  refuge_limit = 11, refuge_radius_km = 10,            # (values for Dryas)
+  drop_tests = "too_old")                              # switch tests off/on
+
+layers <- filter_layers(
+  range    = "range_polygon.shp",                      # optional, any CRS
+  land     = download_shoreline("data/coast"),         # GSHHG, downloaded once
+  climate  = "CHELSA_bio10_1981-2010_V.2.1.tif",
+  built    = download_landcover("built", "data"),      # ESA WorldCover ~1 km
+  cropland = download_landcover("cropland", "data"))
+
+res <- filter_occurrences(occ, settings, layers,
+                          exclude_ids = c("1701093660"),   # gbifID lists
+                          keep_ids    = c("2571281411"))
+res                                    # records removed per test
+filter_report(res, by = "countryCode") # which tests remove records where
+filter_sensitivity(res, "climate", c(16, 18, 20, 22, 24))  # choose thresholds
+record_fate(res, c("2571281411", "1701093660"))
+write_filter_results(res, "results", "dryas_strict")       # CSV files
+clean <- kept(res)
+```
+
+Only tests whose data you supply are run; the others are listed as
+skipped. Optional helpers download the layers: `download_shoreline()`,
+`download_landcover()` and `aggregate_ghs()` (GHS-BUILT-S settlement layers).
+See `?filter_occurrences` and `?filter_settings` for every test and
+threshold.
+
+**Relation to CoordinateCleaner.** Its standard tests are called, not
+re-implemented, so please also cite Zizka et al. (2019), *Methods in Ecology
+and Evolution* 10: 744-751. The other tests are specific to `preENM`: atlas
+grid detection, gridded datasets, coordinate decimals, text clues, shoreline
+distance, settlement, range, climate and isolation.
+
+## One point per raster cell and background points
+
+After filtering, merge your sources, keep one record per cell of the
+predictor rasters, and draw background points from the same grid:
+
+```r
+env <- terra::rast(list.files("layers_M_area", "\\.tif$", full.names = TRUE))
+
+occ <- merge_occurrences(sNMF = "genetic_samples.csv",   # your own samples
+                         GBIF = clean,                     # filtered GBIF
+                         species = "Dryas octopetala")
+pres <- thin_by_cell(occ, env, priority = c("sNMF", "GBIF"))  # own samples win
+bg   <- sample_background(env, n = 10000, n_sets = 10,
+                          exclude = pres, seed = 123)
+
+write.csv(pres[c("species", "lon", "lat")], "presences_1perCell.csv",
+          row.names = FALSE)
+for (k in unique(bg$set)) {
+  write.csv(bg[bg$set == k, c("lon", "lat")],
+            sprintf("background_10000_set%d.csv", k), row.names = FALSE)
+}
+```
+
+`thin_by_cell()` moves each kept record to the centre of its cell and keeps
+the original coordinates in `lon_orig` / `lat_orig`. Records outside the
+rasters, or in cells where any layer has no value, are dropped.
+`sample_background()` draws only from cells where all layers have values, one
+point per cell, with an independent, reproducible seed for each set.
 
 ## Quick start: model selection with example data
 

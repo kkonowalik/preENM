@@ -16,6 +16,7 @@ your own code.
 |---|---|---|
 | **Point filtering** (especially GBIF) | **available** | `read_gbif()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
 | **Accessible area (M)** | **available** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
+| **Cutting raster files to M** | **available** | `crop_rasters()`, `crop_to_m()` |
 | **One point per raster cell, background points** | **available** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Environmental thinning | planned | |
 | Correlation analysis | planned | |
@@ -195,6 +196,31 @@ env_m <- crop_to_m(env, m)               # predictors clipped to M
 The example above uses simulated records with a hollow between two arms of the
 range. The default Delaunay M leaves the hollow out; an expert polygon or a
 cluster hull includes it.
+
+## Cutting raster files to M
+
+`crop_rasters()` cuts whole folders of rasters (e.g. all CHELSA-TraCE21k time
+slices) to M or any polygon and writes them to a new folder. GDAL does the
+work file to file, so memory use stays low. Finished files are skipped when
+the run is repeated, and a failing file does not stop the others.
+
+```r
+res <- crop_rasters(c("D:/GIS/ChelsaTrace21k/bio", "D:/GIS/ChelsaTrace21k/orog"),
+                    m,                                  # or "dryas_M.gpkg"
+                    out_dir = "D:/GIS/ChelsaTrace21k/Dryas",
+                    variables = c("bio01", "bio04", "bio05", "bio06", "bio10",
+                                  "bio12", "bio17", "scd", "dem"))
+table(res$status)
+```
+
+**Values are copied exactly.** CHELSA stores integers with a scale and offset
+in the file metadata (e.g. temperature x 10 in Kelvin). Cropping by reading
+the values into R and writing them back in the original integer type, e.g.
+`terra::crop(r, v, mask = TRUE, filename = ..., datatype = datatype(r))`, can
+round the values and drop the scale and offset. In our test it gave errors of
+up to 0.95 deg C. `crop_rasters()` keeps the raw values, the data type, the
+scale/offset and NoData, on exactly the input grid (nothing is resampled). For
+a single raster in memory, `crop_to_m()` is enough.
 
 ## One point per raster cell and background points
 

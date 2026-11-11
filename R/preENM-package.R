@@ -5,6 +5,7 @@
 #'   [filter_layers()]: rule-based filtering of occurrence records.
 #' * [delimit_m()], [linking_distance()], [m_scenarios()], [plot_m_area()],
 #'   [write_m_area()], [crop_to_m()]: the accessible area (M).
+#' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
 #' * [merge_occurrences()], [thin_by_cell()], [sample_background()]: one
 #'   record per raster cell and background points.
 #'

@@ -2,7 +2,7 @@ Package: preENM
 Type: Package
 Title: Data Preparation and Model Selection for Ecological Niche and Species
     Distribution Models
-Version: 2.2.0
+Version: 2.3.0
 Authors@R:
     person("Kamil", "Konowalik", role = c("aut", "cre", "cph"),
            email = "kamil.konowalik@gmail.com")
@@ -13,7 +13,8 @@ Description: Tools for the steps around fitting ecological niche models /
     coordinate precision, settlements, sea, range and climatic outliers, with
     optional tests from 'CoordinateCleaner'; delimitation of the accessible
     area (M) from a data-derived linking distance, with room for expert
-    additions; one record per raster cell; and random background point sets. Model evaluation and selection: the
+    additions; exact batch cropping of raster files to M; one record per raster
+    cell; and random background point sets. Model evaluation and selection: the
     simultaneous use of the area under the ROC curve (AUC) and the mean
     absolute error (MAE) proposed in Konowalik and Nosol (2021)
     <doi:10.1038/s41598-020-80062-1>, the true skill statistic and the

@@ -1,3 +1,13 @@
+# preENM 2.3.0
+
+* `crop_rasters()`: batch cropping and masking of raster files (e.g. all
+  CHELSA-TraCE21k time slices) to M or any polygon, file to file with GDAL
+  (low memory), skipping finished files on re-runs, selecting variables by
+  name, and continuing past failing files. Raw values, data type,
+  scale/offset and NoData are kept exactly on the input grid; reading scaled
+  integer rasters into R and writing them back in their integer type can
+  silently round them and drop the scale and offset.
+
 # preENM 2.2.0
 
 Delimitation of the accessible area (M), generalised from the M-area

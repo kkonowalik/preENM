@@ -1,3 +1,28 @@
+# preENM 2.2.0
+
+Delimitation of the accessible area (M), generalised from the M-area
+workflow for *Dryas octopetala*:
+
+* `delimit_m()`: M from the records with a data-derived linking distance L
+  (minimum spanning tree / single-linkage clustering). Methods `"delaunay"`
+  (default: Delaunay triangles with edges up to L plus L/2 buffers, closed by
+  L/2, holes filled), `"cluster_hull"` (convex or concave), `"convex_hull"`
+  and `"buffer"`. Expert intervention: added polygons and sites, corridors up
+  to a second linking distance L2, exclusions, extent, land trimming, manual
+  L.
+* `linking_distance()` and `plot_linking()`: the connectivity diagnostics.
+* `m_scenarios()`: several M variants compared (area, records inside per
+  group, overlap and Jaccard with a reference).
+* `plot_m_area()`, `m_report()`, `m_class_shares()` (e.g. Koppen-Geiger
+  shares, with `koppen_geiger_labels()`), `class_polygons()`,
+  `write_m_area()` (GeoPackage, CSV, PNG) and `crop_to_m()`.
+* The spanning tree is computed from the Delaunay triangulation (identical
+  to single linkage on the full distance matrix, but with memory growing
+  linearly), and buffers of many points are merged tile by tile, so tens of
+  thousands of records are handled in seconds with modest memory.
+* `merge_occurrences()` repairs text that is not valid UTF-8 (`encoding`).
+* `sf` is now imported.
+
 # preENM 2.1.0
 
 Point filtering, one point per cell and background points, generalised from

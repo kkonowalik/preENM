@@ -39,3 +39,13 @@ test_that("merge_occurrences standardises columns and drops bad rows", {
   m3 <- suppressMessages(merge_occurrences(file = f))
   expect_equal(m3$lon, a$Longitude)
 })
+
+test_that("invalid UTF-8 text is repaired", {
+  bad <- "Krak\xf3w"                              # latin1 bytes for o-acute
+  Encoding(bad) <- "unknown"
+  expect_false(validUTF8(bad))
+  a <- data.frame(lon = 19.9, lat = 50.06, place = bad)
+  expect_message(m <- merge_occurrences(own = a), "repaired")
+  expect_true(validUTF8(m$place))
+  expect_equal(m$place, "Kraków")
+})

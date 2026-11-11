@@ -15,6 +15,7 @@ your own code.
 | Step | Status | Functions |
 |---|---|---|
 | **Point filtering** (especially GBIF) | **available** | `read_gbif()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
+| **Accessible area (M)** | **available** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | **One point per raster cell, background points** | **available** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Environmental thinning | planned | |
 | Correlation analysis | planned | |
@@ -125,13 +126,83 @@ and Evolution* 10: 744-751. The other tests are specific to `preENM`: atlas
 grid detection, gridded datasets, coordinate decimals, text clues, shoreline
 distance, settlement, range, climate and isolation.
 
+## Accessible area (M)
+
+`delimit_m()` draws the area the species could have reached (the M of the BAM
+diagram), where background points are drawn and to which the predictors are
+clipped. Instead of choosing buffer radii by hand, one number is derived from
+the records: the **linking distance L**. The thinned records are joined by
+single-linkage clustering (their minimum spanning tree). Gaps within a
+continuous range are sampling gaps; gaps between separate parts of the range
+are much longer. L is the last link before the largest jump in the sorted
+links (searched between 100 and 600 km by default). Everything else follows
+from L: buffers of L/2 join every chain of records linked at L into one
+patch.
+
+| Method | What it draws |
+|---|---|
+| `"delaunay"` (default) | Delaunay triangles with all edges up to L, plus L/2 buffers, closed by L/2, holes filled. Follows concave outlines; the M chosen for *Dryas octopetala* (L = 340 km). |
+| `"cluster_hull"` | convex (or concave, `hull_ratio < 1`) hull of each cluster linked at L: fills hollows inside a cluster automatically |
+| `"convex_hull"` | one convex hull around all records: the most generous M |
+| `"buffer"` | buffers of fixed radius (`buffer_km`), e.g. as a reference |
+
+**Room for expert judgement.** The automatic M can leave out areas the
+species could have crossed, e.g. a hollow between two mountain chains. You
+can then:
+- add polygons drawn in a GIS (`add`);
+- add sites known from the literature with a radius (`add_sites`);
+- join isolated parts by corridors along the spanning tree, up to a second
+  linking distance L2 (`corridors = TRUE`);
+- choose a hull method that fills hollows;
+- set L by hand (`link_km`), remove areas (`exclude`), clip to a study
+  `extent`, or trim the sea (`land`).
+
+The report states how much area the expert additions contribute, so it can
+be reported as expert-based.
+
+```r
+env <- terra::rast(list.files("layers", "\\.tif$", full.names = TRUE))
+occ <- merge_occurrences(GBIF = clean, Neotoma = fossils)  # e.g. modern + fossil
+occ$time <- ifelse(occ$source == "Neotoma", "fossil", "modern")
+
+lk <- linking_distance(occ, group = "time")   # diagnostics: is L sensible?
+lk
+plot_linking(lk)                              # the jump at L
+
+m <- delimit_m(occ, group = "time",
+               extent = c(-26, 74, 38, 82),                  # lon/lat box
+               add = "additional_areas.gpkg",                # expert polygons
+               add_sites = data.frame(name = c("Jan Mayen", "Bjornoya"),
+                                      lon = c(-8.3, 19.0), lat = c(71.0, 74.4),
+                                      buffer_km = 60))
+m                                   # L, settings and areas
+plot_m_area(m)                      # preview: automatic M + expert additions
+m_report(m, raster = env)           # areas (incl. land area), records inside
+m_class_shares(m, "CHELSA_kg0_1981-2010_V.2.1.tif",
+               labels = koppen_geiger_labels(), fact = 3)   # climate types
+
+# sensitivity: several methods side by side, compared with the default
+sc <- m_scenarios(occ, group = "time", extent = c(-26, 74, 38, 82))
+sc$comparison                       # area, records inside, overlap, Jaccard
+plot_m_area(sc)
+
+write_m_area(m, "M_area", "dryas_M")     # GeoPackage, CSV reports, PNG maps
+env_m <- crop_to_m(env, m)               # predictors clipped to M
+```
+
+![M scenarios](man/figures/m_scenarios.png)
+
+The example above uses simulated records with a hollow between two arms of the
+range. The default Delaunay M leaves the hollow out; an expert polygon or a
+cluster hull includes it.
+
 ## One point per raster cell and background points
 
 After filtering, merge your sources, keep one record per cell of the
 predictor rasters, and draw background points from the same grid:
 
 ```r
-env <- terra::rast(list.files("layers_M_area", "\\.tif$", full.names = TRUE))
+env <- crop_to_m(env, m)                     # predictors within M (see above)
 
 occ <- merge_occurrences(sNMF = "genetic_samples.csv",   # your own samples
                          GBIF = clean,                     # filtered GBIF

@@ -62,6 +62,10 @@ read_gbif <- function(file) {
 #'   GBIF = cleaned)`. Names become the `source` column.
 #' @param species Optional single species name written to every record. If
 #'   `NULL`, the species column of each table is used when found.
+#' @param encoding Encoding assumed for text that is not valid UTF-8 (common
+#'   in CSV files exported from Excel or some databases); such text is
+#'   converted to UTF-8. Try `"CP1250"` for Central European files if the
+#'   repaired characters look wrong.
 #' @return A data.frame with `species`, `lon`, `lat`, `source` and the other
 #'   columns of the inputs.
 #' @export
@@ -70,7 +74,7 @@ read_gbif <- function(file) {
 #' b <- data.frame(decimalLongitude = c(10.1, 11), decimalLatitude = c(46.1, 47),
 #'                 species = "Dryas octopetala", gbifID = c("1", "2"))
 #' merge_occurrences(own = a, GBIF = b, species = "Dryas octopetala")
-merge_occurrences <- function(..., species = NULL) {
+merge_occurrences <- function(..., species = NULL, encoding = "latin1") {
   inputs <- list(...)
   if (!length(inputs) || is.null(names(inputs)) || any(names(inputs) == "")) {
     stop("Give every input a name, e.g. merge_occurrences(own = a, GBIF = b).",
@@ -83,6 +87,18 @@ merge_occurrences <- function(..., species = NULL) {
     xy <- guess_coords(names(x))
     sp <- find_column(names(x), c("species", "scientificname", "taxon"))
     x[] <- lapply(x, as.character)
+    names(x) <- fix_utf8(names(x), encoding)
+    n_fixed <- 0L
+    for (j in seq_along(x)) {
+      v <- fix_utf8(x[[j]], encoding)
+      n_fixed <- n_fixed + attr(v, "n_fixed")
+      attr(v, "n_fixed") <- NULL
+      x[[j]] <- v
+    }
+    if (n_fixed) {
+      message(src, ": ", n_fixed, " text value(s) with invalid UTF-8 ",
+              "repaired (read as ", encoding, ")")
+    }
     out <- data.frame(
       species = if (!is.null(species)) species else if (!is.na(sp)) x[[sp]]
       else NA_character_,
@@ -129,6 +145,21 @@ read_any_csv <- function(f) {
 # Numbers written with a decimal point or a decimal comma (internal)
 as_number <- function(v) suppressWarnings(as.numeric(sub(",", ".", v,
                                                           fixed = TRUE)))
+
+# Make text valid UTF-8, re-reading invalid strings in `from` (internal)
+fix_utf8 <- function(x, from = "latin1") {
+  if (!is.character(x)) return(x)
+  Encoding(x) <- "unknown"
+  bad <- !is.na(x) & !validUTF8(x)
+  if (any(bad)) {
+    y <- iconv(x[bad], from = from, to = "UTF-8")
+    y[is.na(y)] <- iconv(x[bad][is.na(y)], "UTF-8", "UTF-8", sub = "?")
+    x[bad] <- y
+  }
+  Encoding(x) <- "UTF-8"
+  attr(x, "n_fixed") <- sum(bad)
+  x
+}
 
 # First matching column name, case-insensitive (internal)
 find_column <- function(nms, candidates) {

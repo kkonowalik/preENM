@@ -4,7 +4,7 @@
 \alias{merge_occurrences}
 \title{Merge occurrence records from several sources}
 \usage{
-merge_occurrences(..., species = NULL)
+merge_occurrences(..., species = NULL, encoding = "latin1")
 }
 \arguments{
 \item{...}{Named data.frames or paths to CSV files (comma-separated, or
@@ -12,6 +12,11 @@ semicolon-separated with decimal commas), e.g. \code{merge_occurrences(sNMF = "s
 
 \item{species}{Optional single species name written to every record. If
 \code{NULL}, the species column of each table is used when found.}
+
+\item{encoding}{Encoding assumed for text that is not valid UTF-8 (common
+in CSV files exported from Excel or some databases); such text is
+converted to UTF-8. Try \code{"CP1250"} for Central European files if the
+repaired characters look wrong.}
 }
 \value{
 A data.frame with \code{species}, \code{lon}, \code{lat}, \code{source} and the other

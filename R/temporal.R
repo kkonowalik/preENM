@@ -24,7 +24,10 @@
 #' records dominate the overall mean. Further options: an "analog" score that
 #' ignores record-slices with climate outside the calibration range (`novel`,
 #' see [outside_range()]), and sensitivity, the share of records predicted
-#' above a present-day threshold (`thresholds`, see [threshold_p10()]).
+#' above a present-day threshold (`thresholds`, see [threshold_p10()]),
+#' with the share of background predicted suitable (`area`) and their ratio
+#' (`lift` = sensitivity / area; 1 = no better than chance, so a model cannot
+#' gain sensitivity simply by predicting everything as suitable).
 #'
 #' @param sites Long data.frame of predictions at the records: one row per
 #'   record x time slice x model (x run), with the columns named by `record`,
@@ -48,8 +51,8 @@
 #'   `fossil_AUC`.
 #' @return A data.frame with one row per model: `<prefix>_AUC`, per-period and
 #'   combined columns `<prefix>_AUC_<period>`, `<prefix>_AUC_analog`,
-#'   `<prefix>_sens`, `<prefix>_n_records`, and with `run` the SD of each
-#'   metric across runs (`_sd`) and `<prefix>_n_runs`. Per-run results are
+#'   `<prefix>_sens`, `<prefix>_area`, `<prefix>_lift`, `<prefix>_n_records`,
+#'   and with `run` the SD of each metric across runs (`_sd`) and `<prefix>_n_runs`. Per-run results are
 #'   in `attr(x, "runs")`.
 #' @export
 #' @examples
@@ -153,6 +156,17 @@ temporal_validation <- function(sites, background, model = "model",
       rec_pred <- tapply(x, rec, mean, na.rm = TRUE)
       out[[paste0(p, "_sens")]] <- if (is.na(thr)) NA_real_ else
         mean(rec_pred >= thr, na.rm = TRUE)
+      # predicted area: share of background cells above the threshold in
+      # each record's slices, averaged like the records
+      if (is.na(thr)) {
+        out[[paste0(p, "_area")]] <- NA_real_
+      } else {
+        a_sl <- vapply(bvals, function(v) mean(v >= thr), numeric(1))
+        rec_area <- tapply(unname(a_sl[sl]), rec, mean, na.rm = TRUE)
+        out[[paste0(p, "_area")]] <- mean(rec_area, na.rm = TRUE)
+      }
+      out[[paste0(p, "_lift")]] <- out[[paste0(p, "_sens")]] /
+        out[[paste0(p, "_area")]]
     }
     out[[paste0(p, "_n_records")]] <- sum(!is.na(rec_score))
     out

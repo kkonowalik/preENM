@@ -49,8 +49,8 @@ pooled (so periods with more records weigh more).}
 \value{
 A data.frame with one row per model: \verb{<prefix>_AUC}, per-period and
 combined columns \verb{<prefix>_AUC_<period>}, \verb{<prefix>_AUC_analog},
-\verb{<prefix>_sens}, \verb{<prefix>_n_records}, and with \code{run} the SD of each
-metric across runs (\verb{_sd}) and \verb{<prefix>_n_runs}. Per-run results are
+\verb{<prefix>_sens}, \verb{<prefix>_area}, \verb{<prefix>_lift}, \verb{<prefix>_n_records},
+and with \code{run} the SD of each metric across runs (\verb{_sd}) and \verb{<prefix>_n_runs}. Per-run results are
 in \code{attr(x, "runs")}.
 }
 \description{
@@ -79,7 +79,10 @@ are usually what hindcasts are about, while the far more numerous recent
 records dominate the overall mean. Further options: an "analog" score that
 ignores record-slices with climate outside the calibration range (\code{novel},
 see \code{\link[=outside_range]{outside_range()}}), and sensitivity, the share of records predicted
-above a present-day threshold (\code{thresholds}, see \code{\link[=threshold_p10]{threshold_p10()}}).
+above a present-day threshold (\code{thresholds}, see \code{\link[=threshold_p10]{threshold_p10()}}),
+with the share of background predicted suitable (\code{area}) and their ratio
+(\code{lift} = sensitivity / area; 1 = no better than chance, so a model cannot
+gain sensitivity simply by predicting everything as suitable).
 }
 \examples{
 set.seed(1)

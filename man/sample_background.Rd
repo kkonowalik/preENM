@@ -2,7 +2,7 @@
 % Please edit documentation in R/cells.R
 \name{sample_background}
 \alias{sample_background}
-\title{Random background (pseudo-absence) points}
+\title{Background (pseudo-absence) points: uniform, environmental, effort-based}
 \usage{
 sample_background(
   raster,
@@ -10,15 +10,26 @@ sample_background(
   n_sets = 1,
   exclude = NULL,
   seed = NULL,
-  crs = "EPSG:4326"
+  crs = "EPSG:4326",
+  method = c("uniform", "envstrat", "effort", "enveffort"),
+  effort = NULL,
+  effort_floor = 1,
+  effort_power = 1,
+  env_pool = 1e+06,
+  env_cumvar = 0.95,
+  env_axes = NULL,
+  env_total_bins = 3000,
+  env_min_bin = 5,
+  log_vars = NULL
 )
 }
 \arguments{
 \item{raster}{The predictor layers (\link[terra:SpatRaster-class]{terra::SpatRaster} or file paths),
-clipped to the accessible area.}
+clipped to the accessible area. For the environmental methods use the
+variables of your model.}
 
-\item{n}{Number of points per set (default 10000). If fewer valid cells
-exist, all of them are used, with a warning.}
+\item{n}{Number of points per set (default 10000). If fewer cells are
+available, all are used, with a warning.}
 
 \item{n_sets}{Number of independent sets.}
 
@@ -29,25 +40,81 @@ with coordinates, or a vector of cell numbers.}
 \item{seed}{Optional random seed.}
 
 \item{crs}{CRS of the output coordinates (default WGS84 longitude/latitude).}
+
+\item{method}{\code{"uniform"}, \code{"envstrat"}, \code{"effort"} or \code{"enveffort"}.}
+
+\item{effort}{Recording-effort raster for \code{"effort"} and \code{"enveffort"}
+(any resolution and CRS; \code{NA} counts as 0), e.g. \code{effort_n_species}
+from \code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}.}
+
+\item{effort_floor}{Added to every cell's effort, so cells without records
+keep a small chance.}
+
+\item{effort_power}{Exponent of the effort (1 = proportional; 0.5 = a
+softer correction).}
+
+\item{env_pool}{Size of the random pool of cells for the weighted methods.}
+
+\item{env_cumvar, env_axes}{PCs used for the bins: those explaining
+\code{env_cumvar} of the variance, or exactly \code{env_axes} PCs.}
+
+\item{env_total_bins}{Approximate total number of bins.}
+
+\item{env_min_bin}{Bins with fewer pool cells are down-weighted.}
+
+\item{log_vars}{Layers log-transformed for the PCA (default: bioclim
+precipitation amounts recognised by name).}
 }
 \value{
-A data.frame with \code{set}, \code{cell}, \code{lon}, \code{lat} (cell centres).
+A data.frame with \code{set}, \code{cell}, \code{lon}, \code{lat} (cell centres) and,
+for the environmental methods, \code{bin}. Attribute \code{"background"} holds the
+method and, for the environmental methods, the PCA and bin settings.
 }
 \description{
-Draws background points from random cells of the predictor rasters, one
-point per cell (without replacement), only from cells where \emph{all} layers
-have values. Several independent sets can be drawn, e.g. to repeat models
-with different backgrounds (see the \code{set} argument of \code{\link[=evaluate_cv]{evaluate_cv()}}).
-Each set uses its own seed (\verb{seed + set number}), so a set can be
-reproduced on its own.
+Draws background points from cells of the predictor rasters, one point per
+cell (without replacement), only from cells where \emph{all} layers have
+values. Several independent sets can be drawn (e.g. for the \code{set} argument
+of \code{\link[=evaluate_cv]{evaluate_cv()}}); each uses its own seed (\verb{seed + set number}).
+Restrict the rasters to the accessible area (M) beforehand.
 }
 \details{
-Restrict the rasters to the accessible area (M) beforehand: the background
-should represent the area the species could have reached.
+\strong{Methods}
+\itemize{
+\item \code{"uniform"} (default): random cells; every cell equally likely.
+\item \code{"envstrat"}: uniform in environmental space. A PCA of the layers
+(precipitation amounts log-transformed) is cut into bins: all PCs up to
+\code{env_cumvar} of the variance, about \code{env_total_bins} bins in total
+(\verb{env_axes = 2, env_total_bins = 1600} gives the earlier PC1 x PC2,
+40 x 40 version). Every occupied bin is equally likely, so rare climates
+are represented as well as common ones (bins with fewer than
+\code{env_min_bin} cells are down-weighted). It mirrors environmentally
+thinned presences (\code{\link[=thin_environment]{thin_environment()}}).
+\item \code{"effort"}: probability proportional to recording effort, e.g. the
+number of plant species recorded in GBIF per cell (see
+\code{\link[=gbif_effort_sql]{gbif_effort_sql()}}), or to the records of a target group of companion
+species (a "target-group background"). Corrects for the fact that "not
+recorded" means "absent" only where people recorded.
+\item \code{"enveffort"}: the \code{envstrat} bins with equal total probability per
+bin, but \emph{within} a bin cells with more recording effort are preferred
+(their missing record of the species is a more reliable absence). For
+\emph{Dryas octopetala} this combination gave the best hindcasts and reduced
+the sampling bias.
+}
+
+For \code{"envstrat"}, \code{"effort"} and \code{"enveffort"} the points are drawn from
+a random pool of \code{env_pool} valid cells (all cells if fewer), by weighted
+sampling without replacement.
 }
 \examples{
 r <- terra::rast(nrows = 20, ncols = 20, xmin = 0, xmax = 10, ymin = 40,
                  ymax = 50, vals = 1)
 bg <- sample_background(r, n = 50, n_sets = 3, seed = 1)
 table(bg$set)
+
+# uniform in environmental space, with recording effort within bins
+sim <- simulate_enm_data(seed = 1)
+effort <- terra::init(sim$env[[1]], function(n) rpois(n, 5))
+bg2 <- sample_background(sim$env, n = 500, method = "enveffort",
+                         effort = effort, seed = 1)
+head(bg2)
 }

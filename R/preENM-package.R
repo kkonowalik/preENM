@@ -8,8 +8,15 @@
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
 #' * [sample_environment()], [select_variables()], [best_sets()]: predictor
 #'   sets uncorrelated in every period, scenario and region, ranked.
-#' * [merge_occurrences()], [thin_by_cell()], [sample_background()]: one
-#'   record per raster cell and background points.
+#' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell.
+#' * [thin_environment()], [plot_env_thinning()], [write_env_thinning()]:
+#'   thinning in environmental space without truncating the niche.
+#' * [sample_background()]: background points, uniform, stratified in
+#'   environmental space, by recording effort, or both; effort layers from
+#'   GBIF with [gbif_effort_sql()], [download_gbif_effort()] and
+#'   [gbif_effort_rasters()].
+#' * [download_neotoma()], [neotoma_records()], [fossil_site_bins()],
+#'   [site_bin_slices()]: dated fossil records for [temporal_validation()].
 #'
 #' Model evaluation and selection:
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto

@@ -24,11 +24,13 @@ print.occ_filter <- function(x, ...) {
   invisible(x)
 }
 
-#' Kept or removed records of a filtering run
+#' Kept or removed records of a filtering or thinning run
 #'
-#' @param x An `occ_filter` object from [filter_occurrences()].
+#' @param x An `occ_filter` object from [filter_occurrences()] or an
+#'   `env_thinning` from [thin_environment()].
 #' @return A data.frame: the original columns plus the diagnostic columns
-#'   added by the filtering (`reason`, `climate`, `built_pct`, ...).
+#'   added by the filtering (`reason`, `climate`, `built_pct`, ...) or the
+#'   thinning (`env_*`, `ax_*`, `bin`, `block`, `keep_reason`).
 #' @export
 #' @examples
 #' occ <- data.frame(decimalLongitude = c(10.123, 10.123, 0),
@@ -37,8 +39,24 @@ print.occ_filter <- function(x, ...) {
 #'                            verbose = FALSE)
 #' kept(res)
 #' removed(res)
-kept <- function(x) {
-  check_filter(x)
+kept <- function(x) UseMethod("kept")
+
+#' @rdname kept
+#' @export
+removed <- function(x) UseMethod("removed")
+
+#' @export
+kept.default <- function(x) {
+  stop("`x` must come from filter_occurrences() or thin_environment().",
+       call. = FALSE)
+}
+
+#' @export
+removed.default <- kept.default
+
+#' @rdname kept
+#' @export
+kept.occ_filter <- function(x) {
   d <- x$data[is.na(x$data$reason), , drop = FALSE]
   rownames(d) <- NULL
   d
@@ -46,8 +64,7 @@ kept <- function(x) {
 
 #' @rdname kept
 #' @export
-removed <- function(x) {
-  check_filter(x)
+removed.occ_filter <- function(x) {
   d <- x$data[!is.na(x$data$reason), , drop = FALSE]
   rownames(d) <- NULL
   d

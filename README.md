@@ -18,7 +18,9 @@ your own code.
 | **Accessible area (M)** | **available** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | **Cutting raster files to M** | **available** | `crop_rasters()`, `crop_to_m()` |
 | **One point per raster cell, background points** | **available** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
-| Environmental thinning | planned | |
+| **Environmental thinning** (without truncating the niche) | **available** | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
+| **Background strategies and recording effort** | **available** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
+| **Fossil records** (optional, for hindcasts) | **available** | `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()` |
 
@@ -324,6 +326,91 @@ rasters, or in cells where any layer has no value, are dropped.
 `sample_background()` draws only from cells where all layers have values, one
 point per cell, with an independent, reproducible seed for each set.
 
+## Environmental thinning
+
+One record per cell still leaves densely sampled regions (e.g. the Alps or
+Scandinavia) over-represented in environmental space. `thin_environment()`
+evens out that density without choosing a target number and without
+truncating the niche:
+
+```r
+th <- thin_environment(pres, env,
+                       radius_km = 1,          # positional accuracy of records
+                       protect = list(source = "sNMF"),  # always kept
+                       block_km = 50, block_min = 2,     # geographic quota
+                       seed = 1)
+th                                   # what was kept and why; checks
+plot_env_thinning(th)                # PC pairs and the map, kept vs removed
+write_env_thinning(th, "out", "presences_envThinned")
+pres_env <- kept(th)
+```
+
+How it works:
+
+1. A PCA of the whole area (random cells of `env`, precipitation amounts
+   log-transformed) gives the environmental space; the first PCs with 95% of
+   the variance are used (`axes = "raw"` for standardised layers).
+2. **The bin width comes from the data**: the range of each axis among the
+   cells within `radius_km` of a record is its environmental uncertainty;
+   the median over records is the bin width. Two records in one bin differ
+   less than one record's own uncertainty.
+3. One record per occupied bin is kept (the most central). Every removed
+   record therefore has a kept neighbour less than one bin away on every
+   axis: only density changes, not the occupied space.
+4. Always kept: protected records, the minimum and maximum of every layer,
+   and the convex-hull vertices of every pair of axes (extreme combinations).
+5. A geographic quota keeps at least `block_min` records in every
+   `block_km` equal-area block, choosing the least represented environments
+   first, so isolated areas are not lost.
+
+The report shows that the ranges of all layers are identical before and
+after, how far removed records are from kept ones, and how the number of
+occupied bins changes with the bin width. Pass `template = th` to thin a
+subset (e.g. one lineage) in exactly the same space.
+
+## Background strategies and recording effort
+
+`sample_background(method = ...)` offers four ways to draw background
+points (each with `n_sets` reproducible sets):
+
+| `method` | Background | Use |
+|---|---|---|
+| `"uniform"` (default) | random cells | the classic choice |
+| `"envstrat"` | even coverage of environmental bins (PCA of the layers) | common climates no longer dominate the background |
+| `"effort"` | cells weighted by recording effort | like a target-group background: corrects the sampling bias of presences |
+| `"enveffort"` | environmental bins with equal weight, effort-weighted cells within each bin | both; for *Dryas octopetala* this gave the best hindcasts and reduced the sampling bias |
+
+```r
+bg <- sample_background(env, n = 10000, n_sets = 10, exclude = pres,
+                        method = "enveffort", effort = effort$n_species,
+                        seed = 123)
+```
+
+**Recording effort from GBIF.** One SQL download counts, per cell, all
+vascular-plant records, the number of species recorded (the recommended
+proxy) and records of companion species:
+
+```r
+q <- gbif_effort_sql(extent = c(-32, 75, 34, 82), cell = 0.1,
+                     target = c("Silene acaulis", "Salix herbacea"))
+tab <- download_gbif_effort(q, "gbif_effort")   # takes minutes to hours
+effort <- gbif_effort_rasters(tab, c(-32, 75, 34, 82), cell = 0.1,
+                              path = "gbif_effort")
+```
+
+This needs a free GBIF account and the `rgbif` package. **Never write your
+password in a script.** Store the credentials once in your `.Renviron` file:
+run `file.edit("~/.Renviron")` in R, add
+
+```
+GBIF_USER=your_user_name
+GBIF_PWD=your_password
+GBIF_EMAIL=your_email
+```
+
+save, and restart R. Cite the download DOI written to
+`gbif_effort/effort_download_DOI.txt`.
+
 ## Quick start: model selection with example data
 
 ```r
@@ -534,6 +621,30 @@ sel <- select_models(all,
                      tol = 0.01)
 plot_selection(sel, x_metric = "AUC", y_metric = "fossil_AUC_deep")
 ```
+
+With `thresholds`, the result also has the sensitivity (`_sens`), the share
+of background predicted suitable (`_area`) and their ratio (`_lift`): a
+model that predicts everything as suitable has a lift of 1, however high its
+sensitivity.
+
+**Fossil records from Neotoma** (optional; packages `neotoma2` and
+`rintcal`). Find the dataset IDs of your taxon in the Neotoma Explorer, then:
+
+```r
+smp <- download_neotoma(dataset_ids, cache = "neotoma_downloads.rds")
+rec <- neotoma_records(smp, taxon_regex = "^Dryas", area = m,
+                       max_age = 22000)       # CHELSA-TraCE21k coverage
+table(rec$FLAG)                               # why samples are not usable
+sb  <- fossil_site_bins(rec, bin_years = 1000)  # one record per site and millennium
+sites <- site_bin_slices(sb)                  # record x TraCE21k slice
+# add each slice's prediction to `sites` (column pred), then temporal_validation()
+```
+
+Each sample keeps its own age and age window (radiocarbon ages are
+calibrated with IntCal20) and is matched to the CHELSA-TraCE21k century
+slices it covers (`trace21k_id()`; use `slice_fun` for other climate data).
+Flags mark samples outside M, with zero values, without (calendar) ages or
+older than the climate data.
 
 Helpers for preparing the climate of each record:
 

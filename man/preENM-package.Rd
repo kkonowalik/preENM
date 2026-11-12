@@ -15,8 +15,15 @@ Data preparation:
 \item \code{\link[=crop_rasters]{crop_rasters()}}: cut folders of raster files to M, keeping values exact.
 \item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}}: predictor
 sets uncorrelated in every period, scenario and region, ranked.
-\item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}, \code{\link[=sample_background]{sample_background()}}: one
-record per raster cell and background points.
+\item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell.
+\item \code{\link[=thin_environment]{thin_environment()}}, \code{\link[=plot_env_thinning]{plot_env_thinning()}}, \code{\link[=write_env_thinning]{write_env_thinning()}}:
+thinning in environmental space without truncating the niche.
+\item \code{\link[=sample_background]{sample_background()}}: background points, uniform, stratified in
+environmental space, by recording effort, or both; effort layers from
+GBIF with \code{\link[=gbif_effort_sql]{gbif_effort_sql()}}, \code{\link[=download_gbif_effort]{download_gbif_effort()}} and
+\code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}.
+\item \code{\link[=download_neotoma]{download_neotoma()}}, \code{\link[=neotoma_records]{neotoma_records()}}, \code{\link[=fossil_site_bins]{fossil_site_bins()}},
+\code{\link[=site_bin_slices]{site_bin_slices()}}: dated fossil records for \code{\link[=temporal_validation]{temporal_validation()}}.
 }
 }
 \details{

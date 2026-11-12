@@ -116,3 +116,22 @@ test_that("outside_range flags non-analog rows", {
   x <- data.frame(p = c(500, 500, 950), t = c(5, -2, 5))
   expect_equal(outside_range(x, ref), c(FALSE, TRUE, TRUE))
 })
+
+test_that("temporal_validation gives predicted area and lift", {
+  set.seed(2)
+  bg <- expand.grid(cell = 1:400, slice = 1:2, model = c("good", "all"))
+  bg$pred <- ifelse(bg$model == "all", 0.9, runif(nrow(bg)))
+  st <- expand.grid(record = 1:30, model = c("good", "all"))
+  st$slice <- rep(1:2, length.out = nrow(st))
+  st$pred <- ifelse(st$model == "all", 0.9, runif(nrow(st), 0.6, 1))
+  tv <- temporal_validation(st, bg, thresholds = c(good = 0.5, all = 0.5),
+                            prefix = "f")
+  good <- tv[tv$model == "good", ]
+  all <- tv[tv$model == "all", ]
+  expect_equal(all$f_sens, 1)
+  expect_equal(all$f_area, 1)
+  expect_equal(all$f_lift, 1)                  # predicts everything
+  expect_equal(good$f_sens, 1)
+  expect_equal(good$f_area, 0.5, tolerance = 0.06)
+  expect_gt(good$f_lift, 1.8)
+})

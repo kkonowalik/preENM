@@ -68,3 +68,62 @@ test_that("thin_by_cell handles merged tables with extra coordinate columns", {
   bad$lon[1] <- NA
   expect_message(thin_by_cell(bad, r), "Without coordinates: 1")
 })
+
+test_that("envstrat background evens the environmental bins", {
+  # one gradient where 90% of the area has nearly the same climate
+  g <- terra::rast(nrows = 100, ncols = 100, xmin = 0, xmax = 10, ymin = 40,
+                   ymax = 50, crs = "EPSG:4326")
+  x <- terra::crds(g, na.rm = FALSE)[, 1]
+  v1 <- ifelse(x < 9, x / 100, x - 8)
+  env <- c(terra::setValues(g, v1),
+           terra::setValues(g, v1 + stats::rnorm(length(v1), 0, 0.001)))
+  names(env) <- c("a", "b")
+  uni <- suppressMessages(sample_background(env, n = 1000, seed = 1))
+  es <- suppressMessages(sample_background(env, n = 1000, seed = 1,
+                                           method = "envstrat",
+                                           env_axes = 1, env_total_bins = 10,
+                                           env_min_bin = 1))
+  expect_true("bin" %in% names(es))
+  expect_gt(mean(es$lon > 9), 2 * mean(uni$lon > 9))
+  info <- attr(es, "background")
+  expect_equal(info$method, "envstrat")
+  expect_equal(info$n_axes, 1)
+  es2 <- suppressMessages(sample_background(env, n = 1000, seed = 1,
+                                            method = "envstrat",
+                                            env_axes = 1, env_total_bins = 10,
+                                            env_min_bin = 1))
+  expect_equal(es$cell, es2$cell)
+  expect_equal(anyDuplicated(es$cell), 0)
+})
+
+test_that("effort and enveffort backgrounds follow recording effort", {
+  sim <- simulate_enm_data(seed = 1)
+  eff <- terra::init(sim$env[[1]], "x")
+  eff <- (eff - terra::global(eff, "min")[[1]])^3
+  ux <- suppressMessages(sample_background(sim$env, n = 300, seed = 2))
+  ef <- suppressMessages(sample_background(sim$env, n = 300, seed = 2,
+                                           method = "effort", effort = eff,
+                                           effort_floor = 0))
+  expect_gt(mean(ef$lon), mean(ux$lon))
+  ee <- suppressMessages(sample_background(sim$env, n = 300, seed = 2,
+                                           method = "enveffort", effort = eff,
+                                           env_axes = 2,
+                                           env_total_bins = 100))
+  es <- suppressMessages(sample_background(sim$env, n = 300, seed = 2,
+                                           method = "envstrat", env_axes = 2,
+                                           env_total_bins = 100))
+  expect_true("bin" %in% names(ee))
+  # within the same bins, cells with more effort are preferred
+  set.seed(4)
+  eff2 <- terra::init(sim$env[[1]], function(n) stats::rexp(n)^2)
+  ee2 <- suppressMessages(sample_background(sim$env, n = 300, seed = 2,
+                                            method = "enveffort",
+                                            effort = eff2, env_axes = 2,
+                                            env_total_bins = 100))
+  e_of <- function(b) mean(terra::extract(eff2, cbind(b$lon, b$lat))[[1]])
+  expect_gt(e_of(ee2), 1.5 * e_of(es))
+  expect_equal(length(unique(ee2$bin)), length(unique(es$bin)),
+               tolerance = 0.1)
+  expect_error(suppressMessages(sample_background(sim$env, method = "effort")),
+               "needs an `effort`")
+})

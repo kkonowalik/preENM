@@ -125,38 +125,95 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
   d
 }
 
-#' Random background (pseudo-absence) points
+#' Background (pseudo-absence) points: uniform, environmental, effort-based
 #'
-#' Draws background points from random cells of the predictor rasters, one
-#' point per cell (without replacement), only from cells where *all* layers
-#' have values. Several independent sets can be drawn, e.g. to repeat models
-#' with different backgrounds (see the `set` argument of [evaluate_cv()]).
-#' Each set uses its own seed (`seed + set number`), so a set can be
-#' reproduced on its own.
+#' Draws background points from cells of the predictor rasters, one point per
+#' cell (without replacement), only from cells where *all* layers have
+#' values. Several independent sets can be drawn (e.g. for the `set` argument
+#' of [evaluate_cv()]); each uses its own seed (`seed + set number`).
+#' Restrict the rasters to the accessible area (M) beforehand.
 #'
-#' Restrict the rasters to the accessible area (M) beforehand: the background
-#' should represent the area the species could have reached.
+#' **Methods**
+#' * `"uniform"` (default): random cells; every cell equally likely.
+#' * `"envstrat"`: uniform in environmental space. A PCA of the layers
+#'   (precipitation amounts log-transformed) is cut into bins: all PCs up to
+#'   `env_cumvar` of the variance, about `env_total_bins` bins in total
+#'   (`env_axes = 2, env_total_bins = 1600` gives the earlier PC1 x PC2,
+#'   40 x 40 version). Every occupied bin is equally likely, so rare climates
+#'   are represented as well as common ones (bins with fewer than
+#'   `env_min_bin` cells are down-weighted). It mirrors environmentally
+#'   thinned presences ([thin_environment()]).
+#' * `"effort"`: probability proportional to recording effort, e.g. the
+#'   number of plant species recorded in GBIF per cell (see
+#'   [gbif_effort_sql()]), or to the records of a target group of companion
+#'   species (a "target-group background"). Corrects for the fact that "not
+#'   recorded" means "absent" only where people recorded.
+#' * `"enveffort"`: the `envstrat` bins with equal total probability per
+#'   bin, but *within* a bin cells with more recording effort are preferred
+#'   (their missing record of the species is a more reliable absence). For
+#'   *Dryas octopetala* this combination gave the best hindcasts and reduced
+#'   the sampling bias.
+#'
+#' For `"envstrat"`, `"effort"` and `"enveffort"` the points are drawn from
+#' a random pool of `env_pool` valid cells (all cells if fewer), by weighted
+#' sampling without replacement.
 #'
 #' @param raster The predictor layers ([terra::SpatRaster] or file paths),
-#'   clipped to the accessible area.
-#' @param n Number of points per set (default 10000). If fewer valid cells
-#'   exist, all of them are used, with a warning.
+#'   clipped to the accessible area. For the environmental methods use the
+#'   variables of your model.
+#' @param n Number of points per set (default 10000). If fewer cells are
+#'   available, all are used, with a warning.
 #' @param n_sets Number of independent sets.
 #' @param exclude Optional presence records whose cells are excluded: a
 #'   data.frame with a `cell` column (as returned by [thin_by_cell()]) or
 #'   with coordinates, or a vector of cell numbers.
 #' @param seed Optional random seed.
 #' @param crs CRS of the output coordinates (default WGS84 longitude/latitude).
-#' @return A data.frame with `set`, `cell`, `lon`, `lat` (cell centres).
+#' @param method `"uniform"`, `"envstrat"`, `"effort"` or `"enveffort"`.
+#' @param effort Recording-effort raster for `"effort"` and `"enveffort"`
+#'   (any resolution and CRS; `NA` counts as 0), e.g. `effort_n_species`
+#'   from [gbif_effort_rasters()].
+#' @param effort_floor Added to every cell's effort, so cells without records
+#'   keep a small chance.
+#' @param effort_power Exponent of the effort (1 = proportional; 0.5 = a
+#'   softer correction).
+#' @param env_pool Size of the random pool of cells for the weighted methods.
+#' @param env_cumvar,env_axes PCs used for the bins: those explaining
+#'   `env_cumvar` of the variance, or exactly `env_axes` PCs.
+#' @param env_total_bins Approximate total number of bins.
+#' @param env_min_bin Bins with fewer pool cells are down-weighted.
+#' @param log_vars Layers log-transformed for the PCA (default: bioclim
+#'   precipitation amounts recognised by name).
+#' @return A data.frame with `set`, `cell`, `lon`, `lat` (cell centres) and,
+#'   for the environmental methods, `bin`. Attribute `"background"` holds the
+#'   method and, for the environmental methods, the PCA and bin settings.
 #' @export
 #' @examples
 #' r <- terra::rast(nrows = 20, ncols = 20, xmin = 0, xmax = 10, ymin = 40,
 #'                  ymax = 50, vals = 1)
 #' bg <- sample_background(r, n = 50, n_sets = 3, seed = 1)
 #' table(bg$set)
+#'
+#' # uniform in environmental space, with recording effort within bins
+#' sim <- simulate_enm_data(seed = 1)
+#' effort <- terra::init(sim$env[[1]], function(n) rpois(n, 5))
+#' bg2 <- sample_background(sim$env, n = 500, method = "enveffort",
+#'                          effort = effort, seed = 1)
+#' head(bg2)
 sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
-                              seed = NULL, crs = "EPSG:4326") {
+                              seed = NULL, crs = "EPSG:4326",
+                              method = c("uniform", "envstrat", "effort",
+                                         "enveffort"),
+                              effort = NULL, effort_floor = 1,
+                              effort_power = 1, env_pool = 1e6,
+                              env_cumvar = 0.95, env_axes = NULL,
+                              env_total_bins = 3000, env_min_bin = 5,
+                              log_vars = NULL) {
+  method <- match.arg(method)
   r <- as_grid(raster)
+  if (method %in% c("effort", "enveffort") && is.null(effort)) {
+    stop("method = \"", method, "\" needs an `effort` raster.", call. = FALSE)
+  }
   ok <- if (terra::nlyr(r) > 1) sum(r) else r
   valid <- terra::cells(ok)
   if (is.list(valid)) valid <- valid[[1]]
@@ -178,15 +235,96 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
     warning("Fewer valid cells (", length(valid), ") than n; using all.",
             call. = FALSE)
   }
+  info <- list(method = method)
+  if (method == "uniform") {
+    pool <- valid
+    w <- NULL
+    bin <- NULL
+  } else {
+    pool <- with_seed(seed, sort(valid[sample.int(length(valid),
+                                                  min(length(valid),
+                                                      env_pool))]))
+    bin <- NULL
+    if (method %in% c("envstrat", "enveffort")) {
+      eb <- env_bins(r, pool, env_cumvar, env_axes, env_total_bins, log_vars)
+      pool <- pool[eb$ok]
+      bin <- eb$bin
+      cnt <- as.numeric(table(bin)[bin])
+      info <- c(info, eb[c("n_axes", "bins_per_axis", "n_bins", "log_vars",
+                           "variance")])
+      message("Environmental bins: PC1-PC", eb$n_axes, ", ", eb$bins_per_axis,
+              " bins per axis, ", eb$n_bins, " occupied")
+    }
+    if (method %in% c("effort", "enveffort")) {
+      ef <- as_grid(effort)[[1]]
+      e <- extract_xy(ef, terra::xyFromCell(r, pool), terra::crs(r))
+      e[is.na(e)] <- 0
+      e <- (pmax(e, 0) + effort_floor)^effort_power
+      info$effort <- c(floor = effort_floor, power = effort_power)
+    }
+    w <- switch(method,
+      envstrat = 1 / pmax(cnt, env_min_bin),
+      effort = e,
+      enveffort = e / stats::ave(e, bin, FUN = sum) * pmin(1, cnt / env_min_bin))
+    keep <- w > 0
+    pool <- pool[keep]
+    w <- w[keep]
+    if (!is.null(bin)) bin <- bin[keep]
+    n_take <- min(n_take, length(pool))
+  }
   sets <- lapply(seq_len(n_sets), function(k) {
-    cl <- with_seed(if (is.null(seed)) NULL else seed + k,
-                    valid[sample.int(length(valid), n_take)])
+    s <- with_seed(if (is.null(seed)) NULL else seed + k, {
+      if (is.null(w)) sample.int(length(pool), n_take) else
+        weighted_draw(w, n_take)
+    })
+    cl <- pool[s]
     xy <- cell_coords(terra::xyFromCell(r, cl), r, crs)
-    data.frame(set = k, cell = cl, lon = xy[, 1], lat = xy[, 2])
+    d <- data.frame(set = k, cell = cl, lon = xy[, 1], lat = xy[, 2])
+    if (!is.null(bin)) d$bin <- bin[s]
+    d
   })
   out <- do.call(rbind, sets)
   rownames(out) <- NULL
+  attr(out, "background") <- info
   out
+}
+
+# Weighted sampling without replacement (Efraimidis-Spirakis; fast for
+# millions of cells) (internal)
+weighted_draw <- function(w, n) order(stats::rexp(length(w)) / w)[seq_len(n)]
+
+# Environmental bins of pool cells (internal)
+env_bins <- function(r, cells, cumvar, n_axes, total_bins, log_vars) {
+  M <- read_cells(r, cells)
+  colnames(M) <- names(r)
+  ok <- stats::complete.cases(M)
+  M <- M[ok, , drop = FALSE]
+  lv <- if (is.null(log_vars)) default_log_vars(names(r)) else
+    intersect(log_vars, names(r))
+  M <- log_tf(pmax_cols(M, lv), lv)
+  pc <- stats::prcomp(M, scale. = TRUE)
+  ve <- pc$sdev^2 / sum(pc$sdev^2)
+  k <- if (!is.null(n_axes)) min(n_axes, ncol(M)) else
+    which(cumsum(ve) >= cumvar - 1e-9)[1]
+  nb <- max(4, round(total_bins^(1 / k)))
+  bin <- do.call(paste, lapply(seq_len(k), function(j) {
+    cut(pc$x[, j], nb, labels = FALSE)
+  }))
+  list(ok = ok, bin = bin, n_axes = k, bins_per_axis = nb,
+       n_bins = length(unique(bin)), log_vars = lv,
+       variance = sum(ve[seq_len(k)]))
+}
+
+pmax_cols <- function(M, cols) {
+  if (length(cols)) M[, cols] <- pmax(M[, cols], 0)
+  M
+}
+
+# Raster values at x/y given in `crs` (internal)
+extract_xy <- function(r, xy, crs) {
+  p <- terra::vect(xy, crs = crs)
+  if (!terra::same.crs(p, r)) p <- terra::project(p, r)
+  terra::extract(r, p, ID = FALSE)[[1]]
 }
 
 # Read predictor layers as one SpatRaster (internal)

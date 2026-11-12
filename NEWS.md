@@ -1,3 +1,36 @@
+# preENM 2.5.0
+
+Environmental thinning and background strategies, generalised from the
+*Dryas octopetala* workflow and its background experiments:
+
+* `thin_environment()`: thins presence records in a PCA (or standardised)
+  environmental space. The bin width is not arbitrary: it is the median
+  environmental uncertainty of a record (the range of each axis within the
+  record's positional accuracy, `radius_km`). One record per occupied bin is
+  kept, so density is evened out while every removed record has a kept
+  neighbour within one bin. Always kept: protected records (e.g. genetic
+  samples), the minimum and maximum of every layer, convex-hull vertices of
+  every pair of axes, and a geographic quota per equal-area block, so the
+  niche is not truncated environmentally or geographically. Templates
+  re-use the same space for subsets. `plot_env_thinning()`,
+  `write_env_thinning()`, `kept()`/`removed()` (now generics).
+* `sample_background()` gains `method`: `"uniform"` (default, unchanged),
+  `"envstrat"` (even coverage of environmental bins), `"effort"`
+  (proportional to recording effort, a target-group-like background) and
+  `"enveffort"` (environmental bins with effort-weighted cells inside each
+  bin; the best combination for *Dryas*, reducing the sampling bias).
+* `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()`:
+  recording-effort layers (records, species, target group per cell) from one
+  aggregated GBIF SQL download. Credentials are read from `~/.Renviron`
+  (`GBIF_USER`, `GBIF_PWD`, `GBIF_EMAIL`), never from scripts.
+* `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`
+  (IntCal20 via 'rintcal'), `trace21k_id()`, `fossil_site_bins()`,
+  `site_bin_slices()`: dated fossil records with their own age windows,
+  flags and time slices, ready for `temporal_validation()`.
+* `temporal_validation()` with `thresholds` also gives the predicted area
+  (`_area`) and `_lift` = sensitivity / area, so a model cannot score well
+  by predicting everything as suitable.
+
 # preENM 2.4.1
 
 * Fix: `crop_rasters()` failed for every file with recent GDAL versions

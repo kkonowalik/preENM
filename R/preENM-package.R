@@ -6,6 +6,9 @@
 #' * [delimit_m()], [linking_distance()], [m_scenarios()], [plot_m_area()],
 #'   [write_m_area()], [crop_to_m()]: the accessible area (M).
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
+#' * [download_chelsa_monthly()], [monthly_files()], [climate_indices()]:
+#'   derived climate variables (VPD, PET, moisture deficit, aridity, heat
+#'   stress, summer rain, heat-rain synchrony) from monthly climatologies.
 #' * [sample_environment()], [select_variables()], [best_sets()]: predictor
 #'   sets uncorrelated in every period, scenario and region, ranked.
 #' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell.

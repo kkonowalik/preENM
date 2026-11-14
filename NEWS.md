@@ -1,3 +1,20 @@
+# preENM 2.9.0
+
+Derived climate variables, generalised from the C3/C4 workflow:
+
+* `climate_indices()`: vapour pressure deficit, potential evapotranspiration
+  (Hargreaves-Samani, FAO-56), climatic moisture deficit, aridity index,
+  heat stress, summer rain index and heat-rain synchronicity from monthly
+  Tmax, Tmin, (Tmean) and precipitation; any CRS (latitude per cell);
+  written to files and resumable; temperature units checked (Kelvin
+  converted, values divided by 10 by mistake detected).
+* `download_chelsa_monthly()`: CHELSA V2.1 monthly climatologies for the
+  present or any future period, GCM and scenario, optionally only for a
+  region (read remotely with GDAL, values, scale and offset kept exactly),
+  resumable. `chelsa_monthly_urls()` finds the files on the CHELSA server.
+* `monthly_files()`: the 12 monthly files of a variable in a folder, in
+  order, optionally filtered by GCM, scenario or period.
+
 # preENM 2.8.0
 
 * `select_models()` reports selected models that are far worse than the

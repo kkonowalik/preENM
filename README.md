@@ -21,6 +21,7 @@ your own code.
 | **Environmental thinning** (without truncating the niche) | **available** | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | **Background strategies and recording effort** | **available** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
 | **Fossil records** (optional, for hindcasts) | **available** | `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
+| **Derived climate variables** (VPD, PET, moisture deficit, aridity, heat stress, summer rain, heat-rain synchrony) | **available** | `download_chelsa_monthly()`, `monthly_files()`, `climate_indices()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 
@@ -198,6 +199,86 @@ env_m <- crop_to_m(env, m)               # predictors clipped to M
 The example above uses simulated records with a hollow between two arms of the
 range. The default Delaunay M leaves the hollow out; an expert polygon or a
 cluster hull includes it.
+
+## Computing derived climate variables
+
+Bioclimatic variables describe temperature and precipitation, but not the
+water balance or heat stress that limit many species (e.g. C3 vs C4 plants).
+`climate_indices()` computes seven such variables from **monthly
+climatologies**: the 12 monthly means of maximum (`tasmax`), minimum
+(`tasmin`) and mean (`tas`) temperature and precipitation (`pr`). Daily data
+are not needed.
+
+| Index | Meaning | Unit |
+|---|---|---|
+| `vpd` | mean vapour pressure deficit (FAO-56, dew point from Tmin) | kPa |
+| `pet` | potential evapotranspiration, Hargreaves-Samani (FAO-56) | mm/year |
+| `cmd` | climatic moisture deficit: sum of monthly PET − P where positive | mm/year |
+| `aridity` | aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid) | – |
+| `heat_stress` | sum over months of Tmax above 30 °C (`heat_threshold`) | °C × months |
+| `sri` | summer rain index: precipitation of the warmest quarter / annual (= bio18 / bio12) | 0–1 |
+| `synchronicity` | 1 = the warmest and the wettest month coincide, 0 = six months apart | 0–1 |
+
+**1. Get the monthly files.** They can be downloaded automatically from
+CHELSA V2.1 (no account needed). With `extent`, only your region is read
+from the global files over the internet and saved, with the original values,
+scale and offset:
+
+```r
+# present climate (1981-2010), 4 variables x 12 months
+download_chelsa_monthly("chelsa_monthly", extent = c(-170, -30, -56, 72))
+# future: any period, GCM and scenario
+for (gcm in c("IPSL-CM6A-LR", "MPI-ESM1-2-HR", "UKESM1-0-LL"))
+  for (ssp in c("ssp126", "ssp370", "ssp585"))
+    download_chelsa_monthly("chelsa_monthly", period = "2071-2100",
+                            gcm = gcm, ssp = ssp, extent = c(-170, -30, -56, 72))
+```
+
+A large region still means a large download (each global file is about
+110 MB, and at least the full rows of the region are read; 48 files per
+period and scenario). Interrupted downloads continue where they stopped.
+You can also download the files by hand from
+[chelsa-climate.org](https://chelsa-climate.org) (*Downloads → V2.1 →
+climatologies*: `tasmax`, `tasmin`, `tas`, `pr` for months 01–12), or use
+WorldClim monthly `tmax`, `tmin`, `tavg`, `prec`; any 12-layer monthly data
+in °C and mm/month work. Cite CHELSA (Karger et al. 2017) when you use it.
+
+**2. Compute the indices.**
+
+```r
+f <- function(v, ...) monthly_files("chelsa_monthly", v, must_contain = c(...))
+ci <- climate_indices(tmax = f("tasmax", "1981-2010"), tmin = f("tasmin", "1981-2010"),
+                      prec = f("pr", "1981-2010"), tmean = f("tas", "1981-2010"),
+                      path = "indices", prefix = "CHELSA_1981-2010_")
+
+# the same for every future scenario
+for (gcm in c("ipsl-cm6a-lr", "mpi-esm1-2-hr", "ukesm1-0-ll"))
+  for (ssp in c("ssp126", "ssp370", "ssp585"))
+    climate_indices(f("tasmax", gcm, ssp), f("tasmin", gcm, ssp),
+                    f("pr", gcm, ssp), tmean = f("tas", gcm, ssp),
+                    path = "indices", prefix = paste0("CHELSA_", gcm, "_", ssp, "_"))
+```
+
+Existing output files are kept, so interrupted runs continue. Compute on
+the original longitude/latitude grid (cut to your region with
+`crop_rasters()` if you downloaded global files) and project the results
+afterwards if you need another projection: that is faster than projecting
+48 monthly layers, and the indices are computed from unsmoothed values.
+Then add the new variables to `sample_environment()` / `select_variables()`
+like any other layer.
+
+**Units.** Temperatures must be in °C and precipitation in mm/month.
+CHELSA V2.1 stores temperature as Kelvin × 10 with a scale and offset in the
+file, which terra applies on reading: the values are already °C, so do
+**not** divide them by 10. `climate_indices()` checks this: Kelvin is
+converted, and values that look divided by 10 stop with an explanation.
+
+**Formulas** (see `?climate_indices`): saturation vapour pressure
+e(T) = 0.6108 exp(17.27 T / (T + 237.3)); VPD = (e(Tmax) + e(Tmin)) / 2 −
+e(Tmin); PET = 0.0023 × 0.408 × Ra × (Tmean + 17.8) × √(Tmax − Tmin) mm/day,
+with extraterrestrial radiation Ra (MJ m⁻² day⁻¹) from latitude and the
+mid-month day (FAO-56 eq. 21; 0.408 converts it to mm of water); summer
+quarters are any three consecutive months, including December–February.
 
 ## Selecting predictor variables across periods and regions
 

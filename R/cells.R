@@ -150,9 +150,11 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #'   recorded" means "absent" only where people recorded.
 #' * `"enveffort"`: the `envstrat` bins with equal total probability per
 #'   bin, but *within* a bin cells with more recording effort are preferred
-#'   (their missing record of the species is a more reliable absence). For
-#'   *Dryas octopetala* this combination gave the best hindcasts and reduced
-#'   the sampling bias.
+#'   (their missing record of the species is a more reliable absence).
+#'
+#' No method is best for every species and data set; compare the
+#' backgrounds on the same hold-out folds (and independent records, if you
+#' have them), with `"uniform"` as the reference.
 #'
 #' For `"envstrat"`, `"effort"` and `"enveffort"` the points are drawn from
 #' a random pool of `env_pool` valid cells (all cells if fewer), by weighted

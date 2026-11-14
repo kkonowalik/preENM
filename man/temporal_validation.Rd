@@ -17,6 +17,11 @@ temporal_validation(
   thresholds = NULL,
   combine = NULL,
   pool = NULL,
+  n_boot = 0,
+  conf = 0.95,
+  compare = NULL,
+  margin = 0,
+  seed = NULL,
   prefix = "temporal"
 )
 }
@@ -55,6 +60,22 @@ many records of a large one. Otherwise (e.g. every record scored by
 every run or background set) the run values are averaged. The \verb{_sd}
 columns are always the SD across runs.}
 
+\item{n_boot}{Number of bootstrap resamples of the records (0 = none;
+1000-2000 for final results). See \emph{Record bootstrap}.}
+
+\item{conf}{Confidence level of the bootstrap intervals.}
+
+\item{compare}{The metric (output column) for the paired comparison
+between models, e.g. \code{"fossil_AUC_deep"}. Default: the first \code{combine}
+group if given, otherwise \verb{<prefix>_AUC}.}
+
+\item{margin}{Smallest difference to the best model that matters (in
+units of \code{compare}, e.g. 0.02). A model is flagged \verb{_worse} only if its
+gap to the best is larger than \code{margin} in the lower bound of the
+paired interval. Set it before looking at the results.}
+
+\item{seed}{Optional random seed for the bootstrap.}
+
 \item{prefix}{Prefix of the output columns, e.g. \code{"fossil"} gives
 \code{fossil_AUC}.}
 }
@@ -63,7 +84,8 @@ A data.frame with one row per model: \verb{<prefix>_AUC}, per-period and
 combined columns \verb{<prefix>_AUC_<period>}, \verb{<prefix>_AUC_analog},
 \verb{<prefix>_sens}, \verb{<prefix>_area}, \verb{<prefix>_lift}, \verb{<prefix>_n_records},
 and with \code{run} the SD of each metric across runs (\verb{_sd}) and
-\verb{<prefix>_n_runs}. Per-run results are in \code{attr(x, "runs")}, the
+\verb{<prefix>_n_runs}; with \code{n_boot}, the bootstrap columns (see \emph{Record
+bootstrap}). Per-run results are in \code{attr(x, "runs")}, the
 per-record scores in \code{attr(x, "records")} and whether runs were pooled
 in \code{attr(x, "pooled")}.
 }
@@ -98,6 +120,34 @@ with the share of background predicted suitable (\code{area}) and their ratio
 (\code{lift} = sensitivity / area; 1 = no better than chance, so a model cannot
 gain sensitivity simply by predicting everything as suitable).
 }
+\section{Record bootstrap}{
+
+With a few hundred records, differences between models of a few
+hundredths may be noise. With \code{n_boot > 0} the records are resampled
+with replacement, and \strong{the same resampled records are scored for every
+model}, so the comparison is paired: a record that is hard for one model
+is usually hard for all, and a consistent gap shows up even when the
+intervals of the models overlap. Records are matched between models by
+their \code{record} id; each record's score is its pooled score (or its mean
+over runs, when runs are averaged). The output gains, for every metric,
+\verb{_lower} and \verb{_upper} (percentile interval), and for the \code{compare}
+metric:
+\itemize{
+\item \verb{<compare>_diff}: the gap to the best model (best minus this model),
+with \verb{_diff_lower} and \verb{_diff_upper} (paired interval);
+\item \verb{<compare>_p_best}: share of resamples in which the model is the best;
+\item \verb{<compare>_p_worse}: share of resamples in which the best model is
+better than this one;
+\item \verb{<compare>_worse}: \code{TRUE} if the gap exceeds \code{margin} with the
+confidence \code{conf} (\verb{_diff_lower > margin}).
+}
+
+A consistent gap is not necessarily an important one: with \code{margin = 0}
+even tiny but consistent differences are flagged. Choose \code{margin} (the
+difference you would consider meaningful) before looking at the results.
+The replicates are in \code{attr(x, "bootstrap")}.
+}
+
 \examples{
 set.seed(1)
 # 3 time slices, 500 background cells each, 40 records
@@ -109,4 +159,10 @@ st$pred <- ifelse(st$model == "good", rbeta(nrow(st), 5, 1),
                   runif(nrow(st)))
 st$period <- ifelse(st$record <= 30, "Holocene", "Glacial")
 temporal_validation(st, bg, period = "period", prefix = "fossil")
+
+# paired record bootstrap: is "random" really worse than "good"?
+tv <- temporal_validation(st, bg, period = "period", prefix = "fossil",
+                          n_boot = 200, margin = 0.02, seed = 1)
+tv[c("model", "fossil_AUC", "fossil_AUC_lower", "fossil_AUC_upper",
+     "fossil_AUC_diff", "fossil_AUC_p_best", "fossil_AUC_worse")]
 }

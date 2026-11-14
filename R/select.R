@@ -5,7 +5,8 @@
 #' Combines the two selection rules used in practice:
 #'
 #' * **`"threshold"`** (default): keep every model reaching conventional
-#'   minimum values on all `min_metrics`. This drops only clearly poor models
+#'   minimum values on all `min_metrics` (and not exceeding the
+#'   `max_metrics`, for "lower is better" metrics such as MAEbal). This drops only clearly poor models
 #'   and keeps several good ones for an ensemble. Typical values: AUC >= 0.8
 #'   ("excellent" discrimination; 0.7-0.8 "acceptable", Hosmer & Lemeshow
 #'   2000), TSS >= 0.6 ("substantial" agreement on the Landis & Koch 1977
@@ -38,9 +39,11 @@
 #' @param x A data.frame with one row per model and a `model` column.
 #' @param rule `"threshold"`, `"pareto"` or `"both"` (see Details).
 #' @param min_metrics Named vector of minimum values (larger = better).
-#'   Metrics that are not columns of `x` are ignored with a message. To set a
-#'   maximum for a "lower is better" metric, add a negated column, e.g.
-#'   `x$neg_MAE <- -x$MAE` and `min_metrics = c(neg_MAE = -0.3)`.
+#'   Metrics that are not columns of `x` are ignored with a message.
+#' @param max_metrics Named vector of maximum values for "lower is better"
+#'   metrics, e.g. `c(MAEbal = 0.3)`: a model passes only if it does not
+#'   exceed them. Together with `min_metrics` this lets the rule require
+#'   both discrimination (AUC, TSS) and calibration (MAE, MAEbal).
 #' @param criteria Named character vector giving, for each Pareto criterion,
 #'   `"max"` (larger is better), `"min"` (smaller is better) or `"zero"`
 #'   (closer to 0 is better, e.g. `bias`).
@@ -59,9 +62,11 @@
 #'                  TSS = c(0.62, 0.65, 0.66, 0.38),
 #'                  MAE = c(0.30, 0.27, 0.24, 0.41))
 #' select_models(df)                                   # minimum values
+#' select_models(df, max_metrics = c(MAE = 0.3))       # ... and a maximum
 #' select_models(df, rule = "pareto", tol = 0.01)      # Pareto front
 select_models <- function(x, rule = c("threshold", "pareto", "both"),
                           min_metrics = c(AUC = 0.8, TSS = 0.6),
+                          max_metrics = NULL,
                           criteria = c(AUC = "max", MAE = "min"),
                           tol = 0, override = NULL,
                           plot = interactive()) {
@@ -72,20 +77,23 @@ select_models <- function(x, rule = c("threshold", "pareto", "both"),
   }
   check_criteria(criteria, names(criteria))
 
-  # rule 1: minimum values
-  miss <- setdiff(names(min_metrics), names(x))
+  # rule 1: minimum (and maximum) values
+  miss <- setdiff(c(names(min_metrics), names(max_metrics)), names(x))
   if (length(miss)) {
-    message("Minimum values ignored (no such column): ",
+    message("Minimum/maximum values ignored (no such column): ",
             paste(miss, collapse = ", "))
   }
   mins <- min_metrics[names(min_metrics) %in% names(x)]
-  x$pass <- if (length(mins)) {
-    Reduce(`&`, lapply(names(mins), function(k) {
-      !is.na(x[[k]]) & x[[k]] >= mins[[k]]
-    }))
-  } else {
-    rep(TRUE, nrow(x))
-  }
+  maxs <- if (is.null(max_metrics)) numeric(0) else
+    max_metrics[names(max_metrics) %in% names(x)]
+  tests <- c(lapply(names(mins), function(k) {
+    !is.na(x[[k]]) & x[[k]] >= mins[[k]]
+  }), lapply(names(maxs), function(k) {
+    !is.na(x[[k]]) & x[[k]] <= maxs[[k]]
+  }))
+  x$pass <- if (length(tests)) Reduce(`&`, tests) else rep(TRUE, nrow(x))
+  rule_text <- c(if (length(mins)) paste(names(mins), mins, sep = " >= "),
+                 if (length(maxs)) paste(names(maxs), maxs, sep = " <= "))
 
   # rule 2: Pareto front (missing values count as worst)
   miss_c <- setdiff(names(criteria), names(x))
@@ -115,8 +123,8 @@ select_models <- function(x, rule = c("threshold", "pareto", "both"),
     x$pass
   }
   if (!any(sel)) {
-    warning("No model reaches all minimum values (",
-            paste(names(mins), mins, sep = " >= ", collapse = ", "),
+    warning("No model reaches all minimum/maximum values (",
+            paste(rule_text, collapse = ", "),
             "); the Pareto front is selected instead.", call. = FALSE)
     sel <- x$pareto
   }
@@ -125,6 +133,7 @@ select_models <- function(x, rule = c("threshold", "pareto", "both"),
   rownames(x) <- NULL
   attr(x, "rule") <- if (!is.null(override)) "manual" else rule
   attr(x, "min_metrics") <- mins
+  attr(x, "max_metrics") <- maxs
   attr(x, "criteria") <- crit
   attr(x, "tol") <- tol
   class(x) <- c("enm_selection", "data.frame")
@@ -139,11 +148,13 @@ print.enm_selection <- function(x, digits = 3, ...) {
     return(print_plain(x, digits, ...))
   }
   mins <- attr(x, "min_metrics")
+  maxs <- attr(x, "max_metrics")
   crit <- attr(x, "criteria")
   cat("Model selection (rule: ", attr(x, "rule"), ")\n", sep = "")
-  if (length(mins)) {
-    cat("  Minimum values: ", paste(names(mins), mins, sep = " >= ",
-                                    collapse = ", "),
+  rt <- c(if (length(mins)) paste(names(mins), mins, sep = " >= "),
+          if (length(maxs)) paste(names(maxs), maxs, sep = " <= "))
+  if (length(rt)) {
+    cat("  Required values: ", paste(rt, collapse = ", "),
         " | pass: ", paste(x$model[x$pass], collapse = ", "), "\n", sep = "")
   }
   cat("  Pareto front (", paste(names(crit), crit, sep = ":", collapse = ", "),

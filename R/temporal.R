@@ -57,13 +57,49 @@
 #'   many records of a large one. Otherwise (e.g. every record scored by
 #'   every run or background set) the run values are averaged. The `_sd`
 #'   columns are always the SD across runs.
+#' @param n_boot Number of bootstrap resamples of the records (0 = none;
+#'   1000-2000 for final results). See *Record bootstrap*.
+#' @param conf Confidence level of the bootstrap intervals.
+#' @param compare The metric (output column) for the paired comparison
+#'   between models, e.g. `"fossil_AUC_deep"`. Default: the first `combine`
+#'   group if given, otherwise `<prefix>_AUC`.
+#' @param margin Smallest difference to the best model that matters (in
+#'   units of `compare`, e.g. 0.02). A model is flagged `_worse` only if its
+#'   gap to the best is larger than `margin` in the lower bound of the
+#'   paired interval. Set it before looking at the results.
+#' @param seed Optional random seed for the bootstrap.
 #' @param prefix Prefix of the output columns, e.g. `"fossil"` gives
 #'   `fossil_AUC`.
+#' @section Record bootstrap:
+#' With a few hundred records, differences between models of a few
+#' hundredths may be noise. With `n_boot > 0` the records are resampled
+#' with replacement, and **the same resampled records are scored for every
+#' model**, so the comparison is paired: a record that is hard for one model
+#' is usually hard for all, and a consistent gap shows up even when the
+#' intervals of the models overlap. Records are matched between models by
+#' their `record` id; each record's score is its pooled score (or its mean
+#' over runs, when runs are averaged). The output gains, for every metric,
+#' `_lower` and `_upper` (percentile interval), and for the `compare`
+#' metric:
+#' * `<compare>_diff`: the gap to the best model (best minus this model),
+#'   with `_diff_lower` and `_diff_upper` (paired interval);
+#' * `<compare>_p_best`: share of resamples in which the model is the best;
+#' * `<compare>_p_worse`: share of resamples in which the best model is
+#'   better than this one;
+#' * `<compare>_worse`: `TRUE` if the gap exceeds `margin` with the
+#'   confidence `conf` (`_diff_lower > margin`).
+#'
+#' A consistent gap is not necessarily an important one: with `margin = 0`
+#' even tiny but consistent differences are flagged. Choose `margin` (the
+#' difference you would consider meaningful) before looking at the results.
+#' The replicates are in `attr(x, "bootstrap")`.
+#'
 #' @return A data.frame with one row per model: `<prefix>_AUC`, per-period and
 #'   combined columns `<prefix>_AUC_<period>`, `<prefix>_AUC_analog`,
 #'   `<prefix>_sens`, `<prefix>_area`, `<prefix>_lift`, `<prefix>_n_records`,
 #'   and with `run` the SD of each metric across runs (`_sd`) and
-#'   `<prefix>_n_runs`. Per-run results are in `attr(x, "runs")`, the
+#'   `<prefix>_n_runs`; with `n_boot`, the bootstrap columns (see *Record
+#'   bootstrap*). Per-run results are in `attr(x, "runs")`, the
 #'   per-record scores in `attr(x, "records")` and whether runs were pooled
 #'   in `attr(x, "pooled")`.
 #' @export
@@ -78,12 +114,20 @@
 #'                   runif(nrow(st)))
 #' st$period <- ifelse(st$record <= 30, "Holocene", "Glacial")
 #' temporal_validation(st, bg, period = "period", prefix = "fossil")
+#'
+#' # paired record bootstrap: is "random" really worse than "good"?
+#' tv <- temporal_validation(st, bg, period = "period", prefix = "fossil",
+#'                           n_boot = 200, margin = 0.02, seed = 1)
+#' tv[c("model", "fossil_AUC", "fossil_AUC_lower", "fossil_AUC_upper",
+#'      "fossil_AUC_diff", "fossil_AUC_p_best", "fossil_AUC_worse")]
 temporal_validation <- function(sites, background, model = "model",
                                 run = NULL, record = "record",
                                 slice = "slice", pred = "pred",
                                 period = NULL, novel = NULL,
                                 thresholds = NULL, combine = NULL,
-                                pool = NULL, prefix = "temporal") {
+                                pool = NULL, n_boot = 0, conf = 0.95,
+                                compare = NULL, margin = 0, seed = NULL,
+                                prefix = "temporal") {
   need_s <- c(model, run, record, slice, pred, period, novel)
   need_b <- c(model, run, slice, pred)
   miss <- c(setdiff(need_s, names(sites)), setdiff(need_b, names(background)))
@@ -119,30 +163,36 @@ temporal_validation <- function(sites, background, model = "model",
   empty_slices <- character(0)
   recs <- list()
   # metrics from a table of records (internal to this function)
-  record_metrics <- function(rt) {
+  # w: optional record weights (bootstrap counts)
+  wmean <- function(v, w, keep = TRUE) {
+    k <- keep & !is.na(v) & w > 0
+    if (!any(k)) return(NA_real_)
+    sum(v[k] * w[k]) / sum(w[k])
+  }
+  record_metrics <- function(rt, w = rep(1, nrow(rt)), periods = NULL) {
     out <- list()
-    out[[paste0(p, "_AUC")]] <- mean(rt$score, na.rm = TRUE)
+    out[[paste0(p, "_AUC")]] <- wmean(rt$score, w)
     if (!is.null(period)) {
-      for (pp in sort(unique(stats::na.omit(rt$period)))) {
-        out[[paste0(p, "_AUC_", pp)]] <- mean(rt$score[rt$period %in% pp],
-                                              na.rm = TRUE)
+      if (is.null(periods)) periods <- sort(unique(stats::na.omit(rt$period)))
+      for (pp in periods) {
+        out[[paste0(p, "_AUC_", pp)]] <- wmean(rt$score, w, rt$period %in% pp)
       }
       for (nm in names(combine)) {
         out[[paste0(p, "_AUC_", nm)]] <-
-          mean(rt$score[rt$period %in% combine[[nm]]], na.rm = TRUE)
+          wmean(rt$score, w, rt$period %in% combine[[nm]])
       }
     }
     if (!is.null(novel)) {
-      out[[paste0(p, "_AUC_analog")]] <- mean(rt$analog, na.rm = TRUE)
+      out[[paste0(p, "_AUC_analog")]] <- wmean(rt$analog, w)
     }
     if (!is.null(thresholds)) {
-      sens <- mean(rt$above, na.rm = TRUE)
-      area <- mean(rt$area, na.rm = TRUE)
+      sens <- wmean(as.numeric(rt$above), w)
+      area <- wmean(rt$area, w)
       out[[paste0(p, "_sens")]] <- sens
       out[[paste0(p, "_area")]] <- area
       out[[paste0(p, "_lift")]] <- sens / area
     }
-    out[[paste0(p, "_n_records")]] <- sum(!is.na(rt$score))
+    out[[paste0(p, "_n_records")]] <- sum(!is.na(rt$score) & w > 0)
     out
   }
 
@@ -262,8 +312,17 @@ temporal_validation <- function(sites, background, model = "model",
     })
   }
   rownames(out) <- NULL
+
+  boot <- NULL
+  if (n_boot > 0) {
+    bt <- temporal_bootstrap(out, recs, record_metrics, n_boot, conf, compare,
+                             margin, seed, p, period, wmean)
+    out <- bt$out
+    boot <- bt$boot
+  }
   attr(out, "runs") <- runs
   attr(out, "records") <- recs
+  attr(out, "bootstrap") <- boot
   attr(out, "pooled") <- isTRUE(pool) && !is.null(run)
   out
 }
@@ -376,4 +435,86 @@ outside_range <- function(x, reference) {
                na.rm = TRUE)
   rowSums(sweep(x, 2, rng[1, ], `<`) | sweep(x, 2, rng[2, ], `>`),
           na.rm = TRUE) > 0
+}
+
+# Paired bootstrap over records for temporal_validation() (internal)
+temporal_bootstrap <- function(out, recs, record_metrics, n_boot, conf,
+                               compare, margin, seed, p, period, wmean) {
+  # one row per model and record (mean over runs when records repeat)
+  key <- paste(recs$model, recs$record, sep = "\r")
+  first <- !duplicated(key)
+  agg <- function(v) as.vector(tapply(v, key, mean, na.rm = TRUE)[key[first]])
+  rt <- recs[first, c("model", "record", "period"), drop = FALSE]
+  rt$score <- agg(recs$score)
+  rt$analog <- agg(recs$analog)
+  rt$above <- agg(as.numeric(recs$above))
+  rt$area <- agg(recs$area)
+  rt[] <- lapply(rt, function(v) {
+    if (is.numeric(v)) v[is.nan(v)] <- NA
+    v
+  })
+  ids <- unique(rt$record)
+  rt$id <- match(rt$record, ids)
+  by_model <- split(rt, factor(rt$model, unique(out$model)))
+  periods <- if (is.null(period)) NULL else
+    sort(unique(stats::na.omit(rt$period)))
+  mets <- setdiff(names(record_metrics(by_model[[1]], periods = periods)),
+                  paste0(p, "_n_records"))
+  mets <- intersect(mets, names(out))
+  if (is.null(compare)) {
+    cmb <- setdiff(mets, c(paste0(p, c("_AUC", "_AUC_analog", "_sens",
+                                       "_area", "_lift")),
+                           paste0(p, "_AUC_", periods)))
+    compare <- if (length(cmb)) cmb[1] else paste0(p, "_AUC")
+  }
+  if (!compare %in% mets) {
+    stop("`compare` must be one of: ", paste(mets, collapse = ", "),
+         call. = FALSE)
+  }
+  higher <- !grepl("_area$", compare)
+  reps <- with_seed(seed, lapply(seq_len(n_boot), function(b) {
+    cnt <- tabulate(sample.int(length(ids), replace = TRUE), length(ids))
+    t(vapply(by_model, function(d) {
+      m <- record_metrics(d, w = cnt[d$id], periods = periods)
+      vapply(mets, function(k) {
+        if (is.null(m[[k]])) NA_real_ else m[[k]]
+      }, numeric(1))
+    }, numeric(length(mets))))
+  }))
+  boot <- do.call(rbind, lapply(seq_along(reps), function(b) {
+    data.frame(replicate = b, model = names(by_model), reps[[b]],
+               row.names = NULL, check.names = FALSE)
+  }))
+  alpha <- (1 - conf) / 2
+  q <- function(v, pr) stats::quantile(v, pr, na.rm = TRUE, names = FALSE)
+  for (k in mets) {
+    M <- vapply(reps, function(r) r[, k], numeric(length(by_model)))
+    M <- matrix(M, nrow = length(by_model))
+    out[[paste0(k, "_lower")]] <- apply(M, 1, q, alpha)
+    out[[paste0(k, "_upper")]] <- apply(M, 1, q, 1 - alpha)
+  }
+  M <- matrix(vapply(reps, function(r) r[, compare],
+                     numeric(length(by_model))), nrow = length(by_model))
+  est <- out[[compare]]
+  best <- if (higher) which.max(est) else which.min(est)
+  D <- if (higher) sweep(-M, 2, M[best, ], "+") else sweep(M, 2, M[best, ])
+  win <- apply(M, 2, function(v) {
+    if (all(is.na(v))) return(NA_integer_)
+    if (higher) which.max(v) else which.min(v)
+  })
+  out[[paste0(compare, "_diff")]] <- if (higher) est[best] - est else
+    est - est[best]
+  out[[paste0(compare, "_diff_lower")]] <- apply(D, 1, q, alpha)
+  out[[paste0(compare, "_diff_upper")]] <- apply(D, 1, q, 1 - alpha)
+  out[[paste0(compare, "_p_best")]] <- vapply(seq_along(est), function(i) {
+    mean(win == i, na.rm = TRUE)
+  }, numeric(1))
+  out[[paste0(compare, "_p_worse")]] <- rowMeans(D > 0, na.rm = TRUE)
+  out[[paste0(compare, "_p_worse")]][best] <- 0
+  out[[paste0(compare, "_worse")]] <-
+    out[[paste0(compare, "_diff_lower")]] > margin
+  out[[paste0(compare, "_worse")]][best] <- FALSE
+  attr(out, "compare") <- c(metric = compare, best = out$model[best],
+                            margin = margin)
+  list(out = out, boot = boot)
 }

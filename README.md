@@ -378,7 +378,14 @@ points (each with `n_sets` reproducible sets):
 | `"uniform"` (default) | random cells | the classic choice |
 | `"envstrat"` | even coverage of environmental bins (PCA of the layers) | common climates no longer dominate the background |
 | `"effort"` | cells weighted by recording effort | like a target-group background: corrects the sampling bias of presences |
-| `"enveffort"` | environmental bins with equal weight, effort-weighted cells within each bin | both; for *Dryas octopetala* this gave the best hindcasts and reduced the sampling bias |
+| `"enveffort"` | environmental bins with equal weight, effort-weighted cells within each bin | both corrections at once |
+
+No strategy is best for every species: which one gives the most
+transferable models depends on how biased the records are and on how the
+species' niche lies in the study area. Treat the method as one more choice
+to test: fit models with two or more backgrounds and compare them on the
+same hold-out folds and, where available, on independent (e.g. fossil)
+records; `"uniform"` is a sound reference.
 
 ```r
 bg <- sample_background(env, n = 10000, n_sets = 10, exclude = pres,
@@ -660,10 +667,49 @@ fos <- temporal_validation(
 all <- merge(cv, fos, by = "model")
 sel <- select_models(all,
                      min_metrics = c(AUC = 0.8, TSS = 0.6, fossil_AUC_deep = 0.7),
+                     max_metrics = c(MAEbal = 0.3),   # calibration, too
                      criteria = c(AUC = "max", MAEbal = "min", fossil_AUC_deep = "max"),
                      tol = 0.01)
 plot_selection(sel, x_metric = "AUC", y_metric = "fossil_AUC_deep")
 ```
+
+Call `temporal_validation()` **once for all models** (the `model` column;
+`thresholds` as a table with `model`, `run`, `threshold`), not once per
+model: the per-record scores (`attr(fos, "records")`) then cover every
+model, and the bootstrap below can compare them.
+
+`max_metrics` sets upper limits for "lower is better" metrics. A rule
+with minimum values for discrimination (AUC, TSS) and a maximum for
+calibration (MAEbal) keeps models that rank sites well *and* predict
+sensible values; a model with good AUC but values shifted upwards everywhere
+(high MAEbal, positive bias) would otherwise pass.
+
+**Are the differences real? Record bootstrap.** With a few hundred fossil
+records, gaps of a few hundredths may be noise. `n_boot` resamples the
+records, scoring the **same resampled records for every model** (a paired
+comparison):
+
+```r
+fos <- temporal_validation(sites, bg, run = "run", period = "period",
+                           combine = list(deep = c("Lateglacial", "Glacial")),
+                           prefix = "fossil", n_boot = 2000, seed = 1,
+                           compare = "fossil_AUC_deep", margin = 0.02)
+fos[c("model", "fossil_AUC_deep", "fossil_AUC_deep_lower",
+      "fossil_AUC_deep_upper", "fossil_AUC_deep_diff",
+      "fossil_AUC_deep_diff_lower", "fossil_AUC_deep_p_best",
+      "fossil_AUC_deep_worse")]
+```
+
+Every metric gets a percentile interval (`_lower`, `_upper`). For the
+`compare` metric you also get the gap to the best model with its paired
+interval (`_diff`, `_diff_lower`, `_diff_upper`), the share of resamples in
+which each model is the best (`_p_best`) or is beaten by the best
+(`_p_worse`), and `_worse`: the gap exceeds `margin` with 95% confidence.
+Because records that are hard for one model are usually hard for all, even
+small gaps are often consistent; a consistent gap is not necessarily an
+important one. Fix `margin` (the difference that would matter to you)
+before looking at the results, and use the bootstrap to report the ranking
+and its certainty rather than to drop every model that is detectably worse.
 
 **Out-of-fold records are pooled.** When each record is scored by only one
 run (spatial cross-validation: the model of fold *k* scores the records in

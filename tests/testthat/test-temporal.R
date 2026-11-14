@@ -162,3 +162,44 @@ test_that("out-of-fold records are pooled across runs", {
   both <- temporal_validation(st2, bg, run = "run")
   expect_false(attr(both, "pooled"))
 })
+
+test_that("record bootstrap is paired across models", {
+  set.seed(5)
+  n_rec <- 150
+  bg <- expand.grid(cell = 1:500, slice = 1:3, model = c("A", "B", "C"))
+  bg$pred <- runif(nrow(bg))
+  # records differ a lot in difficulty; B is A minus a small constant
+  base <- runif(n_rec, 0.5, 0.98)
+  st <- data.frame(record = rep(1:n_rec, 3), slice = rep(sample(1:3, n_rec,
+                   replace = TRUE), 3), model = rep(c("A", "B", "C"),
+                   each = n_rec))
+  st$pred <- c(base, base - 0.02, runif(n_rec))
+  st$period <- rep(ifelse(1:n_rec <= 100, "Holocene", "Glacial"), 3)
+  tv <- temporal_validation(st, bg, period = "period", n_boot = 300,
+                            seed = 1, combine = list(deep = "Glacial"))
+  expect_equal(attr(tv, "compare")[["metric"]], "temporal_AUC_deep")
+  a <- tv[tv$model == "A", ]
+  b <- tv[tv$model == "B", ]
+  # separate intervals overlap, but the paired gap is clearly above 0
+  expect_gt(a$temporal_AUC_deep_upper, b$temporal_AUC_deep_lower)
+  expect_gt(b$temporal_AUC_deep_diff_lower, 0)
+  expect_true(b$temporal_AUC_deep_worse)
+  expect_gt(a$temporal_AUC_deep_p_best, 0.95)
+  expect_equal(a$temporal_AUC_deep_diff, 0)
+  expect_false(a$temporal_AUC_deep_worse)
+  # a margin larger than the gap: not flagged
+  tvm <- temporal_validation(st, bg, period = "period", n_boot = 300,
+                             seed = 1, combine = list(deep = "Glacial"),
+                             margin = 0.1)
+  expect_false(tvm$temporal_AUC_deep_worse[tvm$model == "B"])
+  expect_true(tvm$temporal_AUC_deep_worse[tvm$model == "C"])
+  # reproducible; intervals around the estimate
+  tv2 <- temporal_validation(st, bg, period = "period", n_boot = 300,
+                             seed = 1, combine = list(deep = "Glacial"))
+  expect_equal(tv$temporal_AUC_lower, tv2$temporal_AUC_lower)
+  expect_true(all(tv$temporal_AUC_lower <= tv$temporal_AUC &
+                    tv$temporal_AUC <= tv$temporal_AUC_upper))
+  expect_equal(nrow(attr(tv, "bootstrap")), 300 * 3)
+  expect_error(temporal_validation(st, bg, n_boot = 10, compare = "nope"),
+               "must be one of")
+})

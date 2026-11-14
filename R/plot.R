@@ -293,13 +293,16 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
     p <- p + ggplot2::geom_hline(yintercept = 0, colour = muted,
                                  linewidth = 0.4, linetype = "dotted")
   }
-  if (x_metric %in% names(mins)) {
-    p <- p + ggplot2::geom_vline(xintercept = mins[[x_metric]],
+  limits <- c(mins, attr(x, "max_metrics"))
+  if (x_metric %in% names(limits)) {
+    p <- p + ggplot2::geom_vline(xintercept = limits[names(limits) ==
+                                                       x_metric],
                                  linetype = "dashed", colour = muted,
                                  linewidth = 0.4)
   }
-  if (y_metric %in% names(mins)) {
-    p <- p + ggplot2::geom_hline(yintercept = mins[[y_metric]],
+  if (y_metric %in% names(limits)) {
+    p <- p + ggplot2::geom_hline(yintercept = limits[names(limits) ==
+                                                       y_metric],
                                  linetype = "dashed", colour = muted,
                                  linewidth = 0.4)
   }
@@ -349,7 +352,7 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
   sub <- c(
     paste0("Selection rule: ", attr(x, "rule"), ". ",
            better_text(dirs, x_metric, y_metric)),
-    paste0(if (length(mins)) "Dashed lines: minimum values. ",
+    paste0(if (length(limits)) "Dashed lines: required values. ",
            if (ys %in% names(df) || xs %in% names(df))
              "Bars: \u00b11 SD across runs."),
     if (length(extra_crit)) {

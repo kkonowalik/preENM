@@ -40,3 +40,16 @@ test_that("plot_selection returns a ggplot", {
   expect_error(plot_selection(df), "select_models")
   expect_error(plot_selection(s, x_metric = "nope"), "not found")
 })
+
+test_that("maximum values for lower-is-better metrics", {
+  df <- data.frame(model = c("A", "B", "C"), AUC = c(0.9, 0.92, 0.91),
+                   TSS = 0.7, MAEbal = c(0.21, 0.33, 0.22))
+  s <- select_models(df, max_metrics = c(MAEbal = 0.3), plot = FALSE)
+  expect_equal(sort(s$model[s$selected]), c("A", "C"))
+  expect_equal(attr(s, "max_metrics"), c(MAEbal = 0.3))
+  expect_output(print(s), "MAEbal <= 0.3")
+  expect_message(select_models(df, max_metrics = c(x = 1), plot = FALSE),
+                 "ignored")
+  p <- plot_selection(s, "MAEbal", "AUC")
+  expect_match(p$labels$subtitle, "required values")
+})

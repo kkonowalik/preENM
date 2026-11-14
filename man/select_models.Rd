@@ -8,6 +8,7 @@ select_models(
   x,
   rule = c("threshold", "pareto", "both"),
   min_metrics = c(AUC = 0.8, TSS = 0.6),
+  max_metrics = NULL,
   criteria = c(AUC = "max", MAE = "min"),
   tol = 0,
   override = NULL,
@@ -20,9 +21,12 @@ select_models(
 \item{rule}{\code{"threshold"}, \code{"pareto"} or \code{"both"} (see Details).}
 
 \item{min_metrics}{Named vector of minimum values (larger = better).
-Metrics that are not columns of \code{x} are ignored with a message. To set a
-maximum for a "lower is better" metric, add a negated column, e.g.
-\code{x$neg_MAE <- -x$MAE} and \code{min_metrics = c(neg_MAE = -0.3)}.}
+Metrics that are not columns of \code{x} are ignored with a message.}
+
+\item{max_metrics}{Named vector of maximum values for "lower is better"
+metrics, e.g. \code{c(MAEbal = 0.3)}: a model passes only if it does not
+exceed them. Together with \code{min_metrics} this lets the rule require
+both discrimination (AUC, TSS) and calibration (MAE, MAEbal).}
 
 \item{criteria}{Named character vector giving, for each Pareto criterion,
 \code{"max"} (larger is better), \code{"min"} (smaller is better) or \code{"zero"}
@@ -47,7 +51,8 @@ Combines the two selection rules used in practice:
 \details{
 \itemize{
 \item \strong{\code{"threshold"}} (default): keep every model reaching conventional
-minimum values on all \code{min_metrics}. This drops only clearly poor models
+minimum values on all \code{min_metrics} (and not exceeding the
+\code{max_metrics}, for "lower is better" metrics such as MAEbal). This drops only clearly poor models
 and keeps several good ones for an ensemble. Typical values: AUC >= 0.8
 ("excellent" discrimination; 0.7-0.8 "acceptable", Hosmer & Lemeshow
 2000), TSS >= 0.6 ("substantial" agreement on the Landis & Koch 1977
@@ -84,5 +89,6 @@ df <- data.frame(model = c("GLM", "GBM", "RF", "SRE"),
                  TSS = c(0.62, 0.65, 0.66, 0.38),
                  MAE = c(0.30, 0.27, 0.24, 0.41))
 select_models(df)                                   # minimum values
+select_models(df, max_metrics = c(MAE = 0.3))       # ... and a maximum
 select_models(df, rule = "pareto", tol = 0.01)      # Pareto front
 }

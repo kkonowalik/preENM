@@ -1,3 +1,17 @@
+# preENM 2.7.0
+
+* `temporal_validation()`: **paired record bootstrap** (`n_boot`, `conf`,
+  `seed`). The records are resampled and the same resampled records are
+  scored for every model. Every metric gets a percentile interval, and the
+  `compare` metric (default: the first `combine` group) gets the gap to the
+  best model with a paired interval, `_p_best`, `_p_worse` and `_worse`
+  (the gap exceeds `margin`). Replicates in `attr(x, "bootstrap")`.
+* `select_models(max_metrics =)`: upper limits for "lower is better"
+  metrics, e.g. `c(MAEbal = 0.3)`, so one rule can require discrimination
+  and calibration. Shown in the printout and as dashed lines in plots.
+* Documentation: the background strategies are presented as choices to
+  compare, not with a recommended winner.
+
 # preENM 2.6.0
 
 Improvements to model selection, prompted by a comparison with the

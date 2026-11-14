@@ -135,3 +135,30 @@ test_that("temporal_validation gives predicted area and lift", {
   expect_equal(good$f_area, 0.5, tolerance = 0.06)
   expect_gt(good$f_lift, 1.8)
 })
+
+test_that("out-of-fold records are pooled across runs", {
+  set.seed(3)
+  bg <- expand.grid(cell = 1:300, slice = 1, run = 1:2, model = "m")
+  bg$pred <- runif(nrow(bg))
+  # run 1 scores 2 records (both poor), run 2 scores 18 records (good)
+  st <- data.frame(model = "m", run = rep(1:2, c(2, 18)), record = 1:20,
+                   slice = 1, pred = c(0.1, 0.1, rep(0.9, 18)))
+  pooled <- temporal_validation(st, bg, run = "run")
+  bg1 <- bg[bg$run == 1, ]
+  manual <- function(x, v) (findInterval(x, sort(v), left.open = TRUE) +
+                              findInterval(x, sort(v))) / (2 * length(v))
+  sc <- c(manual(0.1, bg1$pred), manual(0.1, bg1$pred),
+          rep(manual(0.9, bg$pred[bg$run == 2]), 18))
+  expect_true(attr(pooled, "pooled"))
+  expect_equal(pooled$temporal_AUC, mean(sc))
+  expect_equal(pooled$temporal_n_records, 20)
+  means <- temporal_validation(st, bg, run = "run", pool = FALSE)
+  expect_false(attr(means, "pooled"))
+  expect_equal(means$temporal_AUC, mean(c(mean(sc[1:2]), mean(sc[3:20]))))
+  expect_lt(means$temporal_AUC, pooled$temporal_AUC)
+  expect_equal(nrow(attr(pooled, "records")), 20)
+  # records scored by every run: run values are averaged (auto)
+  st2 <- rbind(transform(st, run = 1), transform(st, run = 2))
+  both <- temporal_validation(st2, bg, run = "run")
+  expect_false(attr(both, "pooled"))
+})

@@ -22,7 +22,7 @@ your own code.
 | **Background strategies and recording effort** | **available** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
 | **Fossil records** (optional, for hindcasts) | **available** | `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
-| **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()` |
+| **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 
 ### Model evaluation and selection
 
@@ -480,9 +480,15 @@ res4 <- evaluate_models(sim$models, sim$presence, sim$absence,
 
 ![TSS vs Boyce](man/figures/pareto_tss_boyce.png)
 
-The built-in metrics are `AUC`, `MAE`, `bias`, `TSS` and `Boyce`. A custom
+The built-in metrics are `AUC`, `MAE`, `MAEbal`, `bias`, `TSS` and
+`Boyce`. **`MAEbal`** (balanced MAE) averages the error on presences and on
+background points, `(mean(1 - pred | presence) + mean(pred | background)) / 2`.
+With thousands of background points the plain MAE is dominated by them and
+rewards narrow models; MAEbal weighs both classes equally and does not depend
+on the number of background points, so prefer it with presence-background
+data: `criteria = c(AUC = "max", MAEbal = "min")`. A custom
 metric is any `function(obs, pred)` that returns one number (`obs` is 0/1,
-`pred` the predicted suitability). The same `metrics` argument works in
+`pred` the predicted suitability); one with a built-in name replaces it. The same `metrics` argument works in
 `evaluate_cv()`, and `select_models()` / `plot_selection()` take the same
 `criteria`. The bootstrap gives confidence intervals and `p_pareto` for
 whichever criteria you choose.
@@ -551,8 +557,14 @@ A typical workflow for choosing the algorithms of an ensemble:
 4. **Temporal validation** (optional). `temporal_validation()` checks
    hindcasts against fossil records (see below).
 5. **Selection.** `select_models()` keeps every algorithm that reaches
-   conventional minimum values (default AUC >= 0.8, TSS >= 0.6), or only the
-   Pareto front. `plot_selection()` draws any pair of metrics.
+   conventional minimum values (default AUC >= 0.8, TSS >= 0.6), only the
+   Pareto front, or both (`rule = "both"`). For an ensemble the minimum
+   values are usually the better rule: the Pareto front finds the best
+   *single* models, and a model can reach it through one criterion alone,
+   e.g. the best present-day fit with weak hindcasts.
+6. **Plots.** `plot(sel)` draws the full view and a zoom on the best
+   models; `plot_models()` draws any two or three metrics, static or
+   interactive (see [Plotting any metrics, zoom and 3-D](#plotting-any-metrics-zoom-and-3-d)).
 
 A complete example you can run with the simulated data. It compares three GLMs
 on 4 spatial folds and 2 background sets:
@@ -583,6 +595,7 @@ sel <- select_models(cv, min_metrics = c(AUC = 0.8, TSS = 0.6))
 sel
 plot_selection(sel)                       # AUC vs MAE
 plot_selection(sel, x_metric = "TSS")     # AUC vs TSS
+plot(sel)                                 # full view + zoom on the best models
 ```
 
 ![Selection example](man/figures/selection_example.png)
@@ -592,6 +605,36 @@ point and run, with columns `model`, `fold`, `obs` (1/0), `pred` and,
 optionally, `set`. Any modelling software's output can be put in this form.
 With biomod2, for example, project the cross-validation models on the
 evaluation points and keep, for each run, the points of its held-out fold.
+
+### Plotting any metrics, zoom and 3-D
+
+When many algorithms perform alike, the plot gets crowded in one corner.
+`plot(sel)` (also drawn by `select_models()` in interactive sessions) shows
+the full view and, next to it, a **zoom on the region of the best models**:
+the Pareto fronts of the two plotted metrics are added one by one until at
+least half of the models are included. Models outside the zoom are named in
+the subtitle, and selected models are always drawn on top.
+
+![Full view and zoom](man/figures/selection_zoom.png)
+
+`plot_models()` draws any metrics of `select_models()`, `evaluate_models()`
+or `evaluate_cv()` output (or any table with a `model` column):
+
+```r
+plot_models(sel, x = "bias", y = "AUC")                  # any pair
+plot_models(sel, x = "MAEbal", y = "AUC", zoom = TRUE)   # zoom only
+plot_models(sel, x = "MAEbal", y = "AUC", zoom = list(x = c(0.19, 0.24),
+                                                      y = c(0.89, 0.93)))
+plot_models(sel, x = "MAEbal", y = "AUC", interactive = TRUE)  # hover, zoom
+plot_models(sel, x = "MAEbal", y = "AUC", z = "fossil_AUC_deep",  # 3-D
+            file = "selection_3d.html")                 # saved, opens in browser
+```
+
+Interactive and 3-D plots use the `plotly` package
+(`install.packages("plotly")`); they open in the RStudio viewer or the
+browser, can be rotated and hovered over (all values of a model), and saved
+as one HTML file. Axes always run from worse to better. Static plots are
+`ggplot` objects: save them with `ggplot2::ggsave()`.
 
 ### Fossil (temporal) validation
 
@@ -617,10 +660,19 @@ fos <- temporal_validation(
 all <- merge(cv, fos, by = "model")
 sel <- select_models(all,
                      min_metrics = c(AUC = 0.8, TSS = 0.6, fossil_AUC_deep = 0.7),
-                     criteria = c(AUC = "max", MAE = "min", fossil_AUC_deep = "max"),
+                     criteria = c(AUC = "max", MAEbal = "min", fossil_AUC_deep = "max"),
                      tol = 0.01)
 plot_selection(sel, x_metric = "AUC", y_metric = "fossil_AUC_deep")
 ```
+
+**Out-of-fold records are pooled.** When each record is scored by only one
+run (spatial cross-validation: the model of fold *k* scores the records in
+fold *k*), the records of all runs are pooled and every record counts once.
+Averaging the fold means instead would give a few records in a small fold as
+much weight as many records in a large one. When records are scored by
+several runs (e.g. every background set), the run values are averaged.
+`pool = TRUE`/`FALSE` forces either; the `_sd` columns are always the SD
+across runs, and `attr(fos, "records")` has the score of every record.
 
 With `thresholds`, the result also has the sensitivity (`_sens`), the share
 of background predicted suitable (`_area`) and their ratio (`_lift`): a
@@ -661,6 +713,7 @@ Helpers for preparing the climate of each record:
 
 1. **Metrics.** For each model, compute **AUC** (Mann–Whitney formulation,
    higher is better), **MAE** (`mean(|obs − pred|)`, lower is better),
+   **MAEbal** (MAE averaged over presences and background, lower is better),
    **bias** (`mean(obs − pred)`, closer to 0 is better), **TSS** and the
    **Boyce index**. AUC and MAE are the default criteria; see
    [Choosing which metrics to compare](#choosing-which-metrics-to-compare).

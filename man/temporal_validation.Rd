@@ -16,6 +16,7 @@ temporal_validation(
   novel = NULL,
   thresholds = NULL,
   combine = NULL,
+  pool = NULL,
   prefix = "temporal"
 )
 }
@@ -43,6 +44,17 @@ vector (names = models) or a data.frame with columns \code{model}, \code{run}
 \code{list(deep = c("Lateglacial", "Glacial"))}. Records of these periods are
 pooled (so periods with more records weigh more).}
 
+\item{pool}{How the runs are combined (only with \code{run}). \code{TRUE}: the
+records of all runs are pooled and every metric is computed over them,
+so each record counts once. \code{FALSE}: the metric is computed per run and
+the run values are averaged. \code{NULL} (default): pooled when no record is
+scored by more than one run of a model, i.e. out-of-fold evaluation
+where each record belongs to one cross-validation fold; there, averaging
+fold means would give a few records of a small fold as much weight as
+many records of a large one. Otherwise (e.g. every record scored by
+every run or background set) the run values are averaged. The \verb{_sd}
+columns are always the SD across runs.}
+
 \item{prefix}{Prefix of the output columns, e.g. \code{"fossil"} gives
 \code{fossil_AUC}.}
 }
@@ -50,8 +62,10 @@ pooled (so periods with more records weigh more).}
 A data.frame with one row per model: \verb{<prefix>_AUC}, per-period and
 combined columns \verb{<prefix>_AUC_<period>}, \verb{<prefix>_AUC_analog},
 \verb{<prefix>_sens}, \verb{<prefix>_area}, \verb{<prefix>_lift}, \verb{<prefix>_n_records},
-and with \code{run} the SD of each metric across runs (\verb{_sd}) and \verb{<prefix>_n_runs}. Per-run results are
-in \code{attr(x, "runs")}.
+and with \code{run} the SD of each metric across runs (\verb{_sd}) and
+\verb{<prefix>_n_runs}. Per-run results are in \code{attr(x, "runs")}, the
+per-record scores in \code{attr(x, "records")} and whether runs were pooled
+in \code{attr(x, "pooled")}.
 }
 \description{
 Tests whether models projected to past climates predict independent,

@@ -32,6 +32,9 @@ Model evaluation and selection:
 \item \code{\link[=evaluate_models]{evaluate_models()}}: AUC, MAE and bias for one or many models, Pareto
 ranking and bootstrap robustness.
 \item \code{\link[=plot_pareto]{plot_pareto()}}: publication-ready AUC-MAE plot with the Pareto front.
+\item \code{\link[=select_models]{select_models()}}, \code{\link[=plot_selection]{plot_selection()}}, \code{\link[=plot_models]{plot_models()}}: selection by
+minimum values or Pareto front; any two or three metrics, zoom, static
+or interactive 3-D plots.
 \item \code{\link[=extract_predictions]{extract_predictions()}}: model predictions at evaluation points.
 \item \code{\link[=pareto_rank]{pareto_rank()}}: generic multi-criteria Pareto ranking.
 \item \code{\link[=simulate_enm_data]{simulate_enm_data()}}: example data.

@@ -54,3 +54,27 @@ test_that("Boyce index handles degenerate input", {
 test_that("threshold_p10 is the 10th percentile", {
   expect_equal(threshold_p10(1:11 / 11), unname(quantile(1:11 / 11, 0.1)))
 })
+
+test_that("MAEbal weighs presences and background equally", {
+  obs <- c(1, 1, rep(0, 98))
+  narrow <- c(0.6, 0.6, rep(0, 98))
+  expect_equal(mae_balanced(obs, narrow), 0.5 * 0.4 + 0)
+  expect_lt(mae_score(obs, narrow), mae_balanced(obs, narrow))
+  expect_true(is.na(mae_balanced(c(0, 0), c(0.1, 0.2))))
+  # independent of the number of background points
+  expect_equal(mae_balanced(c(1, 0), c(0.8, 0.3)),
+               mae_balanced(c(1, rep(0, 50)), c(0.8, rep(0.3, 50))))
+})
+
+test_that("a user metric may replace a built-in one", {
+  sim <- simulate_enm_data(seed = 1)
+  my <- function(obs, pred) 42
+  expect_message(r <- evaluate_models(sim$models, sim$presence, sim$absence,
+                                      metrics = list(MAEbal = my),
+                                      criteria = c(AUC = "max",
+                                                   MAEbal = "min")),
+                 "replace the built-in")
+  expect_true(all(r$MAEbal == 42))
+  expect_error(evaluate_models(sim$models, sim$presence, sim$absence,
+                               metrics = list(obs = my)), "reserved")
+})

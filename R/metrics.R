@@ -35,6 +35,32 @@ auc_score <- function(obs, pred) {
 #' mae_score(c(1, 1, 0, 0), c(0.9, 0.6, 0.7, 0.1))
 mae_score <- function(obs, pred) mean(abs(obs - pred), na.rm = TRUE)
 
+#' Balanced mean absolute error (MAEbal)
+#'
+#' The mean absolute error computed separately for presences and for
+#' absences/background points and then averaged:
+#' `(mean(1 - pred | presence) + mean(pred | absence)) / 2`. The plain MAE
+#' is dominated by whichever class has more points; with many background
+#' points (e.g. 10 000) it mostly rewards predicting low values everywhere,
+#' i.e. narrow models. MAEbal weighs both classes equally (as with a
+#' prevalence of 0.5) and so does not depend on the number of background
+#' points. Lower is better.
+#'
+#' @inheritParams auc_score
+#' @export
+#' @examples
+#' obs <- c(1, 1, rep(0, 98))
+#' narrow <- c(0.6, 0.6, rep(0, 98))
+#' mae_score(obs, narrow)      # looks excellent: background dominates
+#' mae_balanced(obs, narrow)   # presences count as much as background
+mae_balanced <- function(obs, pred) {
+  ok <- !is.na(obs) & !is.na(pred)
+  obs <- obs[ok]
+  pred <- pred[ok]
+  if (!any(obs == 1) || !any(obs == 0)) return(NA_real_)
+  0.5 * mean(1 - pred[obs == 1]) + 0.5 * mean(pred[obs == 0])
+}
+
 #' Bias
 #'
 #' Mean of `obs - pred`. Positive values mean the model under-predicts
@@ -172,7 +198,7 @@ threshold_p10 <- function(pred_presence, p = 0.1) {
 # Compute all metrics for one model (internal)
 metric_row <- function(obs, pred, extra = list()) {
   ok <- !is.na(pred)
-  c(compute_metrics(obs, pred, c(builtin_metrics(), extra)),
+  c(compute_metrics(obs, pred, metric_funs(extra)),
     n_presence = sum(obs[ok] == 1),
     n_absence = sum(obs[ok] == 0))
 }

@@ -1,3 +1,36 @@
+# preENM 2.6.0
+
+Improvements to model selection, prompted by a comparison with the
+*Dryas octopetala* algorithm selection:
+
+* `temporal_validation()`: out-of-fold records are now **pooled across
+  runs** (new `pool`, default: pooled when no record is scored by more than
+  one run of a model). Before, the run values were averaged, so a few
+  records in a small fold weighed as much as many records in a large one;
+  with unevenly sized folds this lowered e.g. the deep fossil AUC by about
+  0.04. `pool = FALSE` gives the previous values. Per-record scores are in
+  `attr(x, "records")`.
+* New built-in metric **`MAEbal`** (`mae_balanced()`): the MAE averaged
+  over presences and background, independent of the number of background
+  points. A user metric with a built-in name now replaces it (with a
+  message) instead of being an error.
+* `select_models()`: `rule = "both"` (minimum values and Pareto front);
+  documentation on when the Pareto front is the right tool (best single
+  models) and when minimum values are (ensembles); `plot = interactive()`
+  draws the selection.
+* **Zoom**: `plot_selection(zoom = TRUE)` and `plot_pareto(zoom = TRUE)` show
+  the region of the best models (or given limits) and name the models
+  outside it; `plot(sel)` / `plot(evaluation)` draw the full view and the
+  zoom side by side. Selected models are drawn on top of the others, bars
+  are lighter in the zoom, and a `"zero"` metric (bias) gets a reference
+  line.
+* New `plot_models()`: any two or three metrics of a selection, evaluation
+  or plain table; static (`ggplot`) or interactive and 3-D (`plotly`,
+  opens in the viewer or browser, saved as one HTML file with `file`).
+* `evaluate_models()`: models with missing predictions are evaluated on
+  their own points (also in the bootstrap); the printout lists models with
+  fewer points. Rows with an `NA` in one model should not be dropped.
+
 # preENM 2.5.0
 
 Environmental thinning and background strategies, generalised from the

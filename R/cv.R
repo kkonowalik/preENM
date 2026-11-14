@@ -193,7 +193,7 @@ evaluate_cv <- function(data, model = "model", fold = "fold", set = NULL,
             "the means.", call. = FALSE)
   }
 
-  mets <- c(names(builtin_metrics()), names(extra))
+  mets <- names(metric_funs(extra))
   out <- do.call(rbind, lapply(split(runs, factor(runs$model,
                                                   unique(runs$model))),
                                function(r) {

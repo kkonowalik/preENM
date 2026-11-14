@@ -14,6 +14,15 @@
 #'   other model is better on one criterion without being worse on another.
 #'   Stricter; use `tol` so that differences within sampling noise count as
 #'   ties.
+#' * **`"both"`**: models that reach the minimum values *and* are on the
+#'   Pareto front (if none, those reaching the minimum values).
+#'
+#' **Choosing the rule.** The Pareto front finds the best single models (the
+#' best trade-offs), not a group: a model can be on the front through one
+#' criterion alone (e.g. the best present-day fit) while being weak on
+#' another (e.g. hindcasts). For an ensemble, the minimum values usually
+#' give a more robust set; compare the candidate sets on independent data
+#' where you can.
 #'
 #' Both rules are always computed and reported (`pass`, `pareto`), so you can
 #' compare them; `rule` only decides which one fills `selected`. If no model
@@ -27,7 +36,7 @@
 #' fossil validation.
 #'
 #' @param x A data.frame with one row per model and a `model` column.
-#' @param rule `"threshold"` or `"pareto"` (see Details).
+#' @param rule `"threshold"`, `"pareto"` or `"both"` (see Details).
 #' @param min_metrics Named vector of minimum values (larger = better).
 #'   Metrics that are not columns of `x` are ignored with a message. To set a
 #'   maximum for a "lower is better" metric, add a negated column, e.g.
@@ -38,6 +47,8 @@
 #' @param tol Tolerance for Pareto ties; see [pareto_rank()].
 #' @param override Optional character vector of model names to select by
 #'   hand. The rules are still computed and reported.
+#' @param plot Draw the selection (the first two criteria, full view and
+#'   zoom; see [plot_selection()]). Default: in interactive sessions.
 #' @return An object of class `enm_selection` (a data.frame): `x` with
 #'   columns `pass`, `pareto`, `rank_mean` and `selected`, sorted with the
 #'   selected models first.
@@ -49,10 +60,11 @@
 #'                  MAE = c(0.30, 0.27, 0.24, 0.41))
 #' select_models(df)                                   # minimum values
 #' select_models(df, rule = "pareto", tol = 0.01)      # Pareto front
-select_models <- function(x, rule = c("threshold", "pareto"),
+select_models <- function(x, rule = c("threshold", "pareto", "both"),
                           min_metrics = c(AUC = 0.8, TSS = 0.6),
                           criteria = c(AUC = "max", MAE = "min"),
-                          tol = 0, override = NULL) {
+                          tol = 0, override = NULL,
+                          plot = interactive()) {
   rule <- match.arg(rule)
   x <- as.data.frame(x)
   if (!"model" %in% names(x)) {
@@ -97,6 +109,8 @@ select_models <- function(x, rule = c("threshold", "pareto"),
     x$model %in% override
   } else if (rule == "pareto") {
     x$pareto
+  } else if (rule == "both") {
+    if (any(x$pass & x$pareto)) x$pass & x$pareto else x$pass
   } else {
     x$pass
   }
@@ -114,6 +128,7 @@ select_models <- function(x, rule = c("threshold", "pareto"),
   attr(x, "criteria") <- crit
   attr(x, "tol") <- tol
   class(x) <- c("enm_selection", "data.frame")
+  if (isTRUE(plot) && length(crit) >= 2) plot(x)
   x
 }
 

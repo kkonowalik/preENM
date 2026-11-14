@@ -44,6 +44,12 @@
 #'   supplied, `models`, `presence` and `absence` are ignored. This is also
 #'   useful when predictions were extracted with other software: supply a
 #'   data.frame with a 0/1 column `obs` and one numeric column per model.
+#'   Missing predictions (`NA`) are allowed: each model is then evaluated
+#'   on the points it has (also in the bootstrap), so do not drop rows with
+#'   an `NA` in one model, which would remove those points for all models.
+#'   With out-of-fold predictions from cross-validation (each point
+#'   predicted by the model that did not see it), this bootstraps the pooled
+#'   hold-out predictions.
 #'
 #' @return An object of class `enm_evaluation` (a data.frame) with one row per
 #'   model and columns `model`, `AUC`, `MAE`, `bias`, `TSS`, `Boyce`, any
@@ -102,8 +108,7 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
                     check.names = FALSE)
   res$n_presence <- as.integer(res$n_presence)
   res$n_absence <- as.integer(res$n_absence)
-  criteria <- check_criteria(criteria, c(names(builtin_metrics()),
-                                         names(extra)))
+  criteria <- check_criteria(criteria, names(metric_funs(extra)))
 
   pc <- pareto_core(to_minimise(res, criteria), weights = weights, tol = tol)
   res$pareto_front <- pc$front
@@ -111,7 +116,7 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
 
   boot <- NULL
   if (n_boot > 0) {
-    funs <- c(builtin_metrics(), extra)[names(criteria)]
+    funs <- metric_funs(extra)[names(criteria)]
     boot <- with_seed(seed, bootstrap_metrics(obs, preds, n_boot, funs,
                                               criteria, tol))
     alpha <- (1 - conf) / 2
@@ -197,9 +202,17 @@ print.enm_evaluation <- function(x, digits = 3, ...) {
     return(print_plain(x, digits, ...))
   }
   nb <- attr(x, "n_boot")
-  cat("ENM evaluation: ", nrow(x), " model(s), ", x$n_presence[1],
-      " presence and ", x$n_absence[1], " absence/background points\n",
+  same_n <- length(unique(x$n_presence)) == 1 &&
+    length(unique(x$n_absence)) == 1
+  cat("ENM evaluation: ", nrow(x), " model(s), ", max(x$n_presence),
+      " presence and ", max(x$n_absence), " absence/background points\n",
       sep = "")
+  if (!same_n) {
+    few <- x$n_presence < max(x$n_presence) | x$n_absence < max(x$n_absence)
+    cat("Fewer points (missing predictions): ",
+        paste0(x$model[few], " ", x$n_presence[few], "/", x$n_absence[few],
+               collapse = ", "), "\n", sep = "")
+  }
   if (!is.null(nb) && nb > 0) {
     cat("Bootstrap: ", nb, " resamples, ", 100 * attr(x, "conf"),
         "% percentile intervals\n", sep = "")

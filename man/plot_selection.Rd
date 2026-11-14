@@ -2,27 +2,41 @@
 % Please edit documentation in R/plot.R
 \name{plot_selection}
 \alias{plot_selection}
+\alias{plot.enm_selection}
 \title{Plot a model selection for any pair of metrics}
 \usage{
 plot_selection(
   x,
-  x_metric = "MAE",
-  y_metric = "AUC",
+  x_metric = NULL,
+  y_metric = NULL,
   labels = TRUE,
+  zoom = FALSE,
   base_size = 12
 )
+
+\method{plot}{enm_selection}(x, y, x_metric = NULL, y_metric = NULL, zoom = "auto", ...)
 }
 \arguments{
 \item{x}{An \code{enm_selection} object from \code{\link[=select_models]{select_models()}}.}
 
-\item{x_metric, y_metric}{Columns to plot on the x and y axes.}
+\item{x_metric, y_metric}{Columns to plot on the x and y axes. Default:
+the second and the first selection criterion.}
 
 \item{labels}{Label the points with model names.}
 
+\item{zoom}{\code{FALSE}, \code{TRUE} (region of the best models) or a list of
+axis limits (see Details). For \code{plot()}: \code{"auto"} adds the zoomed
+plot when it leaves out at least one model.}
+
 \item{base_size}{Base font size.}
+
+\item{y}{Ignored.}
+
+\item{...}{Passed to \code{\link[=plot_selection]{plot_selection()}}.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object; \code{plot()} returns a list with \code{all} and \code{zoom}
+invisibly.
 }
 \description{
 Shows the models from \code{\link[=select_models]{select_models()}} in the space of two metrics.
@@ -31,11 +45,30 @@ squares), dashed lines mark the minimum values and bars show +/- 1 SD
 across cross-validation runs when \verb{<metric>_sd} columns are present. Call
 it several times for several panels, e.g. AUC vs MAE and AUC vs fossil AUC.
 }
+\details{
+\strong{Zoom.} When many models are close together the plot gets cluttered.
+\code{zoom = TRUE} shows only the region of the best models: the 2-D Pareto
+fronts of the two plotted metrics are added one after another until at
+least half of the models (and at least three) are included, and the view
+is their range. Models outside the view are named in the subtitle. Give
+your own limits with \code{zoom = list(x = c(0.19, 0.24), y = c(0.89, 0.93))}.
+\code{plot(sel)} draws the full plot and, next to it, the zoom (when the zoom
+leaves out at least one model), and returns both.
+
+Selected models are drawn on top, so they are never hidden behind other
+points. Pareto-front membership is computed on all \code{criteria} of
+\code{\link[=select_models]{select_models()}}; with more than the two plotted criteria, a front model
+can look dominated in the plot (noted in the subtitle). See
+\code{\link[=plot_models]{plot_models()}} for interactive and 3-D plots.
+}
 \examples{
 df <- data.frame(model = c("GLM", "GBM", "RF", "SRE"),
                  AUC = c(0.86, 0.88, 0.87, 0.71),
                  TSS = c(0.62, 0.65, 0.66, 0.38),
                  MAE = c(0.30, 0.27, 0.24, 0.41))
-plot_selection(select_models(df))
-plot_selection(select_models(df), x_metric = "TSS")
+sel <- select_models(df)
+plot_selection(sel)
+plot_selection(sel, x_metric = "TSS")
+plot_selection(sel, zoom = TRUE)        # region of the best models
+plot(sel)                               # full view and zoom side by side
 }

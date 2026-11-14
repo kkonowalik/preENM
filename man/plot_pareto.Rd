@@ -2,6 +2,7 @@
 % Please edit documentation in R/plot.R
 \name{plot_pareto}
 \alias{plot_pareto}
+\alias{plot.enm_evaluation}
 \title{Plot models in the space of two metrics with the Pareto front}
 \usage{
 plot_pareto(
@@ -13,6 +14,8 @@ plot_pareto(
   zoom = FALSE,
   base_size = 12
 )
+
+\method{plot}{enm_evaluation}(x, y, x_metric = NULL, y_metric = NULL, zoom = "auto", ...)
 }
 \arguments{
 \item{x}{An \code{enm_evaluation} object from \code{\link[=evaluate_models]{evaluate_models()}}.}
@@ -26,11 +29,16 @@ front only.}
 
 \item{error_bars}{Show bootstrap confidence intervals (if available).}
 
-\item{zoom}{If \code{TRUE}, zoom the axes onto the two best Pareto fronts so
-that close competitors can be told apart. Poor models outside that range
-are then not shown.}
+\item{zoom}{\code{TRUE} zooms onto the region of the best models (see
+\code{\link[=plot_selection]{plot_selection()}}); or a list with the axis limits,
+\code{list(x = c(0.19, 0.24), y = c(0.89, 0.93))}. Models outside are named
+in the subtitle.}
 
 \item{base_size}{Base font size passed to \code{\link[ggplot2:ggtheme]{ggplot2::theme_minimal()}}.}
+
+\item{y}{Ignored.}
+
+\item{...}{Passed to \code{\link[=plot_pareto]{plot_pareto()}}.}
 }
 \value{
 A \code{ggplot} object that can be customised further or saved with

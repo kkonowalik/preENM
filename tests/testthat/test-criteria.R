@@ -56,8 +56,8 @@ test_that("helpful errors for wrong criteria or metrics", {
                "named vector")
   expect_error(evaluate_models(data = tab, metrics = function(o, p) 1),
                "named list")
-  expect_error(evaluate_models(data = tab, metrics = list(AUC = mean)),
-               "already used")
+  expect_error(evaluate_models(data = tab, metrics = list(model = mean)),
+               "reserved")
   expect_error(evaluate_models(data = tab, metrics = list(B = function(o, p)
     c(1, 2))), "single number")
 })

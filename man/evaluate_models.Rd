@@ -65,7 +65,13 @@ comparison). \code{"per_model"} keeps points independently for each model
 \item{data}{Optionally, a table returned by \code{\link[=extract_predictions]{extract_predictions()}}. When
 supplied, \code{models}, \code{presence} and \code{absence} are ignored. This is also
 useful when predictions were extracted with other software: supply a
-data.frame with a 0/1 column \code{obs} and one numeric column per model.}
+data.frame with a 0/1 column \code{obs} and one numeric column per model.
+Missing predictions (\code{NA}) are allowed: each model is then evaluated
+on the points it has (also in the bootstrap), so do not drop rows with
+an \code{NA} in one model, which would remove those points for all models.
+With out-of-fold predictions from cross-validation (each point
+predicted by the model that did not see it), this bootstraps the pooled
+hold-out predictions.}
 }
 \value{
 An object of class \code{enm_evaluation} (a data.frame) with one row per

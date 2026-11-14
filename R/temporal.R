@@ -47,13 +47,25 @@
 #' @param combine Optional named list of period groups, e.g.
 #'   `list(deep = c("Lateglacial", "Glacial"))`. Records of these periods are
 #'   pooled (so periods with more records weigh more).
+#' @param pool How the runs are combined (only with `run`). `TRUE`: the
+#'   records of all runs are pooled and every metric is computed over them,
+#'   so each record counts once. `FALSE`: the metric is computed per run and
+#'   the run values are averaged. `NULL` (default): pooled when no record is
+#'   scored by more than one run of a model, i.e. out-of-fold evaluation
+#'   where each record belongs to one cross-validation fold; there, averaging
+#'   fold means would give a few records of a small fold as much weight as
+#'   many records of a large one. Otherwise (e.g. every record scored by
+#'   every run or background set) the run values are averaged. The `_sd`
+#'   columns are always the SD across runs.
 #' @param prefix Prefix of the output columns, e.g. `"fossil"` gives
 #'   `fossil_AUC`.
 #' @return A data.frame with one row per model: `<prefix>_AUC`, per-period and
 #'   combined columns `<prefix>_AUC_<period>`, `<prefix>_AUC_analog`,
 #'   `<prefix>_sens`, `<prefix>_area`, `<prefix>_lift`, `<prefix>_n_records`,
-#'   and with `run` the SD of each metric across runs (`_sd`) and `<prefix>_n_runs`. Per-run results are
-#'   in `attr(x, "runs")`.
+#'   and with `run` the SD of each metric across runs (`_sd`) and
+#'   `<prefix>_n_runs`. Per-run results are in `attr(x, "runs")`, the
+#'   per-record scores in `attr(x, "records")` and whether runs were pooled
+#'   in `attr(x, "pooled")`.
 #' @export
 #' @examples
 #' set.seed(1)
@@ -71,7 +83,7 @@ temporal_validation <- function(sites, background, model = "model",
                                 slice = "slice", pred = "pred",
                                 period = NULL, novel = NULL,
                                 thresholds = NULL, combine = NULL,
-                                prefix = "temporal") {
+                                pool = NULL, prefix = "temporal") {
   need_s <- c(model, run, record, slice, pred, period, novel)
   need_b <- c(model, run, slice, pred)
   miss <- c(setdiff(need_s, names(sites)), setdiff(need_b, names(background)))
@@ -105,6 +117,34 @@ temporal_validation <- function(sites, background, model = "model",
   }
   p <- prefix
   empty_slices <- character(0)
+  recs <- list()
+  # metrics from a table of records (internal to this function)
+  record_metrics <- function(rt) {
+    out <- list()
+    out[[paste0(p, "_AUC")]] <- mean(rt$score, na.rm = TRUE)
+    if (!is.null(period)) {
+      for (pp in sort(unique(stats::na.omit(rt$period)))) {
+        out[[paste0(p, "_AUC_", pp)]] <- mean(rt$score[rt$period %in% pp],
+                                              na.rm = TRUE)
+      }
+      for (nm in names(combine)) {
+        out[[paste0(p, "_AUC_", nm)]] <-
+          mean(rt$score[rt$period %in% combine[[nm]]], na.rm = TRUE)
+      }
+    }
+    if (!is.null(novel)) {
+      out[[paste0(p, "_AUC_analog")]] <- mean(rt$analog, na.rm = TRUE)
+    }
+    if (!is.null(thresholds)) {
+      sens <- mean(rt$above, na.rm = TRUE)
+      area <- mean(rt$area, na.rm = TRUE)
+      out[[paste0(p, "_sens")]] <- sens
+      out[[paste0(p, "_area")]] <- area
+      out[[paste0(p, "_lift")]] <- sens / area
+    }
+    out[[paste0(p, "_n_records")]] <- sum(!is.na(rt$score))
+    out
+  }
 
   runs <- lapply(split(seq_len(nrow(sites)), gs), function(si) {
     g <- gs[si[1]]
@@ -129,47 +169,44 @@ temporal_validation <- function(sites, background, model = "model",
                         findInterval(x[rows], v)) / (2 * length(v))
     }
     score[is.na(x)] <- NA
-    rec <- sites[[record]][si]
-    rec_score <- tapply(score, rec, mean, na.rm = TRUE)
-    rec_score[is.nan(rec_score)] <- NA
-    out <- list(model = as.character(sites[[model]][si[1]]),
-                run = run_s[si[1]])
-    out[[paste0(p, "_AUC")]] <- mean(rec_score, na.rm = TRUE)
-    if (!is.null(period)) {
-      rec_per <- tapply(as.character(sites[[period]][si]), rec, `[`, 1)
-      for (pp in sort(unique(stats::na.omit(rec_per)))) {
-        out[[paste0(p, "_AUC_", pp)]] <- mean(rec_score[rec_per == pp],
-                                              na.rm = TRUE)
-      }
-      for (nm in names(combine)) {
-        out[[paste0(p, "_AUC_", nm)]] <-
-          mean(rec_score[rec_per %in% combine[[nm]]], na.rm = TRUE)
-      }
-    }
+    rec <- as.character(sites[[record]][si])
+    mod <- as.character(sites[[model]][si[1]])
+    rn <- run_s[si[1]]
+    # one row per record: its score and what the metrics need
+    rt <- data.frame(record = names(tapply(score, rec, length)),
+                     stringsAsFactors = FALSE)
+    rt$score <- as.vector(tapply(score, rec, mean, na.rm = TRUE)[rt$record])
+    rt$period <- if (is.null(period)) NA_character_ else
+      as.vector(tapply(as.character(sites[[period]][si]), rec,
+                       `[`, 1)[rt$record])
+    rt$analog <- NA_real_
     if (!is.null(novel)) {
       an <- !as.logical(sites[[novel]][si])
-      ra <- tapply(score[an], rec[an], mean, na.rm = TRUE)
-      out[[paste0(p, "_AUC_analog")]] <- mean(ra, na.rm = TRUE)
-    }
-    if (!is.null(thresholds)) {
-      thr <- thr_lookup(out$model, out$run)
-      rec_pred <- tapply(x, rec, mean, na.rm = TRUE)
-      out[[paste0(p, "_sens")]] <- if (is.na(thr)) NA_real_ else
-        mean(rec_pred >= thr, na.rm = TRUE)
-      # predicted area: share of background cells above the threshold in
-      # each record's slices, averaged like the records
-      if (is.na(thr)) {
-        out[[paste0(p, "_area")]] <- NA_real_
-      } else {
-        a_sl <- vapply(bvals, function(v) mean(v >= thr), numeric(1))
-        rec_area <- tapply(unname(a_sl[sl]), rec, mean, na.rm = TRUE)
-        out[[paste0(p, "_area")]] <- mean(rec_area, na.rm = TRUE)
+      if (any(an)) {
+        ra <- tapply(score[an], rec[an], mean, na.rm = TRUE)
+        rt$analog <- as.vector(ra[rt$record])
       }
-      out[[paste0(p, "_lift")]] <- out[[paste0(p, "_sens")]] /
-        out[[paste0(p, "_area")]]
     }
-    out[[paste0(p, "_n_records")]] <- sum(!is.na(rec_score))
-    out
+    rt$above <- rt$area <- NA_real_
+    if (!is.null(thresholds)) {
+      thr <- thr_lookup(mod, rn)
+      if (!is.na(thr)) {
+        rt$above <- as.vector(tapply(x, rec, mean,
+                                     na.rm = TRUE)[rt$record]) >= thr
+        # predicted area: share of background cells above the threshold in
+        # each record's slices
+        a_sl <- vapply(bvals, function(v) mean(v >= thr), numeric(1))
+        rt$area <- as.vector(tapply(unname(a_sl[sl]), rec, mean,
+                                    na.rm = TRUE)[rt$record])
+      }
+    }
+    rt[] <- lapply(rt, function(v) {
+      if (is.numeric(v)) v[is.nan(v)] <- NA
+      v
+    })
+    recs[[length(recs) + 1]] <<- cbind(model = mod, run = rn, rt,
+                                       stringsAsFactors = FALSE)
+    c(list(model = mod, run = rn), record_metrics(rt))
   })
   if (length(empty_slices)) {
     warning("No background cells for slice(s): ",
@@ -189,6 +226,14 @@ temporal_validation <- function(sites, background, model = "model",
     v
   })
 
+  recs <- do.call(rbind, recs)
+  rownames(recs) <- NULL
+  if (is.null(pool)) {
+    # pool when no record is scored by more than one run of a model
+    # (out-of-fold evaluation: each record belongs to one fold)
+    pool <- !is.null(run) &&
+      !any(duplicated(recs[c("model", "record")]))
+  }
   if (is.null(run)) {
     out <- runs[setdiff(names(runs), "run")]
   } else {
@@ -197,16 +242,29 @@ temporal_validation <- function(sites, background, model = "model",
                                  function(r) {
       mn <- vapply(r[mets], mean, numeric(1), na.rm = TRUE)
       sdv <- vapply(r[mets], stats::sd, numeric(1), na.rm = TRUE)
+      if (pool) {
+        pooled <- record_metrics(recs[recs$model == r$model[1], ,
+                                      drop = FALSE])
+        mn[] <- vapply(names(mn), function(k) {
+          if (is.null(pooled[[k]])) NA_real_ else pooled[[k]]
+        }, numeric(1))
+      }
       d <- data.frame(model = r$model[1], t(mn),
                       t(stats::setNames(sdv, paste0(mets, "_sd"))),
                       check.names = FALSE)
-      d[[nrec]] <- max(r[[nrec]])
+      d[[nrec]] <- if (pool) sum(r[[nrec]]) else max(r[[nrec]])
       d[[paste0(p, "_n_runs")]] <- nrow(r)
       d
     }))
+    out[] <- lapply(out, function(v) {
+      if (is.numeric(v)) v[is.nan(v)] <- NA
+      v
+    })
   }
   rownames(out) <- NULL
   attr(out, "runs") <- runs
+  attr(out, "records") <- recs
+  attr(out, "pooled") <- isTRUE(pool) && !is.null(run)
   out
 }
 

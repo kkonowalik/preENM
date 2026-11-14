@@ -22,6 +22,9 @@
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto
 #'   ranking and bootstrap robustness.
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.
+#' * [select_models()], [plot_selection()], [plot_models()]: selection by
+#'   minimum values or Pareto front; any two or three metrics, zoom, static
+#'   or interactive 3-D plots.
 #' * [extract_predictions()]: model predictions at evaluation points.
 #' * [pareto_rank()]: generic multi-criteria Pareto ranking.
 #' * [simulate_enm_data()]: example data.

@@ -5,6 +5,7 @@ builtin_metrics <- function() {
   list(
     AUC = auc_score,
     MAE = mae_score,
+    MAEbal = mae_balanced,
     bias = bias_score,
     TSS = function(obs, pred) as.numeric(tss_score(obs, pred)),
     Boyce = function(obs, pred) boyce_index(pred[obs == 1], pred[obs == 0])
@@ -12,8 +13,13 @@ builtin_metrics <- function() {
 }
 
 # Which direction is "better" for the built-in metrics
-default_directions <- c(AUC = "max", MAE = "min", bias = "zero", TSS = "max",
-                        Boyce = "max")
+default_directions <- c(AUC = "max", MAE = "min", MAEbal = "min",
+                        bias = "zero", TSS = "max", Boyce = "max")
+
+# Built-in metrics plus the user's (a user metric with a built-in name
+# replaces it) (internal)
+metric_funs <- function(extra = list()) utils::modifyList(builtin_metrics(),
+                                                          extra)
 
 # Validate user-supplied metric functions
 check_extra_metrics <- function(metrics) {
@@ -29,13 +35,17 @@ check_extra_metrics <- function(metrics) {
     stop("`metrics` must be a named list of functions(obs, pred).",
          call. = FALSE)
   }
-  clash <- intersect(names(metrics), c(names(builtin_metrics()), "model",
-                                       "obs", "pred", "n_presence",
-                                       "n_absence"))
+  clash <- intersect(names(metrics), c("model", "obs", "pred", "n_presence",
+                                       "n_absence", "fold", "set", "run"))
   if (length(clash)) {
-    stop("Metric name(s) already used by the package: ",
+    stop("Metric name(s) reserved by the package: ",
          paste(clash, collapse = ", "), ". Please rename them.",
          call. = FALSE)
+  }
+  same <- intersect(names(metrics), names(builtin_metrics()))
+  if (length(same)) {
+    message("Your metric(s) replace the built-in ",
+            paste(same, collapse = ", "), ".")
   }
   metrics
 }

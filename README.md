@@ -620,7 +620,13 @@ When many algorithms perform alike, the plot gets crowded in one corner.
 the full view and, next to it, a **zoom on the region of the best models**:
 the Pareto fronts of the two plotted metrics are added one by one until at
 least half of the models are included. Models outside the zoom are named in
-the subtitle, and selected models are always drawn on top.
+the subtitle, and selected models are always drawn on top. Dashed lines
+mark the required minimum and maximum values. Error bars (red, `bar_colour`
+to change, `error_bars = FALSE` to hide) show, for each axis, the bootstrap
+interval (`<metric>_lower`, `<metric>_upper`) or else +/- 1 SD across runs
+(`<metric>_sd`); keep those columns when you join tables for
+`select_models()`. `evaluate_models(boot_metrics = "all")` gives intervals
+for every metric, not only the criteria.
 
 ![Full view and zoom](man/figures/selection_zoom.png)
 
@@ -682,7 +688,18 @@ model, and the bootstrap below can compare them.
 with minimum values for discrimination (AUC, TSS) and a maximum for
 calibration (MAEbal) keeps models that rank sites well *and* predict
 sensible values; a model with good AUC but values shifted upwards everywhere
-(high MAEbal, positive bias) would otherwise pass.
+(high MAEbal, positive bias) would otherwise pass. **Criteria are only
+enforced through required values**: `criteria` decides the Pareto front and
+the ranking, not which models pass. When a selected model is far worse than
+the other selected models on a criterion without a required value, the
+printout says so and suggests the limit to add:
+
+```
+  SELECTED: ANN, DNN, GLM, MARS, GBM, GAM, MAXNET, FDA, XGBOOST
+  Note: MAXNET is selected but its MAEbal (0.332) is far higher than the other
+  selected models (0.196-0.236), and MAEbal has no required value. To require
+  one, add max_metrics = c(MAEbal = ...).
+```
 
 **Are the differences real? Record bootstrap.** With a few hundred fossil
 records, gaps of a few hundredths may be noise. `n_boot` resamples the

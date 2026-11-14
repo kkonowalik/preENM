@@ -33,6 +33,8 @@
 #' @param zoom For static 2-D plots: `TRUE` to show only the region of the
 #'   best models, or axis limits; see [plot_selection()].
 #' @param labels Show model names.
+#' @param error_bars Draw error bars (bootstrap intervals, else +/- 1 SD).
+#' @param bar_colour Colour of the error bars.
 #' @param directions Optional named vector of directions for metrics the
 #'   package does not know, e.g. `c(fossil_AUC_deep = "max")` (`"max"`,
 #'   `"min"` or `"zero"`). Known: the criteria of `object`, AUC, MAE,
@@ -60,8 +62,10 @@
 #' }
 plot_models <- function(object, x = NULL, y = NULL, z = NULL,
                         interactive = !is.null(z), zoom = FALSE,
-                        labels = TRUE, directions = NULL, file = NULL,
-                        browse = interactive(), base_size = 12) {
+                        labels = TRUE, error_bars = TRUE,
+                        bar_colour = "#c8553d", directions = NULL,
+                        file = NULL, browse = interactive(),
+                        base_size = 12) {
   if (!is.data.frame(object) || !"model" %in% names(object)) {
     stop("`object` must be a data.frame with a `model` column, e.g. from ",
          "select_models() or evaluate_models().", call. = FALSE)
@@ -99,17 +103,20 @@ plot_models <- function(object, x = NULL, y = NULL, z = NULL,
     if (inherits(object, "enm_evaluation")) {
       return(plot_pareto(object, mets[["x"]], mets[["y"]],
                          labels = if (labels) "all" else "none",
-                         zoom = zoom, base_size = base_size))
+                         error_bars = error_bars, zoom = zoom,
+                         bar_colour = bar_colour, base_size = base_size))
     }
     return(plot_selection(object, mets[["x"]], mets[["y"]], labels = labels,
-                          zoom = zoom, base_size = base_size))
+                          zoom = zoom, error_bars = error_bars,
+                          bar_colour = bar_colour, base_size = base_size))
   }
   if (!requireNamespace("plotly", quietly = TRUE)) {
     stop("Interactive and 3-D plots need the plotly package: ",
          "install.packages(\"plotly\")", call. = FALSE)
   }
   p <- plotly_models(as.data.frame(object), mets, dirs, labels,
-                     is_eval = inherits(object, "enm_evaluation"))
+                     is_eval = inherits(object, "enm_evaluation"),
+                     bars = error_bars, bar_colour = bar_colour)
   if (!is.null(file)) {
     file <- normalizePath(file, mustWork = FALSE)
     lib <- file.path(dirname(file), paste0(tools::file_path_sans_ext(
@@ -142,7 +149,8 @@ metric_direction <- function(m, crit = NULL, directions = NULL) {
 }
 
 # Interactive 2-D / 3-D scatter with plotly (internal)
-plotly_models <- function(df, mets, dirs, labels, is_eval) {
+plotly_models <- function(df, mets, dirs, labels, is_eval, bars = TRUE,
+                          bar_colour = "#c8553d") {
   three_d <- "z" %in% names(mets)
   front <- if (is_eval) df$pareto_front == 1 else df$pareto
   df$.front <- ifelse(front, "Pareto front", "Dominated")
@@ -168,15 +176,16 @@ plotly_models <- function(df, mets, dirs, labels, is_eval) {
            if (!is_eval) paste0("<br>", d$.group))
   }
   err <- function(d, m) {
+    if (!bars) return(list(visible = FALSE))
     if (paste0(m, "_lower") %in% names(d)) {
       return(list(type = "data", symmetric = FALSE,
                   array = d[[paste0(m, "_upper")]] - d[[m]],
                   arrayminus = d[[m]] - d[[paste0(m, "_lower")]],
-                  color = "#8a8a86", thickness = 1, width = 0))
+                  color = bar_colour, thickness = 1.5, width = 0))
     }
     if (paste0(m, "_sd") %in% names(d)) {
       return(list(type = "data", array = d[[paste0(m, "_sd")]],
-                  color = "#8a8a86", thickness = 1, width = 0))
+                  color = bar_colour, thickness = 1.5, width = 0))
     }
     list(visible = FALSE)
   }

@@ -21,7 +21,10 @@
 #' @param labels Which models to label: `"all"`, `"front"` (Pareto models only)
 #'   or `"none"`. Default: all when there are 15 models or fewer, otherwise
 #'   front only.
-#' @param error_bars Show bootstrap confidence intervals (if available).
+#' @param error_bars Show error bars: bootstrap intervals
+#'   (`<metric>_lower`, `<metric>_upper`) or, if there are none, +/- 1 SD
+#'   (`<metric>_sd`), for whichever metrics are on the axes.
+#' @param bar_colour Colour of the error bars.
 #' @param zoom `TRUE` zooms onto the region of the best models (see
 #'   [plot_selection()]); or a list with the axis limits,
 #'   `list(x = c(0.19, 0.24), y = c(0.89, 0.93))`. Models outside are named
@@ -39,7 +42,8 @@
 #' # ggplot2::ggsave("pareto.png", plot_pareto(res), width = 7, height = 5,
 #' #                 dpi = 300)
 plot_pareto <- function(x, x_metric = NULL, y_metric = NULL, labels = NULL,
-                        error_bars = TRUE, zoom = FALSE, base_size = 12) {
+                        error_bars = TRUE, zoom = FALSE,
+                        bar_colour = "#c8553d", base_size = 12) {
   if (!inherits(x, "enm_evaluation")) {
     stop("`x` must be the output of evaluate_models().", call. = FALSE)
   }
@@ -79,23 +83,10 @@ plot_pareto <- function(x, x_metric = NULL, y_metric = NULL, labels = NULL,
                                 colour = muted, linewidth = 0.6,
                                 linetype = "dashed")
   }
-  bar_col <- if (!isFALSE(zoom) && !is.null(zoom)) "#cfcec9" else muted
-  lo <- function(m) paste0(m, "_lower")
-  up <- function(m) paste0(m, "_upper")
-  if (has_boot && error_bars) {
-    if (all(c(lo(y_metric), up(y_metric)) %in% names(df))) {
-      p <- p + ggplot2::geom_errorbar(
-        ggplot2::aes(ymin = .data[[lo(y_metric)]],
-                     ymax = .data[[up(y_metric)]]),
-        width = 0, colour = bar_col, linewidth = 0.4)
-    }
-    if (all(c(lo(x_metric), up(x_metric)) %in% names(df))) {
-      p <- p + ggplot2::geom_errorbar(
-        ggplot2::aes(xmin = .data[[lo(x_metric)]],
-                     xmax = .data[[up(x_metric)]]),
-        orientation = "y", width = 0, colour = bar_col, linewidth = 0.4)
-    }
-  }
+  bars <- bar_layers(df, x_metric, y_metric, bar_colour,
+                     zoomed = !isFALSE(zoom) && !is.null(zoom),
+                     enabled = error_bars)
+  p <- p + bars$layers
   if (has_boot) {
     p <- p +
       ggplot2::geom_point(ggplot2::aes(fill = .data$p_pareto,
@@ -155,9 +146,10 @@ plot_pareto <- function(x, x_metric = NULL, y_metric = NULL, labels = NULL,
              paste(names(crit), collapse = ", "), ".")
     },
     if (has_boot) {
-      sprintf("Bars: %d%% bootstrap intervals (%d resamples).",
+      sprintf("Bootstrap: %d%% intervals, %d resamples.",
               round(100 * attr(x, "conf")), attr(x, "n_boot"))
     },
+    bars$text,
     better_text(dirs, x_metric, y_metric),
     hidden_text(hidden))
   p +
@@ -213,8 +205,12 @@ NULL
 #'
 #' Shows the models from [select_models()] in the space of two metrics.
 #' Selected models are filled, Pareto-front models are circles (others are
-#' squares), dashed lines mark the minimum values and bars show +/- 1 SD
-#' across cross-validation runs when `<metric>_sd` columns are present. Call
+#' squares), dashed lines mark the required minimum and maximum values, and
+#' bars show, for each axis, the bootstrap interval (`<metric>_lower`,
+#' `<metric>_upper`, e.g. from [temporal_validation()] or
+#' [evaluate_models()] with `n_boot`) or else +/- 1 SD across runs
+#' (`<metric>_sd`, from [evaluate_cv()]). Keep these columns when you build
+#' the table for [select_models()]. Call
 #' it several times for several panels, e.g. AUC vs MAE and AUC vs fossil AUC.
 #'
 #' **Zoom.** When many models are close together the plot gets cluttered.
@@ -239,6 +235,8 @@ NULL
 #' @param zoom `FALSE`, `TRUE` (region of the best models) or a list of
 #'   axis limits (see Details). For `plot()`: `"auto"` adds the zoomed
 #'   plot when it leaves out at least one model.
+#' @param error_bars Draw the error bars (`TRUE`/`FALSE`).
+#' @param bar_colour Colour of the error bars.
 #' @param base_size Base font size.
 #' @return A `ggplot` object; `plot()` returns a list with `all` and `zoom`
 #'   invisibly.
@@ -254,7 +252,8 @@ NULL
 #' plot_selection(sel, zoom = TRUE)        # region of the best models
 #' plot(sel)                               # full view and zoom side by side
 plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
-                           labels = TRUE, zoom = FALSE, base_size = 12) {
+                           labels = TRUE, zoom = FALSE, error_bars = TRUE,
+                           bar_colour = "#c8553d", base_size = 12) {
   if (!inherits(x, "enm_selection")) {
     stop("`x` must be the output of select_models().", call. = FALSE)
   }
@@ -281,8 +280,6 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
   dirs <- c(x = dir_of(x_metric, crit), y = dir_of(y_metric, crit))
   dirs[is.na(dirs)] <- "none"
   zoomed <- !isFALSE(zoom) && !is.null(zoom)
-  # in a zoom the bars are often wider than the view: draw them lighter
-  bar_col <- if (zoomed) "#cfcec9" else muted
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$.x, y = .data$.y))
   if (dirs[["x"]] == "zero") {
@@ -306,20 +303,9 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
                                  linetype = "dashed", colour = muted,
                                  linewidth = 0.4)
   }
-  xs <- paste0(x_metric, "_sd")
-  ys <- paste0(y_metric, "_sd")
-  if (ys %in% names(df)) {
-    p <- p + ggplot2::geom_errorbar(
-      ggplot2::aes(ymin = .data$.y - .data[[ys]],
-                   ymax = .data$.y + .data[[ys]]),
-      width = 0, colour = bar_col, linewidth = 0.4)
-  }
-  if (xs %in% names(df)) {
-    p <- p + ggplot2::geom_errorbar(
-      ggplot2::aes(xmin = .data$.x - .data[[xs]],
-                   xmax = .data$.x + .data[[xs]]),
-      orientation = "y", width = 0, colour = bar_col, linewidth = 0.4)
-  }
+  bars <- bar_layers(df, x_metric, y_metric, bar_colour, zoomed,
+                     enabled = error_bars)
+  p <- p + bars$layers
   p <- p +
     ggplot2::geom_point(ggplot2::aes(fill = .data$status,
                                      shape = .data$front),
@@ -352,9 +338,12 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
   sub <- c(
     paste0("Selection rule: ", attr(x, "rule"), ". ",
            better_text(dirs, x_metric, y_metric)),
-    paste0(if (length(limits)) "Dashed lines: required values. ",
-           if (ys %in% names(df) || xs %in% names(df))
-             "Bars: \u00b11 SD across runs."),
+    if (nchar(paste(bars$text, collapse = "")) > 45) {
+      c(if (length(limits)) "Dashed lines: required values.", bars$text)
+    } else {
+      paste0(if (length(limits)) "Dashed lines: required values. ",
+             bars$text)
+    },
     if (length(extra_crit)) {
       paste0("Pareto front on ", length(crit), " criteria (",
              paste(names(crit), collapse = ", "), ").")
@@ -512,4 +501,53 @@ theme_enm <- function(base_size, ink, muted) {
       text = ggplot2::element_text(colour = ink),
       plot.subtitle = ggplot2::element_text(colour = muted),
       legend.position = "right")
+}
+
+# Error bars for the plotted metrics (internal): a bootstrap interval
+# (<m>_lower / <m>_upper) if present, otherwise +/- 1 SD (<m>_sd)
+bar_layers <- function(df, x_metric, y_metric, colour, zoomed,
+                       enabled = TRUE) {
+  rng <- function(m) {
+    lo <- paste0(m, "_lower")
+    up <- paste0(m, "_upper")
+    sdc <- paste0(m, "_sd")
+    if (all(c(lo, up) %in% names(df))) {
+      return(list(lo = df[[lo]], hi = df[[up]], kind = "interval"))
+    }
+    if (sdc %in% names(df)) {
+      return(list(lo = df[[m]] - df[[sdc]], hi = df[[m]] + df[[sdc]],
+                  kind = "sd"))
+    }
+    NULL
+  }
+  if (!isTRUE(enabled)) return(list(layers = list(), text = character(0)))
+  # in a zoom the bars are often wider than the view: draw them lighter
+  alpha <- if (zoomed) 0.45 else 0.85
+  ry <- rng(y_metric)
+  rx <- rng(x_metric)
+  layers <- list()
+  if (!is.null(ry)) {
+    layers <- c(layers, ggplot2::geom_errorbar(
+      data = transform(df, .lo = ry$lo, .hi = ry$hi),
+      ggplot2::aes(ymin = .data$.lo, ymax = .data$.hi), width = 0,
+      colour = colour, alpha = alpha, linewidth = 0.5))
+  }
+  if (!is.null(rx)) {
+    layers <- c(layers, ggplot2::geom_errorbar(
+      data = transform(df, .lo = rx$lo, .hi = rx$hi),
+      ggplot2::aes(xmin = .data$.lo, xmax = .data$.hi), orientation = "y",
+      width = 0, colour = colour, alpha = alpha, linewidth = 0.5))
+  }
+  what <- function(r) if (r$kind == "sd") "\u00b11 SD across runs" else
+    "bootstrap interval"
+  text <- if (is.null(rx) && is.null(ry)) {
+    character(0)
+  } else if (!is.null(rx) && !is.null(ry) && rx$kind == ry$kind) {
+    paste0("Bars: ", what(rx), ".")
+  } else {
+    parts <- c(if (!is.null(ry)) paste(y_metric, what(ry)),
+               if (!is.null(rx)) paste(x_metric, what(rx)))
+    paste0("Bars: ", paste(parts, collapse = "; "), ".")
+  }
+  list(layers = layers, text = text)
 }

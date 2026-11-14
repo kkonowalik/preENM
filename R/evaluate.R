@@ -39,6 +39,9 @@
 #' @param weights Optional named vector of the relative importance of the
 #'   criteria in the compromise score (default: equal); see [pareto_rank()].
 #' @param tol Tolerance for Pareto ties; see [pareto_rank()].
+#' @param boot_metrics Metrics that get bootstrap intervals: `"criteria"`
+#'   (default) or `"all"` metrics (slower, mainly because of the Boyce
+#'   index).
 #' @param seed Optional random seed for reproducible bootstraps.
 #' @param data Optionally, a table returned by [extract_predictions()]. When
 #'   supplied, `models`, `presence` and `absence` are ignored. This is also
@@ -88,8 +91,10 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
                             weights = NULL, tol = 0,
                             coords = NULL, crs = "EPSG:4326",
                             na_action = c("common", "per_model"),
+                            boot_metrics = c("criteria", "all"),
                             seed = NULL, data = NULL) {
   na_action <- match.arg(na_action)
+  boot_metrics <- match.arg(boot_metrics)
   if (is.null(data)) {
     if (is.null(models) || is.null(presence) || is.null(absence)) {
       stop("Supply `models`, `presence` and `absence`, or `data`.",
@@ -116,7 +121,9 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
 
   boot <- NULL
   if (n_boot > 0) {
-    funs <- metric_funs(extra)[names(criteria)]
+    bmets <- if (boot_metrics == "all") names(metric_funs(extra)) else
+      names(criteria)
+    funs <- metric_funs(extra)[union(names(criteria), bmets)]
     boot <- with_seed(seed, bootstrap_metrics(obs, preds, n_boot, funs,
                                               criteria, tol))
     alpha <- (1 - conf) / 2
@@ -124,7 +131,7 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
                                      names = FALSE)
     stats_by_model <- lapply(split(boot, boot$model), function(b) {
       d <- data.frame(model = b$model[1])
-      for (k in names(criteria)) {
+      for (k in names(funs)) {
         qq <- q(b[[k]])
         d[[paste0(k, "_lower")]] <- qq[1]
         d[[paste0(k, "_upper")]] <- qq[2]
@@ -224,13 +231,14 @@ print.enm_evaluation <- function(x, digits = 3, ...) {
                            collapse = ", "), "\n", sep = "")
   cat("Pareto front (best trade-offs): ",
       paste(x$model[x$pareto_front == 1], collapse = ", "), "\n\n", sep = "")
-  crit_cols <- unlist(lapply(names(crit), function(k) {
+  with_ci <- function(ks) unlist(lapply(ks, function(k) {
     c(k, paste0(k, c("_lower", "_upper")))
   }))
-  other <- setdiff(names(x), c("rank", "model", crit_cols, "pareto_front",
-                               "p_pareto", "distance", "n_presence",
-                               "n_absence", grep("_sd$", names(x),
-                                                 value = TRUE)))
+  crit_cols <- with_ci(names(crit))
+  skip <- c("rank", "model", crit_cols, "pareto_front", "p_pareto",
+            "distance", "n_presence", "n_absence",
+            grep("_(sd|lower|upper)$", names(x), value = TRUE))
+  other <- with_ci(setdiff(names(x), skip))
   cols <- intersect(c("rank", "model", crit_cols, other, "pareto_front",
                       "p_pareto", "distance"), names(x))
   df <- as.data.frame(x)[cols]

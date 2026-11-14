@@ -12,6 +12,7 @@ plot_pareto(
   labels = NULL,
   error_bars = TRUE,
   zoom = FALSE,
+  bar_colour = "#c8553d",
   base_size = 12
 )
 
@@ -27,12 +28,16 @@ the second and first criterion (MAE and AUC for the default criteria).}
 or \code{"none"}. Default: all when there are 15 models or fewer, otherwise
 front only.}
 
-\item{error_bars}{Show bootstrap confidence intervals (if available).}
+\item{error_bars}{Show error bars: bootstrap intervals
+(\verb{<metric>_lower}, \verb{<metric>_upper}) or, if there are none, +/- 1 SD
+(\verb{<metric>_sd}), for whichever metrics are on the axes.}
 
 \item{zoom}{\code{TRUE} zooms onto the region of the best models (see
 \code{\link[=plot_selection]{plot_selection()}}); or a list with the axis limits,
 \code{list(x = c(0.19, 0.24), y = c(0.89, 0.93))}. Models outside are named
 in the subtitle.}
+
+\item{bar_colour}{Colour of the error bars.}
 
 \item{base_size}{Base font size passed to \code{\link[ggplot2:ggtheme]{ggplot2::theme_minimal()}}.}
 

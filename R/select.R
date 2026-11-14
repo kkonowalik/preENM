@@ -54,7 +54,12 @@
 #'   zoom; see [plot_selection()]). Default: in interactive sessions.
 #' @return An object of class `enm_selection` (a data.frame): `x` with
 #'   columns `pass`, `pareto`, `rank_mean` and `selected`, sorted with the
-#'   selected models first.
+#'   selected models first. A criterion is only enforced through the
+#'   minimum/maximum values: a selected model can still be much worse than
+#'   the others on a criterion without a required value. Such models (worse
+#'   than the other selected models by more than 1.5 interquartile ranges,
+#'   with at least four selected) are reported when printing and in
+#'   `attr(x, "outliers")`.
 #' @export
 #' @examples
 #' df <- data.frame(model = c("GLM", "GBM", "RF", "SRE"),
@@ -129,11 +134,13 @@ select_models <- function(x, rule = c("threshold", "pareto", "both"),
     sel <- x$pareto
   }
   x$selected <- sel
+  outl <- selection_outliers(x, crit, c(names(mins), names(maxs)))
   x <- x[order(!x$selected, x$rank_mean), , drop = FALSE]
   rownames(x) <- NULL
   attr(x, "rule") <- if (!is.null(override)) "manual" else rule
   attr(x, "min_metrics") <- mins
   attr(x, "max_metrics") <- maxs
+  attr(x, "outliers") <- outl
   attr(x, "criteria") <- crit
   attr(x, "tol") <- tol
   class(x) <- c("enm_selection", "data.frame")
@@ -160,11 +167,55 @@ print.enm_selection <- function(x, digits = 3, ...) {
   cat("  Pareto front (", paste(names(crit), crit, sep = ":", collapse = ", "),
       "; tol ", paste(attr(x, "tol"), collapse = "/"), "): ",
       paste(x$model[x$pareto], collapse = ", "), "\n", sep = "")
-  cat("  SELECTED: ", paste(x$model[x$selected], collapse = ", "), "\n\n",
+  cat("  SELECTED: ", paste(x$model[x$selected], collapse = ", "), "\n",
       sep = "")
+  ol <- attr(x, "outliers")
+  if (!is.null(ol) && nrow(ol)) {
+    for (i in seq_len(nrow(ol))) {
+      cat("  Note: ", ol$model[i], " is selected but its ", ol$metric[i],
+          " (", signif(ol$value[i], 3), ") is far ", ol$side[i],
+          " than the other selected models (", ol$others[i], "), and ",
+          ol$metric[i], " has no required value. To require one, ",
+          switch(ol$side[i],
+                 higher = paste0("add max_metrics = c(", ol$metric[i],
+                                 " = ...)"),
+                 lower = paste0("add min_metrics = c(", ol$metric[i],
+                                " = ...)"),
+                 paste0("add a column abs_", ol$metric[i], " = abs(",
+                        ol$metric[i], ") and max_metrics = c(abs_",
+                        ol$metric[i], " = ...)")),
+          ".\n", sep = "")
+    }
+  }
+  cat("\n")
   df <- as.data.frame(x)
   num <- vapply(df, is.double, logical(1))
   df[num] <- lapply(df[num], round, digits = digits)
   print(df, row.names = FALSE, ...)
   invisible(x)
+}
+
+# Selected models far worse than the other selected models on a criterion
+# that has no required value (Tukey fence on the worse side) (internal)
+selection_outliers <- function(x, crit, required) {
+  empty <- data.frame(model = character(0), metric = character(0),
+                      value = numeric(0), side = character(0),
+                      others = character(0), stringsAsFactors = FALSE)
+  s <- x[x$selected, , drop = FALSE]
+  if (nrow(s) < 4) return(empty)
+  out <- lapply(setdiff(names(crit), required), function(k) {
+    v <- s[[k]]
+    worse <- switch(crit[[k]], max = -v, min = v, zero = abs(v))
+    q <- stats::quantile(worse, c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+    hit <- !is.na(worse) & worse > q[2] + 1.5 * diff(q) &
+      worse - stats::median(worse, na.rm = TRUE) > 1e-9
+    if (!any(hit)) return(NULL)
+    rg <- signif(range(v[!hit], na.rm = TRUE), 3)
+    data.frame(model = s$model[hit], metric = k, value = v[hit],
+               side = switch(crit[[k]], max = "lower", min = "higher",
+                             zero = "further from 0"),
+               others = paste(rg, collapse = "-"), stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, out)
+  if (is.null(out)) empty else out
 }

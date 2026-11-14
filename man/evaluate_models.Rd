@@ -17,6 +17,7 @@ evaluate_models(
   coords = NULL,
   crs = "EPSG:4326",
   na_action = c("common", "per_model"),
+  boot_metrics = c("criteria", "all"),
   seed = NULL,
   data = NULL
 )
@@ -59,6 +60,10 @@ when points are tabular. Detected automatically if \code{NULL}.}
 model, so every model is evaluated on exactly the same points (a fair
 comparison). \code{"per_model"} keeps points independently for each model
 (this reproduces the original 2021 script).}
+
+\item{boot_metrics}{Metrics that get bootstrap intervals: \code{"criteria"}
+(default) or \code{"all"} metrics (slower, mainly because of the Boyce
+index).}
 
 \item{seed}{Optional random seed for reproducible bootstraps.}
 

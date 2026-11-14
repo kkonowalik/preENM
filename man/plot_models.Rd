@@ -12,6 +12,8 @@ plot_models(
   interactive = !is.null(z),
   zoom = FALSE,
   labels = TRUE,
+  error_bars = TRUE,
+  bar_colour = "#c8553d",
   directions = NULL,
   file = NULL,
   browse = interactive(),
@@ -34,6 +36,10 @@ for 2-D).}
 best models, or axis limits; see \code{\link[=plot_selection]{plot_selection()}}.}
 
 \item{labels}{Show model names.}
+
+\item{error_bars}{Draw error bars (bootstrap intervals, else +/- 1 SD).}
+
+\item{bar_colour}{Colour of the error bars.}
 
 \item{directions}{Optional named vector of directions for metrics the
 package does not know, e.g. \code{c(fossil_AUC_deep = "max")} (\code{"max"},

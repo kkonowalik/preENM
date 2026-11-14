@@ -84,3 +84,54 @@ test_that("plot_models: any metrics, plain tables, 2-D and 3-D", {
                                file = f, browse = FALSE))
   expect_true(file.exists(f))
 })
+
+test_that("outliers among selected models are reported", {
+  t2 <- tab
+  t2$MAEbal[t2$model == "MAXNET"] <- 0.332
+  sel <- select_models(t2, min_metrics = c(AUC = 0.8, TSS = 0.6),
+                       criteria = crit, plot = FALSE)
+  ol <- attr(sel, "outliers")
+  expect_equal(ol$model[ol$metric == "MAEbal"], "MAXNET")
+  expect_equal(ol$side[ol$metric == "MAEbal"], "higher")
+  expect_output(print(sel), "max_metrics = c\\(MAEbal")
+  # once MAEbal has a required value, no note
+  sel2 <- select_models(t2, min_metrics = c(AUC = 0.8, TSS = 0.6,
+                                             fossil_AUC_deep = 0.7),
+                        max_metrics = c(MAEbal = 0.3), criteria = crit,
+                        plot = FALSE)
+  expect_equal(nrow(attr(sel2, "outliers")), 0)
+  expect_false("MAXNET" %in% sel2$model[sel2$selected])
+})
+
+test_that("error bars: intervals preferred, any metric, can be switched off", {
+  t3 <- tab
+  t3$fossil_AUC_deep_lower <- t3$fossil_AUC_deep - 0.02
+  t3$fossil_AUC_deep_upper <- t3$fossil_AUC_deep + 0.02
+  t3$fossil_AUC_deep_sd <- 0.5                   # ignored: interval wins
+  sel <- select_models(t3, criteria = crit, plot = FALSE)
+  p <- plot_selection(sel, "AUC", "fossil_AUC_deep")
+  eb <- ggplot2::layer_data(p, 1 + which(vapply(p$layers, function(l)
+    inherits(l$geom, "GeomErrorbar"), logical(1)))[1] - 1)
+  expect_equal(eb$ymax - eb$ymin, rep(0.04, nrow(t3)), tolerance = 1e-6)
+  expect_equal(unique(eb$colour), "#c8553d")
+  expect_match(paste(p$labels$subtitle), "bootstrap interval")
+  expect_match(paste(p$labels$subtitle), "AUC ±1 SD")
+  p0 <- plot_selection(sel, "AUC", "fossil_AUC_deep", error_bars = FALSE)
+  expect_false(any(vapply(p0$layers, function(l)
+    inherits(l$geom, "GeomErrorbar"), logical(1))))
+  pc <- plot_selection(sel, "AUC", "fossil_AUC_deep", bar_colour = "orange")
+  expect_s3_class(pc, "ggplot")
+})
+
+test_that("evaluate_models can bootstrap all metrics", {
+  sim <- simulate_enm_data(seed = 1)
+  ev <- evaluate_models(sim$models, sim$presence, sim$absence, n_boot = 20,
+                        seed = 1, boot_metrics = "all")
+  expect_true(all(c("TSS_lower", "bias_upper", "Boyce_lower",
+                    "MAEbal_upper") %in% names(ev)))
+  ev2 <- evaluate_models(sim$models, sim$presence, sim$absence, n_boot = 20,
+                         seed = 1)
+  expect_false("TSS_lower" %in% names(ev2))
+  expect_equal(ev$AUC_lower, ev2$AUC_lower)
+  expect_output(print(ev), "TSS_lower")
+})

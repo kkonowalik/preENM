@@ -43,7 +43,12 @@ zoom; see \code{\link[=plot_selection]{plot_selection()}}). Default: in interact
 \value{
 An object of class \code{enm_selection} (a data.frame): \code{x} with
 columns \code{pass}, \code{pareto}, \code{rank_mean} and \code{selected}, sorted with the
-selected models first.
+selected models first. A criterion is only enforced through the
+minimum/maximum values: a selected model can still be much worse than
+the others on a criterion without a required value. Such models (worse
+than the other selected models by more than 1.5 interquartile ranges,
+with at least four selected) are reported when printing and in
+\code{attr(x, "outliers")}.
 }
 \description{
 Combines the two selection rules used in practice:

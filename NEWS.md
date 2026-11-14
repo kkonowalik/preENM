@@ -1,3 +1,20 @@
+# preENM 2.8.0
+
+* `select_models()` reports selected models that are far worse than the
+  other selected models on a criterion without a required value (e.g. a
+  model with good AUC and fossil AUC but much higher MAEbal) and suggests
+  the `max_metrics`/`min_metrics` to add (`attr(x, "outliers")`). Criteria
+  only decide the Pareto front and the ranking; models pass through the
+  required values.
+* Error bars in `plot_selection()`, `plot_pareto()`, `plot()` and
+  `plot_models()`: drawn in a distinct colour (`bar_colour`, default red)
+  so they no longer blend with grid and reference lines; taken from the
+  bootstrap interval (`_lower`, `_upper`) or else +/- 1 SD (`_sd`) for any
+  metric on either axis; `error_bars = FALSE` hides them. The subtitle says
+  which kind each axis shows.
+* `evaluate_models(boot_metrics = "all")`: bootstrap intervals for every
+  metric (MAE, MAEbal, bias, TSS, Boyce), not only the criteria.
+
 # preENM 2.7.0
 
 * `temporal_validation()`: **paired record bootstrap** (`n_boot`, `conf`,

@@ -11,6 +11,8 @@ plot_selection(
   y_metric = NULL,
   labels = TRUE,
   zoom = FALSE,
+  error_bars = TRUE,
+  bar_colour = "#c8553d",
   base_size = 12
 )
 
@@ -28,6 +30,10 @@ the second and the first selection criterion.}
 axis limits (see Details). For \code{plot()}: \code{"auto"} adds the zoomed
 plot when it leaves out at least one model.}
 
+\item{error_bars}{Draw the error bars (\code{TRUE}/\code{FALSE}).}
+
+\item{bar_colour}{Colour of the error bars.}
+
 \item{base_size}{Base font size.}
 
 \item{y}{Ignored.}
@@ -41,8 +47,12 @@ invisibly.
 \description{
 Shows the models from \code{\link[=select_models]{select_models()}} in the space of two metrics.
 Selected models are filled, Pareto-front models are circles (others are
-squares), dashed lines mark the minimum values and bars show +/- 1 SD
-across cross-validation runs when \verb{<metric>_sd} columns are present. Call
+squares), dashed lines mark the required minimum and maximum values, and
+bars show, for each axis, the bootstrap interval (\verb{<metric>_lower},
+\verb{<metric>_upper}, e.g. from \code{\link[=temporal_validation]{temporal_validation()}} or
+\code{\link[=evaluate_models]{evaluate_models()}} with \code{n_boot}) or else +/- 1 SD across runs
+(\verb{<metric>_sd}, from \code{\link[=evaluate_cv]{evaluate_cv()}}). Keep these columns when you build
+the table for \code{\link[=select_models]{select_models()}}. Call
 it several times for several panels, e.g. AUC vs MAE and AUC vs fossil AUC.
 }
 \details{

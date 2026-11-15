@@ -14,8 +14,12 @@ Data preparation:
 \code{\link[=write_m_area]{write_m_area()}}, \code{\link[=crop_to_m]{crop_to_m()}}: the accessible area (M).
 \item \code{\link[=crop_rasters]{crop_rasters()}}: cut folders of raster files to M, keeping values exact.
 \item \code{\link[=download_chelsa_monthly]{download_chelsa_monthly()}}, \code{\link[=monthly_files]{monthly_files()}}, \code{\link[=climate_indices]{climate_indices()}}:
-derived climate variables (VPD, PET, moisture deficit, aridity, heat
-stress, summer rain, heat-rain synchrony) from monthly climatologies.
+twenty derived climate variables (water balance, heat, cold, season
+and light; see \code{\link[=climate_index_names]{climate_index_names()}}) from monthly climatologies.
+\item \code{\link[=uncertainty_environment]{uncertainty_environment()}}: coordinate uncertainty judged by how much
+the predictors vary within it.
+\item \code{\link[=niche_truncation]{niche_truncation()}}, \code{\link[=plot_niche_truncation]{plot_niche_truncation()}}: is the niche cut off
+by the calibration area, and do projections go beyond it?
 \item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}}: predictor
 sets uncorrelated in every period, scenario and region, ranked.
 \item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell.

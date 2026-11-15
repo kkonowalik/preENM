@@ -7,8 +7,12 @@
 #'   [write_m_area()], [crop_to_m()]: the accessible area (M).
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
 #' * [download_chelsa_monthly()], [monthly_files()], [climate_indices()]:
-#'   derived climate variables (VPD, PET, moisture deficit, aridity, heat
-#'   stress, summer rain, heat-rain synchrony) from monthly climatologies.
+#'   twenty derived climate variables (water balance, heat, cold, season
+#'   and light; see [climate_index_names()]) from monthly climatologies.
+#' * [uncertainty_environment()]: coordinate uncertainty judged by how much
+#'   the predictors vary within it.
+#' * [niche_truncation()], [plot_niche_truncation()]: is the niche cut off
+#'   by the calibration area, and do projections go beyond it?
 #' * [sample_environment()], [select_variables()], [best_sets()]: predictor
 #'   sets uncorrelated in every period, scenario and region, ranked.
 #' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell.

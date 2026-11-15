@@ -239,9 +239,17 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' | `lgp` | length of the growing period: months with Tmean at or above `gdd_base` and P at least half of PET (FAO) | months |
 #' | `emberger` | Emberger's pluviothermic quotient Q = 2000 P / (M^2 - m^2), M and m in Kelvin (lower = drier) | - |
 #' | `ellenberg` | Ellenberg's quotient: mean temperature of the warmest month / annual precipitation x 1000 | degC/mm x 1000 |
+#' | `kira_warmth` | Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC | degC x months |
+#' | `kira_coldness` | Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative) | degC x months |
+#' | `ra` | mean extraterrestrial radiation over the year (a function of latitude only) | MJ m-2 day-1 |
+#' | `ra_gs` | extraterrestrial radiation received in the months with Tmean at or above `gdd_base` | MJ m-2 |
+#' | `daylength_start` | day length in the middle of the month in which the growing season starts | hours |
 #'
-#' The first seven are computed by default; `indices = "all"` adds the
-#' others, which describe limits common to many organisms. `gdd`, `lgp`
+#' All are computed by default; choose some by name or by group with
+#' [climate_index_names()], e.g. `indices = climate_index_names("water")`
+#' or `indices = c("cold", "gdd")`. The first seven were chosen for water-
+#' and heat-limited plants; the others describe limits common to many
+#' organisms. `gdd`, `lgp`
 #' and `frost_months` measure the length and warmth of the season of
 #' growth or activity (plants, insects and other ectotherms); `cold_stress`
 #' and `frost_months` the severity and duration of frost (frost-sensitive
@@ -251,6 +259,14 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' classical indices of vegetation science: the length of the dry season,
 #' the Mediterranean bioclimatic stages, and the humidity gradient of
 #' temperate forests (in Central Europe beech dominates below about 30).
+#' Kira's indices delimit the vegetation zones of East Asia (e.g. the
+#' evergreen broad-leaved forest between warmth indices of 85 and 180);
+#' they always use 5 degC, whereas `gdd` uses `gdd_base` and counts days.
+#' `daylength_start` is the photoperiod at the onset of growth, a cue for
+#' bud burst, flowering and the end of diapause; `ra_gs` is the light
+#' available at the top of the atmosphere while it is warm enough to
+#' grow. `ra` depends on latitude alone: in a model it acts as a
+#' smooth stand-in for latitude, so use it only with that in mind.
 #'
 #' **Formulas.** Saturation vapour pressure
 #' \eqn{e_s(T) = 0.6108 \exp(17.27 T / (T + 237.3))} (kPa); monthly VPD
@@ -270,7 +286,12 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' `frost_months`, `cold_stress` and `dry_months` are computed from monthly
 #' means, so they are approximations of the daily quantities: days above
 #' the base within a month whose mean is below it (or frosts in a month
-#' whose mean minimum is above the threshold) are not counted. Several
+#' whose mean minimum is above the threshold) are not counted. The growing
+#' season of `daylength_start` starts in the first month with Tmean at or
+#' above `gdd_base`, counting from the coldest month (which is itself the
+#' start where every month is warm enough); cells without such a month
+#' get `NA`. Day length is \eqn{24 \omega_s / \pi} with the sunset hour
+#' angle \eqn{\omega_s} of FAO-56 (eq. 25 and 34). Several
 #' indices are strongly correlated with each other and with bioclim
 #' variables (e.g. `gdd` with bio1, `ellenberg` and `emberger` with
 #' `aridity`); let [select_variables()] choose among them.
@@ -292,10 +313,11 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'   precipitation: 12-layer [terra::SpatRaster]s (January to December) or
 #'   12 file paths (e.g. from [monthly_files()]).
 #' @param tmean Monthly mean temperature; default `(tmax + tmin) / 2`.
-#' @param indices Which indices to compute (default: the first seven of
-#'   the table), or `"all"`.
+#' @param indices Which indices to compute: names of indices or of groups
+#'   of them (see [climate_index_names()]), or `"all"` (default).
 #' @param heat_threshold Temperature (degC) above which `heat_stress` sums.
-#' @param gdd_base Base temperature (degC) of `gdd` and `lgp`: 5 suits
+#' @param gdd_base Base temperature (degC) of `gdd`, `lgp`, `ra_gs` and
+#'   `daylength_start`: 5 suits
 #'   temperate plants; use 0 for arctic-alpine plants or about 10 for
 #'   thermophilous plants and many insects.
 #' @param frost_threshold Temperature (degC) below which `cold_stress`
@@ -319,7 +341,10 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'   Faculte des Sciences de l'Universite de Montpellier, Serie Botanique*
 #'   7, 3-43. Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen.
 #'   Ulmer, Stuttgart. FAO (1978) Report on the agro-ecological zones
-#'   project. World Soil Resources Report 48. Karger, D.N.
+#'   project. World Soil Resources Report 48. Kira, T. (1945) A new
+#'   classification of climate in eastern Asia as the basis for
+#'   agricultural geography. Horticultural Institute, Kyoto University.
+#'   Karger, D.N.
 #'   et al. (2017) Climatologies at high resolution for the earth's land
 #'   surface areas. *Scientific Data* 4, 170122.
 #' @export
@@ -336,27 +361,17 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' ci <- climate_indices(tmax, tmin, prec)
 #' ci
 #' terra::plot(ci)
-#' # all indices, e.g. the growing season of a thermophilous species
-#' names(climate_indices(tmax, tmin, prec, indices = "all", gdd_base = 10))
+#' # only some: by group and by name, with another base temperature
+#' names(climate_indices(tmax, tmin, prec, indices = c("cold", "gdd"),
+#'                       gdd_base = 10))
 climate_indices <- function(tmax, tmin, prec, tmean = NULL,
-                            indices = c("vpd", "pet", "cmd", "aridity",
-                                        "heat_stress", "sri",
-                                        "synchronicity"),
+                            indices = "all",
                             heat_threshold = 30, gdd_base = 5,
                             frost_threshold = 0, tdew_offset = 0,
                             temp_units = c("auto", "C", "K", "K10"),
                             path = NULL, prefix = "", overwrite = FALSE) {
   temp_units <- match.arg(temp_units)
-  all_idx <- c("vpd", "pet", "cmd", "aridity", "heat_stress", "sri",
-               "synchronicity", "gdd", "cold_stress", "frost_months",
-               "continentality", "dry_months", "lgp", "emberger",
-               "ellenberg")
-  if (identical(indices, "all")) indices <- all_idx
-  bad <- setdiff(indices, all_idx)
-  if (length(bad)) {
-    stop("Unknown index: ", paste(bad, collapse = ", "), ". Available: ",
-         paste(all_idx, collapse = ", "), call. = FALSE)
-  }
+  indices <- expand_indices(indices)
   monthly <- function(x, what) {
     if (is.character(x)) x <- terra::rast(x)
     if (!inherits(x, "SpatRaster") || terra::nlyr(x) != 12) {
@@ -475,7 +490,147 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     tot <- sum(prec)
     make("ellenberg", terra::ifel(tot > 0, 1000 * max(tmean) / tot, NA))
   }
+  if ("kira_warmth" %in% indices) {
+    make("kira_warmth", sum(terra::clamp(tmean - 5, lower = 0,
+                                         values = TRUE)))
+  }
+  if ("kira_coldness" %in% indices) {
+    make("kira_coldness", sum(terra::clamp(tmean - 5, upper = 0,
+                                           values = TRUE)))
+  }
+  if (any(c("ra", "ra_gs", "daylength_start") %in% indices)) {
+    phi <- latitude_radians(tmax[[1]])
+  }
+  if (any(c("ra", "ra_gs") %in% indices)) {
+    ra_m <- terra::rast(lapply(1:12, function(i) {
+      extraterrestrial_radiation(phi, i)
+    }))
+    # cells without climate values get none either
+    ra_m <- terra::mask(ra_m, tmean[[1]])
+    if ("ra" %in% indices) make("ra", sum(ra_m * days) / sum(days))
+    if ("ra_gs" %in% indices) {
+      make("ra_gs", sum(ra_m * days * (tmean >= gdd_base)))
+    }
+  }
+  if ("daylength_start" %in% indices) {
+    make("daylength_start", terra::app(c(tmean, phi), season_start_daylength,
+                                       base = gdd_base))
+  }
   terra::rast(out[intersect(indices, names(out))])
+}
+
+#' Names of the climate indices, by group
+#'
+#' The indices that [climate_indices()] can compute, to choose among them:
+#' all of them, those of some groups, or all but some.
+#'
+#' | Group | Indices |
+#' |---|---|
+#' | `water` | `vpd`, `pet`, `cmd`, `aridity`, `dry_months`, `emberger`, `ellenberg` |
+#' | `heat` | `heat_stress`, `gdd`, `kira_warmth`, `continentality` |
+#' | `cold` | `cold_stress`, `frost_months`, `kira_coldness` |
+#' | `season` | `sri`, `synchronicity`, `lgp` |
+#' | `light` | `ra`, `ra_gs`, `daylength_start` |
+#'
+#' @param groups Groups to return (default: all).
+#' @param drop Indices or groups to leave out.
+#' @param table Return a data.frame with the group, meaning and unit of
+#'   each index instead of the names.
+#' @return A character vector of index names, or a data.frame.
+#' @export
+#' @examples
+#' climate_index_names()
+#' climate_index_names("water")
+#' climate_index_names(drop = c("light", "emberger"))
+#' climate_index_names(table = TRUE)
+climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE) {
+  tab <- climate_index_table()
+  known <- unique(tab$group)
+  bad <- setdiff(groups, known)
+  if (length(bad)) {
+    stop("Unknown group: ", paste(bad, collapse = ", "), ". Available: ",
+         paste(known, collapse = ", "), call. = FALSE)
+  }
+  bad <- setdiff(drop, c(known, tab$index))
+  if (length(bad)) {
+    stop("Unknown index or group in `drop`: ", paste(bad, collapse = ", "),
+         call. = FALSE)
+  }
+  keep <- (is.null(groups) | tab$group %in% groups) &
+    !(tab$index %in% drop | tab$group %in% drop)
+  tab <- tab[keep, , drop = FALSE]
+  rownames(tab) <- NULL
+  if (table) tab else tab$index
+}
+
+# The indices in the order they are returned (internal)
+climate_index_table <- function() {
+  x <- c(
+    "vpd", "water", "mean vapour pressure deficit", "kPa",
+    "pet", "water", "potential evapotranspiration", "mm/year",
+    "cmd", "water", "climatic moisture deficit", "mm/year",
+    "aridity", "water", "aridity index P / PET", "-",
+    "heat_stress", "heat", "sum of monthly Tmax above heat_threshold",
+    "degC x months",
+    "sri", "season", "precipitation of the warmest quarter / annual", "0-1",
+    "synchronicity", "season", "heat-rain synchrony", "0-1",
+    "gdd", "heat", "growing degree days above gdd_base", "degC x days",
+    "cold_stress", "cold", "sum of monthly Tmin below frost_threshold",
+    "degC x months",
+    "frost_months", "cold", "months with Tmin below frost_threshold",
+    "months",
+    "continentality", "heat", "Tmean of the warmest - coldest month", "degC",
+    "dry_months", "water", "months with P < 2 x Tmean", "months",
+    "lgp", "season", "months with Tmean >= gdd_base and P >= PET / 2",
+    "months",
+    "emberger", "water", "Emberger's pluviothermic quotient", "-",
+    "ellenberg", "water", "Ellenberg's quotient", "degC/mm x 1000",
+    "kira_warmth", "heat", "Kira's warmth index", "degC x months",
+    "kira_coldness", "cold", "Kira's coldness index", "degC x months",
+    "ra", "light", "mean extraterrestrial radiation", "MJ m-2 day-1",
+    "ra_gs", "light", "extraterrestrial radiation of the growing season",
+    "MJ m-2",
+    "daylength_start", "light",
+    "day length at the start of the growing season", "hours")
+  m <- matrix(x, ncol = 4, byrow = TRUE)
+  data.frame(index = m[, 1], group = m[, 2], meaning = m[, 3], unit = m[, 4],
+             stringsAsFactors = FALSE)
+}
+
+# Index names from names, group names or "all" (internal)
+expand_indices <- function(indices) {
+  tab <- climate_index_table()
+  if (identical(indices, "all")) return(tab$index)
+  bad <- setdiff(indices, c(tab$index, tab$group))
+  if (length(bad)) {
+    stop("Unknown index: ", paste(bad, collapse = ", "), ". Available: ",
+         paste(tab$index, collapse = ", "), "; or a group: ",
+         paste(unique(tab$group), collapse = ", "), call. = FALSE)
+  }
+  tab$index[tab$index %in% indices | tab$group %in% indices]
+}
+
+# Day length (hours) in the middle of the month in which the growing season
+# starts: the first month at or above `base`, counting from the coldest
+# month. `m` has one row per cell: 12 monthly mean temperatures and the
+# latitude in radians (internal)
+season_start_daylength <- function(m, base) {
+  out <- rep(NA_real_, nrow(m))
+  ok <- which(stats::complete.cases(m))
+  if (!length(ok)) return(out)
+  t <- m[ok, 1:12, drop = FALSE]
+  cold <- max.col(-t, ties.method = "first")
+  start <- rep(NA_integer_, length(ok))
+  for (k in 0:11) {
+    month <- (cold - 1 + k) %% 12 + 1
+    hit <- is.na(start) & t[cbind(seq_along(ok), month)] >= base
+    start[hit] <- month[hit]
+  }
+  j <- c(15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349)[start]
+  delta <- 0.409 * sin(2 * pi / 365 * j - 1.39)
+  ws <- acos(pmin(pmax(-tan(m[ok, 13]) * tan(delta), -1), 1))
+  out[ok] <- 24 / pi * ws
+  out
 }
 
 # Function converting temperatures to degC (internal)

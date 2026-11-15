@@ -21,7 +21,9 @@ your own code.
 | **Environmental thinning** (without truncating the niche) | **available** | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | **Background strategies and recording effort** | **available** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
 | **Fossil records** (optional, for hindcasts) | **available** | `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
-| **Derived climate variables** (VPD, PET, moisture deficit, aridity, heat stress, summer rain, heat-rain synchrony; growing degree days, frost, continentality, dry season, growing period, Emberger and Ellenberg quotients) | **available** | `download_chelsa_monthly()`, `monthly_files()`, `climate_indices()` |
+| **Derived climate variables** (twenty indices of water balance, heat, cold, season and light) | **available** | `download_chelsa_monthly()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
+| **Coordinate uncertainty in environmental terms** | **available** | `uncertainty_environment()` |
+| **Niche truncation check** (is M large enough, do projections go beyond it?) | **available** | `niche_truncation()`, `plot_niche_truncation()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 
@@ -219,8 +221,8 @@ are not needed.
 | `sri` | summer rain index: precipitation of the warmest quarter / annual (= bio18 / bio12) | 0–1 |
 | `synchronicity` | 1 = the warmest and the wettest month coincide, 0 = six months apart | 0–1 |
 
-`indices = "all"` adds eight indices of limits shared by many organisms
-(plants, insects and other ectotherms):
+Thirteen more indices describe limits shared by many organisms (plants,
+insects and other ectotherms):
 
 | Index | Meaning | Unit |
 |---|---|---|
@@ -232,11 +234,29 @@ are not needed.
 | `lgp` | length of the growing period: months with Tmean ≥ `gdd_base` and P ≥ PET / 2 (FAO) | months |
 | `emberger` | Emberger's pluviothermic quotient 2000 P / (M² − m²), M and m in Kelvin | – |
 | `ellenberg` | Ellenberg's quotient: Tmean of the warmest month / annual P × 1000 | °C/mm × 1000 |
+| `kira_warmth` | Kira's warmth index: sum over months of Tmean − 5 where Tmean > 5 °C | °C × months |
+| `kira_coldness` | Kira's coldness index: sum over months of Tmean − 5 where Tmean < 5 °C (zero or negative) | °C × months |
+| `ra` | mean extraterrestrial radiation over the year (latitude only) | MJ m⁻² day⁻¹ |
+| `ra_gs` | extraterrestrial radiation received in the months with Tmean ≥ `gdd_base` | MJ m⁻² |
+| `daylength_start` | day length in the middle of the month in which the growing season starts | hours |
 
-They are computed from monthly means, so `gdd`, `lgp`, `frost_months`,
+All twenty are computed by default. Choose some by name or by group with
+`climate_index_names()`:
+
+```r
+climate_index_names()                       # all names
+climate_index_names(table = TRUE)           # with group, meaning and unit
+climate_indices(tmax, tmin, prec, indices = climate_index_names("water"))
+climate_indices(tmax, tmin, prec, indices = c("cold", "gdd"))   # a group and a name
+climate_indices(tmax, tmin, prec, indices = climate_index_names(drop = "light"))
+```
+
+The groups are `water`, `heat`, `cold`, `season` and `light`. The indices
+are computed from monthly means, so `gdd`, `lgp`, `frost_months`,
 `cold_stress` and `dry_months` approximate the daily quantities. Several
 are correlated with each other and with bioclim variables; let
-`select_variables()` choose among them.
+`select_variables()` choose among them. `ra` depends on latitude alone, so
+in a model it stands in for latitude.
 
 **1. Get the monthly files.** They can be downloaded automatically from
 CHELSA V2.1 (no account needed). With `extent`, only your region is read
@@ -298,6 +318,62 @@ e(Tmin); PET = 0.0023 × 0.408 × Ra × (Tmean + 17.8) × √(Tmax − Tmin) mm/
 with extraterrestrial radiation Ra (MJ m⁻² day⁻¹) from latitude and the
 mid-month day (FAO-56 eq. 21; 0.408 converts it to mm of water); summer
 quarters are any three consecutive months, including December–February.
+
+## Keeping imprecise records where the environment is uniform
+
+Records are usually dropped above a fixed coordinate uncertainty, e.g.
+1 km. That discards many usable records, often the older ones and those
+from poorly sampled regions, and narrows the sampled niche: 5 km of
+uncertainty on a plain changes the climate of a record very little, while
+1 km on a steep slope can change it a lot. `uncertainty_environment()`
+measures this directly. For each record it finds the cells that its
+uncertainty circle touches and divides the range of every predictor among
+them by the breadth of the species' niche on that predictor (the distance
+between the 5th and 95th percentile of the values at all records):
+
+```r
+u <- uncertainty_environment(occ, env, max_rel = 0.1)
+table(u$unc_ok, useNA = "ifany")
+occ_ok <- u[which(u$unc_ok), ]
+```
+
+`unc_ok` is `TRUE` when the true conditions cannot differ from the
+recorded ones by more than `max_rel` (here a tenth) of the niche breadth
+on any layer. `unc_rel_<layer>` gives the value for each layer and
+`unc_limiting` the layer that decides. Records without an uncertainty get
+`NA` (or assume one with `na_uncertainty`); records above `max_radius_km`
+are rejected without being examined. Use the layers and the resolution you
+will model with, and run `filter_occurrences()` with a generous
+`max_coord_unc_m` beforehand.
+
+## Checking that the niche is not truncated by M
+
+A model learns only the part of a species' response that the calibration
+area contains. If the records are still frequent where the conditions of M
+end, the limit of the niche lies outside M, and a projection to conditions
+beyond M extrapolates a curve whose end was never seen.
+`niche_truncation()` checks every predictor at both ends:
+
+```r
+tr <- niche_truncation(occ, env_m,
+                       projections = list(lgm = env_lgm, ssp370 = env_2070))
+tr
+plot_niche_truncation(tr)
+```
+
+* `edge_low`, `edge_high`: how often records fall in the outer 5% of M's
+  conditions, relative to how common those conditions are in M (0 = the
+  species avoids the margin, so its limit is inside M; 1 or more = it uses
+  the margin at least as often as M offers it: `truncated_*`).
+* `gap_low`, `gap_high`: the distance between the most extreme record and
+  the limit of M, as a share of M's range.
+* For each projection, the share of cells beyond M and beyond the records,
+  and `risk_low` / `risk_high` where a truncated end is exceeded.
+
+For a flagged variable, consider a larger M, another variable, or clamping
+and a cautious reading of the projection. The flags are a screening aid: a
+species may truly live up to a coast or a mountain crest where M ends, and
+sampling bias near an edge inflates them, so use thinned records.
 
 ## Selecting predictor variables across periods and regions
 

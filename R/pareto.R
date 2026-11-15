@@ -70,21 +70,45 @@ pareto_rank <- function(x, maximize = "AUC", minimize = "MAE", zero = NULL,
 pareto_fronts <- function(m, tol = 0) {
   m <- as.matrix(m)
   tol <- rep_len(tol, ncol(m))
-  n <- nrow(m)
-  front <- rep(NA_integer_, n)
+  front <- rep(NA_integer_, nrow(m))
   remaining <- which(stats::complete.cases(m))
+  n <- length(remaining)
+  if (!n) return(front)
+  sub <- m[remaining, , drop = FALSE]
+  # Dominance is computed once, in blocks of rows (bounded memory), instead
+  # of once per point and per front. dominators(J)[j, i] is TRUE when point
+  # J[j] dominates point i: not worse by more than tol anywhere and better
+  # by more than tol somewhere (tol = 0: classic Pareto dominance).
+  dominators <- function(J) {
+    all_le <- matrix(TRUE, length(J), n)
+    any_lt <- matrix(FALSE, length(J), n)
+    for (k in seq_len(ncol(sub))) {
+      all_le <- all_le & outer(sub[J, k], sub[, k] + tol[k], `<=`)
+      any_lt <- any_lt | outer(sub[J, k], sub[, k] - tol[k], `<`)
+    }
+    all_le & any_lt
+  }
+  n_dominators <- function(J) {
+    out <- numeric(n)
+    size <- max(1L, floor(2e6 / n))
+    for (s in seq(1L, length(J), by = size)) {
+      out <- out + colSums(dominators(J[s:min(s + size - 1L, length(J))]))
+    }
+    out
+  }
+  # number of points that dominate each point; a front is the set of points
+  # with none left, and removing it lowers the counts of those it dominated
+  left <- n_dominators(seq_len(n))
+  open <- rep(TRUE, n)
   k <- 1L
-  while (length(remaining) > 0) {
-    sub <- m[remaining, , drop = FALSE]
-    dominated <- vapply(seq_along(remaining), function(i) {
-      # j dominates i: not worse by more than tol anywhere, better by more
-      # than tol somewhere (tol = 0: classic Pareto dominance)
-      better_eq <- sweep(sub, 2, sub[i, ] + tol, `<=`)
-      strictly <- sweep(sub, 2, sub[i, ] - tol, `<`)
-      any(rowSums(better_eq) == ncol(sub) & rowSums(strictly) > 0)
-    }, logical(1))
-    front[remaining[!dominated]] <- k
-    remaining <- remaining[dominated]
+  while (any(open)) {
+    cur <- which(open & left == 0)
+    # with tol > 0 dominance is not transitive and can form a cycle in
+    # which every remaining point is dominated: they share the last front
+    if (!length(cur)) cur <- which(open)
+    front[remaining[cur]] <- k
+    open[cur] <- FALSE
+    if (any(open)) left <- left - n_dominators(cur)
     k <- k + 1L
   }
   front

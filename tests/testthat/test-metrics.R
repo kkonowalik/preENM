@@ -78,3 +78,30 @@ test_that("a user metric may replace a built-in one", {
   expect_error(evaluate_models(sim$models, sim$presence, sim$absence,
                                metrics = list(obs = my)), "reserved")
 })
+
+test_that("boyce_index equals the window-by-window definition", {
+  slow <- function(presence, background, n_windows = 100, window_width = 0.1) {
+    lo <- min(background, presence)
+    hi <- max(background, presence)
+    w <- (max(background) - min(background)) * window_width
+    start <- seq(from = lo, to = hi - w, by = (hi - lo - w) / n_windows)
+    start[length(start)] <- start[length(start)] + 1
+    end <- start + w
+    ratio <- vapply(seq_along(start), function(i) {
+      round(mean(presence >= start[i] & presence <= end[i]) /
+              mean(background >= start[i] & background <= end[i]), 10)
+    }, numeric(1))
+    keep <- which(!is.nan(ratio))
+    ratio <- ratio[keep]
+    start <- start[keep]
+    r <- which(ratio != c(ratio[-1], TRUE))
+    suppressWarnings(stats::cor(ratio[r], start[r], method = "spearman"))
+  }
+  set.seed(7)
+  for (i in 1:5) {
+    bg <- round(runif(800), 2)            # many ties and window-edge values
+    pres <- round(rbeta(60, 3, 1.5), 2)
+    expect_identical(boyce_index(pres, bg), slow(pres, bg))
+    expect_identical(boyce_index(pres, bg, 20, 0.25), slow(pres, bg, 20, 0.25))
+  }
+})

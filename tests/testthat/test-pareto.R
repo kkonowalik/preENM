@@ -39,3 +39,41 @@ test_that("tolerance turns near-ties into ties", {
   r <- pareto_rank(df2, tol = c(AUC = 0.01))
   expect_equal(r$model[r$pareto_front == 1], "A")
 })
+
+test_that("pareto_fronts matches the definition, point by point", {
+  slow <- function(m, tol) {
+    front <- rep(NA_integer_, nrow(m))
+    remaining <- which(stats::complete.cases(m))
+    k <- 1L
+    while (length(remaining)) {
+      sub <- m[remaining, , drop = FALSE]
+      dominated <- vapply(seq_along(remaining), function(i) {
+        le <- sweep(sub, 2, sub[i, ] + tol, `<=`)
+        lt <- sweep(sub, 2, sub[i, ] - tol, `<`)
+        any(rowSums(le) == ncol(sub) & rowSums(lt) > 0)
+      }, logical(1))
+      if (all(dominated)) dominated[] <- FALSE
+      front[remaining[!dominated]] <- k
+      remaining <- remaining[dominated]
+      k <- k + 1L
+    }
+    front
+  }
+  set.seed(42)
+  for (nc in 1:4) for (tol in c(0, 0.05)) {
+    m <- matrix(round(runif(60 * nc), 2), ncol = nc)   # with ties
+    m[sample(length(m), 3)] <- NA
+    m[sample(length(m), 3)] <- Inf
+    expect_identical(pareto_fronts(m, tol), slow(m, rep(tol, nc)))
+  }
+  expect_identical(pareto_fronts(matrix(numeric(0), 0, 2)), integer(0))
+  expect_identical(pareto_fronts(matrix(NA_real_, 2, 2)), c(NA_integer_,
+                                                            NA_integer_))
+})
+
+test_that("pareto_fronts ends when tolerance makes dominance circular", {
+  # a beats b, b beats c and c beats a (each better by more than tol on
+  # one criterion and worse by less than tol on the others)
+  m <- rbind(c(0, 0.9, 1.8), c(1.8, 0, 0.9), c(0.9, 1.8, 0))
+  expect_identical(pareto_fronts(m, tol = 1), c(1L, 1L, 1L))
+})

@@ -1,3 +1,34 @@
+# preENM 2.10.0
+
+New climate indices and faster computation (results unchanged):
+
+* `climate_indices(indices = "all")` adds eight indices of limits shared
+  by many organisms: growing degree days (`gdd`, base `gdd_base`), frost
+  severity and duration (`cold_stress`, `frost_months`, below
+  `frost_threshold`), `continentality`, the Bagnouls-Gaussen dry season
+  (`dry_months`), the FAO length of the growing period (`lgp`), and the
+  Emberger and Ellenberg quotients. The default remains the seven
+  indices of 2.9.0.
+* Faster, with identical results:
+  * Pareto fronts (`evaluate_models()`, `select_models()`,
+    `pareto_rank()`, `select_variables()` and their bootstraps):
+    dominance is computed once in blocks instead of once per point and
+    per front (about 10 times faster for 300 models on two criteria).
+  * `boyce_index()`: windows counted by binary search on sorted values
+    (about 14 times faster with 100,000 background points), which also
+    speeds up bootstraps with `boot_metrics = "all"`.
+  * `thin_environment()`: nearest kept record found with a k-d tree
+    (`dbscan::kNN()`) instead of a full distance matrix, and bins named
+    in one vectorised step (about 6 times faster for 30,000 records).
+  * `select_variables()`: the novelty (MESS) of each candidate set is
+    computed on the distinct patterns of novel variables instead of on
+    every sampled cell (about 20 times faster for that step with
+    thousands of candidate sets).
+* Fixed: with `tol > 0`, three or more models could dominate each other
+  in a circle (each better than the next by more than `tol` on one
+  criterion), and the Pareto ranking then never finished. Such models
+  now share a front.
+
 # preENM 2.9.0
 
 Derived climate variables, generalised from the C3/C4 workflow:

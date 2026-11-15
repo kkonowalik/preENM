@@ -231,6 +231,26 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' | `heat_stress` | sum over months of Tmax above `heat_threshold` | degC x months |
 #' | `sri` | summer rain index: precipitation of the warmest quarter / annual | 0-1 |
 #' | `synchronicity` | heat-rain synchrony: 1 = the warmest and wettest month coincide, 0 = six months apart | 0-1 |
+#' | `gdd` | growing degree days: monthly mean temperature above `gdd_base`, times the days of the month | degC x days |
+#' | `cold_stress` | sum over months of Tmin below `frost_threshold` | degC x months |
+#' | `frost_months` | number of months with Tmin below `frost_threshold` | months |
+#' | `continentality` | mean temperature of the warmest month minus that of the coldest | degC |
+#' | `dry_months` | number of months with P < 2 x Tmean (Bagnouls-Gaussen, the dry season of Walter-Lieth climate diagrams) | months |
+#' | `lgp` | length of the growing period: months with Tmean at or above `gdd_base` and P at least half of PET (FAO) | months |
+#' | `emberger` | Emberger's pluviothermic quotient Q = 2000 P / (M^2 - m^2), M and m in Kelvin (lower = drier) | - |
+#' | `ellenberg` | Ellenberg's quotient: mean temperature of the warmest month / annual precipitation x 1000 | degC/mm x 1000 |
+#'
+#' The first seven are computed by default; `indices = "all"` adds the
+#' others, which describe limits common to many organisms. `gdd`, `lgp`
+#' and `frost_months` measure the length and warmth of the season of
+#' growth or activity (plants, insects and other ectotherms); `cold_stress`
+#' and `frost_months` the severity and duration of frost (frost-sensitive
+#' plants, overwintering stages); `continentality` the annual temperature
+#' amplitude (oceanic versus continental species; unlike bio7 it uses mean,
+#' not extreme, temperatures); `dry_months`, `emberger` and `ellenberg` are
+#' classical indices of vegetation science: the length of the dry season,
+#' the Mediterranean bioclimatic stages, and the humidity gradient of
+#' temperate forests (in Central Europe beech dominates below about 30).
 #'
 #' **Formulas.** Saturation vapour pressure
 #' \eqn{e_s(T) = 0.6108 \exp(17.27 T / (T + 237.3))} (kPa); monthly VPD
@@ -244,7 +264,16 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' for `sri` are any three consecutive months, also across the year's end
 #' (e.g. December-February), the warmest by mean temperature, as for
 #' bioclim variables: `sri` equals bio18 / bio12, so do not use it together
-#' with both. Ties in `synchronicity` take the first month.
+#' with both. Ties in `synchronicity` take the first month. In `emberger`,
+#' M is the mean maximum temperature of the warmest month and m the mean
+#' minimum of the coldest, P the annual precipitation. `gdd`, `lgp`,
+#' `frost_months`, `cold_stress` and `dry_months` are computed from monthly
+#' means, so they are approximations of the daily quantities: days above
+#' the base within a month whose mean is below it (or frosts in a month
+#' whose mean minimum is above the threshold) are not counted. Several
+#' indices are strongly correlated with each other and with bioclim
+#' variables (e.g. `gdd` with bio1, `ellenberg` and `emberger` with
+#' `aridity`); let [select_variables()] choose among them.
 #'
 #' **Units.** Temperatures must be in degC and precipitation in mm per
 #' month. CHELSA V2.1 stores temperature as K x 10 with a scale (0.1) and
@@ -263,8 +292,14 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'   precipitation: 12-layer [terra::SpatRaster]s (January to December) or
 #'   12 file paths (e.g. from [monthly_files()]).
 #' @param tmean Monthly mean temperature; default `(tmax + tmin) / 2`.
-#' @param indices Which indices to compute (default: all).
+#' @param indices Which indices to compute (default: the first seven of
+#'   the table), or `"all"`.
 #' @param heat_threshold Temperature (degC) above which `heat_stress` sums.
+#' @param gdd_base Base temperature (degC) of `gdd` and `lgp`: 5 suits
+#'   temperate plants; use 0 for arctic-alpine plants or about 10 for
+#'   thermophilous plants and many insects.
+#' @param frost_threshold Temperature (degC) below which `cold_stress`
+#'   sums and `frost_months` counts.
 #' @param tdew_offset Dew point below Tmin (degC) for `vpd`.
 #' @param temp_units `"auto"`, `"C"`, `"K"` or `"K10"` (Kelvin x 10).
 #' @param path Optional folder: each index is written to
@@ -276,7 +311,15 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' @references Allen, R.G., Pereira, L.S., Raes, D., Smith, M. (1998) Crop
 #'   evapotranspiration. FAO Irrigation and Drainage Paper 56. Hargreaves,
 #'   G.H., Samani, Z.A. (1985) Reference crop evapotranspiration from
-#'   temperature. *Applied Engineering in Agriculture* 1, 96-99. Karger, D.N.
+#'   temperature. *Applied Engineering in Agriculture* 1, 96-99. Bagnouls,
+#'   F., Gaussen, H. (1953) Saison seche et indice xerothermique. *Bulletin
+#'   de la Societe d'Histoire Naturelle de Toulouse* 88, 193-239. Emberger,
+#'   L. (1955) A biogeographic classification of climates. *Recueil des
+#'   Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
+#'   Faculte des Sciences de l'Universite de Montpellier, Serie Botanique*
+#'   7, 3-43. Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen.
+#'   Ulmer, Stuttgart. FAO (1978) Report on the agro-ecological zones
+#'   project. World Soil Resources Report 48. Karger, D.N.
 #'   et al. (2017) Climatologies at high resolution for the earth's land
 #'   surface areas. *Scientific Data* 4, 170122.
 #' @export
@@ -293,16 +336,22 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' ci <- climate_indices(tmax, tmin, prec)
 #' ci
 #' terra::plot(ci)
+#' # all indices, e.g. the growing season of a thermophilous species
+#' names(climate_indices(tmax, tmin, prec, indices = "all", gdd_base = 10))
 climate_indices <- function(tmax, tmin, prec, tmean = NULL,
                             indices = c("vpd", "pet", "cmd", "aridity",
                                         "heat_stress", "sri",
                                         "synchronicity"),
-                            heat_threshold = 30, tdew_offset = 0,
+                            heat_threshold = 30, gdd_base = 5,
+                            frost_threshold = 0, tdew_offset = 0,
                             temp_units = c("auto", "C", "K", "K10"),
                             path = NULL, prefix = "", overwrite = FALSE) {
   temp_units <- match.arg(temp_units)
   all_idx <- c("vpd", "pet", "cmd", "aridity", "heat_stress", "sri",
-               "synchronicity")
+               "synchronicity", "gdd", "cold_stress", "frost_months",
+               "continentality", "dry_months", "lgp", "emberger",
+               "ellenberg")
+  if (identical(indices, "all")) indices <- all_idx
   bad <- setdiff(indices, all_idx)
   if (length(bad)) {
     stop("Unknown index: ", paste(bad, collapse = ", "), ". Available: ",
@@ -357,7 +406,7 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     make("vpd", terra::mean((es(tmax) + es(tmin)) / 2 -
                               es(tmin - tdew_offset)))
   }
-  need_pet <- any(c("pet", "cmd", "aridity") %in% indices)
+  need_pet <- any(c("pet", "cmd", "aridity", "lgp") %in% indices)
   if (need_pet) {
     phi <- latitude_radians(tmax[[1]])
     pet_m <- terra::rast(lapply(1:12, function(i) {
@@ -394,6 +443,37 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     d <- abs(terra::which.max(tmax) - terra::which.max(prec))
     d <- terra::ifel(d > 6, 12 - d, d)
     make("synchronicity", (6 - d) / 6)
+  }
+  if ("gdd" %in% indices) {
+    make("gdd", sum(terra::clamp(tmean - gdd_base, lower = 0,
+                                 values = TRUE) * days))
+  }
+  if ("cold_stress" %in% indices) {
+    make("cold_stress", sum(terra::clamp(frost_threshold - tmin, lower = 0,
+                                         values = TRUE)))
+  }
+  if ("frost_months" %in% indices) {
+    make("frost_months", sum(tmin < frost_threshold))
+  }
+  if ("continentality" %in% indices) {
+    make("continentality", max(tmean) - min(tmean))
+  }
+  if ("dry_months" %in% indices) {
+    make("dry_months", sum(prec < 2 * tmean))
+  }
+  if ("lgp" %in% indices) {
+    make("lgp", sum(tmean >= gdd_base & prec >= 0.5 * pet_m))
+  }
+  if ("emberger" %in% indices) {
+    hot <- max(tmax) + 273.15
+    cold <- min(tmin) + 273.15
+    # no annual temperature range: the quotient is undefined
+    make("emberger", terra::ifel(hot > cold,
+                                 2000 * sum(prec) / (hot^2 - cold^2), NA))
+  }
+  if ("ellenberg" %in% indices) {
+    tot <- sum(prec)
+    make("ellenberg", terra::ifel(tot > 0, 1000 * max(tmean) / tot, NA))
   }
   terra::rast(out[intersect(indices, names(out))])
 }

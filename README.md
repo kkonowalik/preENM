@@ -21,7 +21,7 @@ your own code.
 | **Environmental thinning** (without truncating the niche) | **available** | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | **Background strategies and recording effort** | **available** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
 | **Fossil records** (optional, for hindcasts) | **available** | `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
-| **Derived climate variables** (VPD, PET, moisture deficit, aridity, heat stress, summer rain, heat-rain synchrony) | **available** | `download_chelsa_monthly()`, `monthly_files()`, `climate_indices()` |
+| **Derived climate variables** (VPD, PET, moisture deficit, aridity, heat stress, summer rain, heat-rain synchrony; growing degree days, frost, continentality, dry season, growing period, Emberger and Ellenberg quotients) | **available** | `download_chelsa_monthly()`, `monthly_files()`, `climate_indices()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 
@@ -204,7 +204,7 @@ cluster hull includes it.
 
 Bioclimatic variables describe temperature and precipitation, but not the
 water balance or heat stress that limit many species (e.g. C3 vs C4 plants).
-`climate_indices()` computes seven such variables from **monthly
+`climate_indices()` computes such variables from **monthly
 climatologies**: the 12 monthly means of maximum (`tasmax`), minimum
 (`tasmin`) and mean (`tas`) temperature and precipitation (`pr`). Daily data
 are not needed.
@@ -218,6 +218,25 @@ are not needed.
 | `heat_stress` | sum over months of Tmax above 30 °C (`heat_threshold`) | °C × months |
 | `sri` | summer rain index: precipitation of the warmest quarter / annual (= bio18 / bio12) | 0–1 |
 | `synchronicity` | 1 = the warmest and the wettest month coincide, 0 = six months apart | 0–1 |
+
+`indices = "all"` adds eight indices of limits shared by many organisms
+(plants, insects and other ectotherms):
+
+| Index | Meaning | Unit |
+|---|---|---|
+| `gdd` | growing degree days: monthly mean temperature above 5 °C (`gdd_base`) × days | °C × days |
+| `cold_stress` | sum over months of Tmin below 0 °C (`frost_threshold`) | °C × months |
+| `frost_months` | number of months with Tmin below `frost_threshold` | months |
+| `continentality` | mean temperature of the warmest month − that of the coldest | °C |
+| `dry_months` | months with P < 2 × Tmean (Bagnouls–Gaussen; the dry season of Walter–Lieth diagrams) | months |
+| `lgp` | length of the growing period: months with Tmean ≥ `gdd_base` and P ≥ PET / 2 (FAO) | months |
+| `emberger` | Emberger's pluviothermic quotient 2000 P / (M² − m²), M and m in Kelvin | – |
+| `ellenberg` | Ellenberg's quotient: Tmean of the warmest month / annual P × 1000 | °C/mm × 1000 |
+
+They are computed from monthly means, so `gdd`, `lgp`, `frost_months`,
+`cold_stress` and `dry_months` approximate the daily quantities. Several
+are correlated with each other and with bioclim variables; let
+`select_variables()` choose among them.
 
 **1. Get the monthly files.** They can be downloaded automatically from
 CHELSA V2.1 (no account needed). With `extent`, only your region is read

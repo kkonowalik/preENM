@@ -11,6 +11,8 @@ climate_indices(
   tmean = NULL,
   indices = c("vpd", "pet", "cmd", "aridity", "heat_stress", "sri", "synchronicity"),
   heat_threshold = 30,
+  gdd_base = 5,
+  frost_threshold = 0,
   tdew_offset = 0,
   temp_units = c("auto", "C", "K", "K10"),
   path = NULL,
@@ -25,9 +27,17 @@ precipitation: 12-layer \link[terra:SpatRaster-class]{terra::SpatRaster}s (Janua
 
 \item{tmean}{Monthly mean temperature; default \code{(tmax + tmin) / 2}.}
 
-\item{indices}{Which indices to compute (default: all).}
+\item{indices}{Which indices to compute (default: the first seven of
+the table), or \code{"all"}.}
 
 \item{heat_threshold}{Temperature (degC) above which \code{heat_stress} sums.}
+
+\item{gdd_base}{Base temperature (degC) of \code{gdd} and \code{lgp}: 5 suits
+temperate plants; use 0 for arctic-alpine plants or about 10 for
+thermophilous plants and many insects.}
+
+\item{frost_threshold}{Temperature (degC) below which \code{cold_stress}
+sums and \code{frost_months} counts.}
 
 \item{tdew_offset}{Dew point below Tmin (degC) for \code{vpd}.}
 
@@ -63,8 +73,28 @@ are useful for any water- or heat-limited species.
    \code{heat_stress} \tab sum over months of Tmax above \code{heat_threshold} \tab degC x months \cr
    \code{sri} \tab summer rain index: precipitation of the warmest quarter / annual \tab 0-1 \cr
    \code{synchronicity} \tab heat-rain synchrony: 1 = the warmest and wettest month coincide, 0 = six months apart \tab 0-1 \cr
+   \code{gdd} \tab growing degree days: monthly mean temperature above \code{gdd_base}, times the days of the month \tab degC x days \cr
+   \code{cold_stress} \tab sum over months of Tmin below \code{frost_threshold} \tab degC x months \cr
+   \code{frost_months} \tab number of months with Tmin below \code{frost_threshold} \tab months \cr
+   \code{continentality} \tab mean temperature of the warmest month minus that of the coldest \tab degC \cr
+   \code{dry_months} \tab number of months with P < 2 x Tmean (Bagnouls-Gaussen, the dry season of Walter-Lieth climate diagrams) \tab months \cr
+   \code{lgp} \tab length of the growing period: months with Tmean at or above \code{gdd_base} and P at least half of PET (FAO) \tab months \cr
+   \code{emberger} \tab Emberger's pluviothermic quotient Q = 2000 P / (M^2 - m^2), M and m in Kelvin (lower = drier) \tab - \cr
+   \code{ellenberg} \tab Ellenberg's quotient: mean temperature of the warmest month / annual precipitation x 1000 \tab degC/mm x 1000 \cr
 }
 
+
+The first seven are computed by default; \code{indices = "all"} adds the
+others, which describe limits common to many organisms. \code{gdd}, \code{lgp}
+and \code{frost_months} measure the length and warmth of the season of
+growth or activity (plants, insects and other ectotherms); \code{cold_stress}
+and \code{frost_months} the severity and duration of frost (frost-sensitive
+plants, overwintering stages); \code{continentality} the annual temperature
+amplitude (oceanic versus continental species; unlike bio7 it uses mean,
+not extreme, temperatures); \code{dry_months}, \code{emberger} and \code{ellenberg} are
+classical indices of vegetation science: the length of the dry season,
+the Mediterranean bioclimatic stages, and the humidity gradient of
+temperate forests (in Central Europe beech dominates below about 30).
 
 \strong{Formulas.} Saturation vapour pressure
 \eqn{e_s(T) = 0.6108 \exp(17.27 T / (T + 237.3))} (kPa); monthly VPD
@@ -78,7 +108,16 @@ of evaporation) times the days of the month, never below 0. The quarters
 for \code{sri} are any three consecutive months, also across the year's end
 (e.g. December-February), the warmest by mean temperature, as for
 bioclim variables: \code{sri} equals bio18 / bio12, so do not use it together
-with both. Ties in \code{synchronicity} take the first month.
+with both. Ties in \code{synchronicity} take the first month. In \code{emberger},
+M is the mean maximum temperature of the warmest month and m the mean
+minimum of the coldest, P the annual precipitation. \code{gdd}, \code{lgp},
+\code{frost_months}, \code{cold_stress} and \code{dry_months} are computed from monthly
+means, so they are approximations of the daily quantities: days above
+the base within a month whose mean is below it (or frosts in a month
+whose mean minimum is above the threshold) are not counted. Several
+indices are strongly correlated with each other and with bioclim
+variables (e.g. \code{gdd} with bio1, \code{ellenberg} and \code{emberger} with
+\code{aridity}); let \code{\link[=select_variables]{select_variables()}} choose among them.
 
 \strong{Units.} Temperatures must be in degC and precipitation in mm per
 month. CHELSA V2.1 stores temperature as K x 10 with a scale (0.1) and
@@ -106,12 +145,22 @@ prec <- terra::rast(lapply(1:12, function(m) 40 + (40 - lat) * 8 *
 ci <- climate_indices(tmax, tmin, prec)
 ci
 terra::plot(ci)
+# all indices, e.g. the growing season of a thermophilous species
+names(climate_indices(tmax, tmin, prec, indices = "all", gdd_base = 10))
 }
 \references{
 Allen, R.G., Pereira, L.S., Raes, D., Smith, M. (1998) Crop
 evapotranspiration. FAO Irrigation and Drainage Paper 56. Hargreaves,
 G.H., Samani, Z.A. (1985) Reference crop evapotranspiration from
-temperature. \emph{Applied Engineering in Agriculture} 1, 96-99. Karger, D.N.
+temperature. \emph{Applied Engineering in Agriculture} 1, 96-99. Bagnouls,
+F., Gaussen, H. (1953) Saison seche et indice xerothermique. \emph{Bulletin
+de la Societe d'Histoire Naturelle de Toulouse} 88, 193-239. Emberger,
+L. (1955) A biogeographic classification of climates. \emph{Recueil des
+Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
+Faculte des Sciences de l'Universite de Montpellier, Serie Botanique}
+7, 3-43. Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen.
+Ulmer, Stuttgart. FAO (1978) Report on the agro-ecological zones
+project. World Soil Resources Report 48. Karger, D.N.
 et al. (2017) Climatologies at high resolution for the earth's land
 surface areas. \emph{Scientific Data} 4, 170122.
 }

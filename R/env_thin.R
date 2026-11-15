@@ -219,7 +219,8 @@ thin_environment <- function(points, env, axes = c("pca", "raw"),
   }
   lo <- if (!is.null(template)) template$bin_origin else apply(Z, 2, min)
   B <- sweep(sweep(Z, 2, lo, "-"), 2, w, "/")
-  BIN <- apply(floor(B), 1, paste, collapse = "_")
+  # one paste over the columns (vectorised) instead of one per record
+  BIN <- do.call(paste, c(as.data.frame(floor(B)), sep = "_"))
 
   # always kept
   KEEP <- rep(NA_character_, n)
@@ -469,18 +470,13 @@ window_ranges <- function(r, cell, lat, radius_km, window, to_axes, geo) {
   list(axes = amax - amin, raw = rmax - rmin)
 }
 
-# Nearest-neighbour distance from each row of Q to the rows of X (internal)
-nn_dist <- function(Q, X, chunk = 1000) {
-  out <- numeric(nrow(Q))
-  if (!nrow(Q)) return(out)
-  x2 <- rowSums(X^2)
-  for (s in seq(1, nrow(Q), by = chunk)) {
-    i <- s:min(s + chunk - 1, nrow(Q))
-    q <- Q[i, , drop = FALSE]
-    d2 <- outer(rowSums(q^2), x2, "+") - 2 * q %*% t(X)
-    out[i] <- sqrt(pmax(apply(d2, 1, min), 0))
-  }
-  out
+# Nearest-neighbour distance from each row of Q to the rows of X (internal).
+# Uses the kd-tree of dbscan::kNN(): time grows roughly with n log n instead
+# of with nrow(Q) * nrow(X) as with a full distance matrix.
+nn_dist <- function(Q, X) {
+  if (!nrow(Q)) return(numeric(0))
+  if (!nrow(X)) return(rep(Inf, nrow(Q)))
+  as.vector(dbscan::kNN(X, k = 1, query = Q)$dist)
 }
 
 protect_flag <- function(protect, df) {

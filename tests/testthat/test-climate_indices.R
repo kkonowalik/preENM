@@ -119,3 +119,39 @@ test_that("CHELSA file lookup", {
   expect_equal(nrow(u), 2)
   expect_match(u$file[1], "ukesm1-0-ll.*ssp370_pr_01_2071_2100")
 })
+
+test_that("the additional indices are computed correctly", {
+  d <- make_months()
+  ci <- climate_indices(d$tmax, d$tmin, d$prec, indices = "all",
+                        gdd_base = 10, frost_threshold = 12)
+  expect_equal(names(ci)[8:15],
+               c("gdd", "cold_stress", "frost_months", "continentality",
+                 "dry_months", "lgp", "emberger", "ellenberg"))
+  days <- c(31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+  for (cell in c(1, 40, 64)) {
+    tx <- as.numeric(d$tmax[cell])
+    tn <- as.numeric(d$tmin[cell])
+    p <- as.numeric(d$prec[cell])
+    tm <- (tx + tn) / 2
+    lat <- terra::yFromCell(d$tmax, cell) * pi / 180
+    ra <- vapply(1:12, function(i) extraterrestrial_radiation(lat, i),
+                 numeric(1))
+    pet <- pmax(0.0023 * 0.408 * ra * (tm + 17.8) * sqrt(tx - tn) * days, 0)
+    v <- function(k) ci[[k]][cell][[1]]
+    expect_equal(v("gdd"), sum(pmax(tm - 10, 0) * days), tolerance = 1e-6)
+    expect_equal(v("cold_stress"), sum(pmax(12 - tn, 0)), tolerance = 1e-6)
+    expect_equal(v("frost_months"), sum(tn < 12))
+    expect_equal(v("continentality"), max(tm) - min(tm), tolerance = 1e-6)
+    expect_equal(v("dry_months"), sum(p < 2 * tm))
+    expect_equal(v("lgp"), sum(tm >= 10 & p >= 0.5 * pet))
+    expect_equal(v("emberger"), 2000 * sum(p) /
+                   ((max(tx) + 273.15)^2 - (min(tn) + 273.15)^2),
+                 tolerance = 1e-6)
+    expect_equal(v("ellenberg"), 1000 * max(tm) / sum(p), tolerance = 1e-6)
+  }
+  # the indices vary across the grid (the checks above are not trivial)
+  expect_gt(diff(range(terra::values(ci$frost_months))), 0)
+  expect_gt(diff(range(terra::values(ci$dry_months))), 0)
+  # the default stays the first seven indices
+  expect_equal(terra::nlyr(climate_indices(d$tmax, d$tmin, d$prec)), 7)
+})

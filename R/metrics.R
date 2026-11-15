@@ -163,11 +163,16 @@ boyce_index <- function(presence, background, n_windows = 100,
   # (an ecospat "trick" for closed intervals that in effect drops it)
   start[length(start)] <- start[length(start)] + 1
   start_end <- start + w
-  ratio <- vapply(seq_along(start), function(i) {
-    p <- mean(presence >= start[i] & presence <= start_end[i])
-    e <- mean(background >= start[i] & background <= start_end[i])
-    round(p / e, 10)          # p > 0, e = 0 gives Inf (kept); 0/0 = NaN
-  }, numeric(1))
+  # share of values inside each closed window [start, start_end], counted
+  # on the sorted values by binary search (all windows at once) instead of
+  # comparing every value with every window
+  share <- function(v) {
+    v <- sort(v)
+    (findInterval(start_end, v) - findInterval(start, v, left.open = TRUE)) /
+      length(v)
+  }
+  # p > 0, e = 0 gives Inf (kept); 0/0 = NaN
+  ratio <- round(share(presence) / share(background), 10)
   keep <- which(!is.nan(ratio))
   ratio <- ratio[keep]
   start <- start[keep]

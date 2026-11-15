@@ -198,6 +198,23 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
       mess_var(x$sets[[ref]][[v]], d[[v]][i])
     })
   }
+  # Novelty of a set = share of target cells where at least one of its
+  # variables lies outside the reference range (MESS < 0). Cells are grouped
+  # once by which variables are novel there (few distinct patterns), so each
+  # candidate set is scored on the patterns, not on every sampled cell.
+  novel <- lapply(S, function(s) {
+    out <- matrix(unlist(lapply(s, function(z) z < 0)), ncol = nV)
+    if (anyNA(out)) return(NULL)             # scored cell by cell below
+    key <- do.call(paste0, as.data.frame(out + 0L))
+    first <- !duplicated(key)
+    list(pattern = out[first, , drop = FALSE],
+         n = tabulate(match(key, key[first])), total = nrow(out))
+  })
+  novelty <- function(t, idx) {
+    nv <- novel[[t]]
+    if (is.null(nv)) return(mean(Reduce(pmin, S[[t]][idx]) < 0))
+    sum(nv$n[rowSums(nv$pattern[, idx, drop = FALSE]) > 0]) / nv$total
+  }
   if (is.null(gradient_pairs)) {
     gradient_pairs <- lapply(intersect(targets, names(x$common)),
                              function(t) c(ref, t))
@@ -311,7 +328,7 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
            worst_vif = vif_max(idx, rho),
            regional_maxr = if (length(reg_rho)) maxr(idx, reg_rho) else NA,
            regional_vif = if (length(reg_rho)) vif_max(idx, reg_rho) else NA)
-    nov <- vapply(S, function(s) mean(Reduce(pmin, s[idx]) < 0), 1)
+    nov <- vapply(names(S), function(t) novelty(t, idx), 1)
     m["novelty"] <- if (length(nov)) max(nov) else NA
     if (length(nov)) m[paste0("novelty_", names(nov))] <- nov
     m["gradient_min"] <- if (is.null(grad)) NA else min(grad[idx, ])

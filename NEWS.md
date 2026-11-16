@@ -1,3 +1,26 @@
+# preENM 2.13.0
+
+Are the selected predictors better than random variables? The elimination
+procedure of Konowalik (2022, Scientific Reports 12, 16443), before
+modelling and inside the models:
+
+* `variable_relevance()`: a test that needs no model. For each layer, the
+  Kolmogorov-Smirnov distance between the values at the records and in the
+  calibration area is compared with the same distance for random layers
+  with the same spatial structure: smooth random surfaces with the layer's
+  autocorrelation range (`null = "field"`) or the layer itself shifted
+  around the raster (`null = "shift"`, torus translation). White noise is
+  not used as the null, because any smooth layer beats it at clustered
+  records.
+* `random_variables()`: random layers for any modelling software. Each has
+  exactly the values and empty cells of a real layer, arranged in smooth
+  random patches of the same size (`method = "field"`) or cell by cell
+  (`method = "shuffle"`, the classic random variable).
+* `compare_to_random()`: summary of variable importance from models with
+  random variables, over algorithms and runs: the share of runs in which
+  each predictor beats the random variables, and `keep`, which drops a
+  predictor only when most algorithms do not support it.
+
 # preENM 2.12.0
 
 Six additions around the model, all working with any modelling software:

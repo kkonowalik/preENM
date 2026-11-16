@@ -19,6 +19,9 @@
 #'   from the period of the climate data?
 #' * [sample_environment()], [select_variables()], [best_sets()]: predictor
 #'   sets uncorrelated in every period, scenario and region, ranked.
+#' * [variable_relevance()], [random_variables()], [compare_to_random()]:
+#'   are the predictors more informative than random variables, before
+#'   modelling and inside the models?
 #' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell.
 #' * [thin_environment()], [plot_env_thinning()], [write_env_thinning()]:
 #'   thinning in environmental space without truncating the niche.

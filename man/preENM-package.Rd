@@ -26,6 +26,9 @@ by the calibration area, and do projections go beyond it?
 from the period of the climate data?
 \item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}}: predictor
 sets uncorrelated in every period, scenario and region, ranked.
+\item \code{\link[=variable_relevance]{variable_relevance()}}, \code{\link[=random_variables]{random_variables()}}, \code{\link[=compare_to_random]{compare_to_random()}}:
+are the predictors more informative than random variables, before
+modelling and inside the models?
 \item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell.
 \item \code{\link[=thin_environment]{thin_environment()}}, \code{\link[=plot_env_thinning]{plot_env_thinning()}}, \code{\link[=write_env_thinning]{write_env_thinning()}}:
 thinning in environmental space without truncating the niche.

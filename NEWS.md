@@ -1,3 +1,29 @@
+# preENM 2.16.0
+
+Design bias of projections, after Warren et al. (2021, *Methods in Ecology
+and Evolution* 12, 985-995) and Warren et al. (2026, *Ecography* e08559):
+
+* `transfer_bias_test()` asks whether a projected change (to another
+  period, scenario or region) is driven by the records or by the study
+  design. It compares the change predicted from the real records with the
+  change predicted by the same models fitted to random points, for the
+  mean change of suitability, the share of cells with falling suitability
+  and the change of suitable area, for the whole area and an optional
+  region. It returns a verdict per projection (design-driven, not
+  distinguishable, data-driven), a summary in plain words and maps of the
+  mean and spread of the change across the null models. The predictions
+  can come from any software (rasters or files), or from your own fitting
+  function. `plot_transfer_bias()` draws the result.
+* `null_occurrences()` draws the random point sets: uniformly, in
+  proportion to recording effort (`method = "bias"`, the remedy of Warren
+  et al. 2026 for the inflated false positive rates of null models that
+  ignore sampling bias) or by moving and turning the real point pattern
+  (`method = "pattern"`), which keeps its clustering.
+* `environment_shift()` is a check before modelling: per projection and
+  variable, the share of present conditions that disappear and the share
+  of projected conditions that are new (Williams et al. 2007), with the
+  design bias to expect.
+
 # preENM 2.15.0
 
 Variable selection (`sample_environment()`, `select_variables()`):

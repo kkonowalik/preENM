@@ -44,11 +44,12 @@ step can be used on its own.
 | Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough?) | `niche_truncation()`, `plot_niche_truncation()` |
 | Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
-| Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP) | `extrapolation_risk()` |
+| Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 | After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
-| After | [21](#21-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
+| After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
+| After | [22](#22-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
 Points are re-projected to each raster automatically.
@@ -844,6 +845,25 @@ data; `n_outside` and `most_novel` say how many variables are out of range
 and which is the farthest. `reference` can also be a table of the values
 at the records and background points used for fitting.
 
+`environment_shift()` gives the summary in numbers, in both directions:
+how much of the present environment of the study area is gone in the
+projection, and how much of the projection is new (Williams et al. 2007).
+
+```r
+environment_shift(env_m, list(period_2 = env_p2, period_3 = env_p3))
+#>  projection       variable shift_sd disappearing novel
+#>    period_2          bio01     1.04         0.30  0.30
+#>    ...
+#> - period_2: 30% of present cells have conditions that disappear and 30%
+#>     of projected cells have new ones. Expect a predicted decline that
+#>     does not depend on the records; ...
+```
+
+The disappearing share matters as much as the new one: a model can only
+call suitable what it saw during training, so when present conditions
+disappear, most methods predict a decline for *any* species
+([section 21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design)).
+
 ## After modelling
 
 Fit your models with any software, then evaluate, select and report them.
@@ -1287,7 +1307,80 @@ draws are uniform. The models are not refitted, so it works with
 predictions of any software; it tests the locations, not the flexibility
 of the algorithm, unlike the null models of Raes and ter Steege (2007).
 
-### 21. Reporting with ODMAP
+### 21. Is a projected change driven by the data or by the study design?
+
+A model projected to another period can predict a decline (or an increase)
+that has little to do with the species. Think of a scale that shows 2 kg
+with nothing on it: before trusting a weight, you look at what the empty
+scale shows. For a projection, the "empty scale" is the same model fitted
+to points that know nothing about the species, that is random points from
+the study area. If those models also predict a decline of 30%, then a
+decline of 30% for your species is what the study design (area, variables,
+algorithm, scenario) produces by itself. Warren et al. (2021) found exactly
+this for several common algorithms. ENMTools has no function for this
+test; here it works with the predictions of any software, in three steps.
+
+**1. Draw the random points**, as many as you have records. Real records
+are concentrated where people collect, so the random points should be
+too; otherwise the test is too easy to pass (Warren et al. 2026):
+
+```r
+sets <- null_occurrences(area = env_m, points = occ, method = "bias",
+                         weight = effort, n_sets = 99)
+for (i in seq_along(sets)) {
+  write.csv(sets[[i]], sprintf("null/%s.csv", names(sets)[i]), row.names = FALSE)
+}
+```
+
+`method = "bias"` draws cells in proportion to recording effort (see
+`gbif_effort_rasters()`), `"uniform"` draws them evenly, and `"pattern"`
+moves and turns the real point pattern, which keeps its clustering when
+there is no estimate of effort.
+
+**2. Fit and project the models** for each set exactly as for the real
+records (same background, variables and settings), in your software. Save
+each result as one raster file with the present prediction and one layer
+per projection.
+
+**3. Compare:**
+
+```r
+tb <- transfer_bias_test(observed = "models/real.tif",
+                         null = as.list(list.files("models/null", full.names = TRUE)),
+                         region = present_range,     # optional second summary
+                         threshold = "p10", points = occ, null_points = sets)
+tb
+plot_transfer_bias(tb)
+terra::plot(tb$maps[[1]])
+write.csv(tb$summary, "transfer_bias.csv", row.names = FALSE)
+```
+
+If you model in R, give your own function instead of the files:
+`transfer_bias_test(fit = my_fit, points = occ, null_points = sets)`, where
+`my_fit(points)` returns the predictions.
+
+<img src="man/figures/transfer_bias.png" width="640" alt="Change predicted from the real records against the change predicted by models of random points" />
+
+Grey is the change predicted by the models of random points and the line
+their 95% interval; the dot is the model of the real records. The verdict
+for each projection is one of three:
+
+| Verdict | Meaning |
+|---|---|
+| **design-driven** | The real model predicts what the random-point models predict, and those agree on the direction. Any species would give this result. |
+| **not distinguishable** | The real model is within the spread of the random-point models, which do not agree on a direction. |
+| **data-driven** | The real model is outside 95% of the random-point models. `signal` is the part of the change that the design does not explain. |
+
+The measures are the mean change of suitability, the share of cells where
+it falls and, with a threshold, the proportional change of suitable area.
+The maps show, per cell, the mean and spread of the change across the
+random-point models: where the mean is far from zero and the spread is
+small, the direction of the prediction is fixed by the design. A
+design-driven result is not necessarily wrong (if the whole area becomes
+unsuitable, every model says so), but it does not come from your records
+and needs other evidence. Use 99 or more null models for stable intervals.
+
+### 22. Reporting with ODMAP
 
 `odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
 2020) that your workflow determines, from the objects themselves, and

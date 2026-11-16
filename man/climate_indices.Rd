@@ -9,7 +9,7 @@ climate_indices(
   tmin,
   prec,
   tmean = NULL,
-  indices = c("vpd", "pet", "cmd", "aridity", "heat_stress", "sri", "synchronicity"),
+  indices = "all",
   heat_threshold = 30,
   gdd_base = 5,
   frost_threshold = 0,
@@ -27,12 +27,13 @@ precipitation: 12-layer \link[terra:SpatRaster-class]{terra::SpatRaster}s (Janua
 
 \item{tmean}{Monthly mean temperature; default \code{(tmax + tmin) / 2}.}
 
-\item{indices}{Which indices to compute (default: the first seven of
-the table), or \code{"all"}.}
+\item{indices}{Which indices to compute: names of indices or of groups
+of them (see \code{\link[=climate_index_names]{climate_index_names()}}), or \code{"all"} (default).}
 
 \item{heat_threshold}{Temperature (degC) above which \code{heat_stress} sums.}
 
-\item{gdd_base}{Base temperature (degC) of \code{gdd} and \code{lgp}: 5 suits
+\item{gdd_base}{Base temperature (degC) of \code{gdd}, \code{lgp}, \code{ra_gs} and
+\code{daylength_start}: 5 suits
 temperate plants; use 0 for arctic-alpine plants or about 10 for
 thermophilous plants and many insects.}
 
@@ -81,11 +82,19 @@ are useful for any water- or heat-limited species.
    \code{lgp} \tab length of the growing period: months with Tmean at or above \code{gdd_base} and P at least half of PET (FAO) \tab months \cr
    \code{emberger} \tab Emberger's pluviothermic quotient Q = 2000 P / (M^2 - m^2), M and m in Kelvin (lower = drier) \tab - \cr
    \code{ellenberg} \tab Ellenberg's quotient: mean temperature of the warmest month / annual precipitation x 1000 \tab degC/mm x 1000 \cr
+   \code{kira_warmth} \tab Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC \tab degC x months \cr
+   \code{kira_coldness} \tab Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative) \tab degC x months \cr
+   \code{ra} \tab mean extraterrestrial radiation over the year (a function of latitude only) \tab MJ m-2 day-1 \cr
+   \code{ra_gs} \tab extraterrestrial radiation received in the months with Tmean at or above \code{gdd_base} \tab MJ m-2 \cr
+   \code{daylength_start} \tab day length in the middle of the month in which the growing season starts \tab hours \cr
 }
 
 
-The first seven are computed by default; \code{indices = "all"} adds the
-others, which describe limits common to many organisms. \code{gdd}, \code{lgp}
+All are computed by default; choose some by name or by group with
+\code{\link[=climate_index_names]{climate_index_names()}}, e.g. \code{indices = climate_index_names("water")}
+or \code{indices = c("cold", "gdd")}. The first seven were chosen for water-
+and heat-limited plants; the others describe limits common to many
+organisms. \code{gdd}, \code{lgp}
 and \code{frost_months} measure the length and warmth of the season of
 growth or activity (plants, insects and other ectotherms); \code{cold_stress}
 and \code{frost_months} the severity and duration of frost (frost-sensitive
@@ -95,6 +104,14 @@ not extreme, temperatures); \code{dry_months}, \code{emberger} and \code{ellenbe
 classical indices of vegetation science: the length of the dry season,
 the Mediterranean bioclimatic stages, and the humidity gradient of
 temperate forests (in Central Europe beech dominates below about 30).
+Kira's indices delimit the vegetation zones of East Asia (e.g. the
+evergreen broad-leaved forest between warmth indices of 85 and 180);
+they always use 5 degC, whereas \code{gdd} uses \code{gdd_base} and counts days.
+\code{daylength_start} is the photoperiod at the onset of growth, a cue for
+bud burst, flowering and the end of diapause; \code{ra_gs} is the light
+available at the top of the atmosphere while it is warm enough to
+grow. \code{ra} depends on latitude alone: in a model it acts as a
+smooth stand-in for latitude, so use it only with that in mind.
 
 \strong{Formulas.} Saturation vapour pressure
 \eqn{e_s(T) = 0.6108 \exp(17.27 T / (T + 237.3))} (kPa); monthly VPD
@@ -114,7 +131,12 @@ minimum of the coldest, P the annual precipitation. \code{gdd}, \code{lgp},
 \code{frost_months}, \code{cold_stress} and \code{dry_months} are computed from monthly
 means, so they are approximations of the daily quantities: days above
 the base within a month whose mean is below it (or frosts in a month
-whose mean minimum is above the threshold) are not counted. Several
+whose mean minimum is above the threshold) are not counted. The growing
+season of \code{daylength_start} starts in the first month with Tmean at or
+above \code{gdd_base}, counting from the coldest month (which is itself the
+start where every month is warm enough); cells without such a month
+get \code{NA}. Day length is \eqn{24 \omega_s / \pi} with the sunset hour
+angle \eqn{\omega_s} of FAO-56 (eq. 25 and 34). Several
 indices are strongly correlated with each other and with bioclim
 variables (e.g. \code{gdd} with bio1, \code{ellenberg} and \code{emberger} with
 \code{aridity}); let \code{\link[=select_variables]{select_variables()}} choose among them.
@@ -145,8 +167,9 @@ prec <- terra::rast(lapply(1:12, function(m) 40 + (40 - lat) * 8 *
 ci <- climate_indices(tmax, tmin, prec)
 ci
 terra::plot(ci)
-# all indices, e.g. the growing season of a thermophilous species
-names(climate_indices(tmax, tmin, prec, indices = "all", gdd_base = 10))
+# only some: by group and by name, with another base temperature
+names(climate_indices(tmax, tmin, prec, indices = c("cold", "gdd"),
+                      gdd_base = 10))
 }
 \references{
 Allen, R.G., Pereira, L.S., Raes, D., Smith, M. (1998) Crop
@@ -160,7 +183,10 @@ Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
 Faculte des Sciences de l'Universite de Montpellier, Serie Botanique}
 7, 3-43. Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen.
 Ulmer, Stuttgart. FAO (1978) Report on the agro-ecological zones
-project. World Soil Resources Report 48. Karger, D.N.
+project. World Soil Resources Report 48. Kira, T. (1945) A new
+classification of climate in eastern Asia as the basis for
+agricultural geography. Horticultural Institute, Kyoto University.
+Karger, D.N.
 et al. (2017) Climatologies at high resolution for the earth's land
 surface areas. \emph{Scientific Data} 4, 170122.
 }

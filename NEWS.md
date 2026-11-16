@@ -1,3 +1,33 @@
+# preENM 2.11.0
+
+Two new data-preparation checks and five more climate indices:
+
+* `uncertainty_environment()`: judges coordinate uncertainty in
+  environmental terms. For each record it measures how much every
+  predictor varies among the cells that the uncertainty circle touches,
+  relative to the breadth of the species' niche on that predictor, and
+  marks as usable (`unc_ok`) the records whose true conditions cannot be
+  far from the recorded ones. Imprecise records on flat terrain are kept;
+  precise-looking ones on steep gradients can be dropped.
+* `niche_truncation()` and `plot_niche_truncation()`: before modelling,
+  reports for each predictor whether the records are still frequent where
+  the conditions of the calibration area (M) end (a truncated response),
+  how far the records stay from the limits of M, and which share of each
+  projection (period, scenario or region) lies beyond M and beyond the
+  records. Truncated ends that a projection goes beyond are flagged.
+* `climate_indices()`: Kira's warmth and coldness indices
+  (`kira_warmth`, `kira_coldness`), extraterrestrial radiation over the
+  year and over the growing season (`ra`, `ra_gs`) and the day length at
+  the start of the growing season (`daylength_start`).
+* `climate_index_names()`: lists the twenty indices, by group (`water`,
+  `heat`, `cold`, `season`, `light`), with `drop` to leave some out and
+  `table = TRUE` for their meaning and units. `indices` in
+  `climate_indices()` also accepts group names, e.g.
+  `indices = c("cold", "gdd")`.
+* **Changed default:** `climate_indices()` now computes all indices
+  (before: the seven of version 2.9.0). For the previous result use
+  `indices = climate_index_names()[1:7]`.
+
 # preENM 2.10.0
 
 New climate indices and faster computation (results unchanged):

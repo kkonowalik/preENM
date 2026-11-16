@@ -1317,8 +1317,7 @@ to points that know nothing about the species, that is random points from
 the study area. If those models also predict a decline of 30%, then a
 decline of 30% for your species is what the study design (area, variables,
 algorithm, scenario) produces by itself. Warren et al. (2021) found exactly
-this for several common algorithms. ENMTools has no function for this
-test; here it works with the predictions of any software, in three steps.
+this for several common algorithms. This pipeline works with the predictions of any software, in three steps.
 
 **1. Draw the random points**, as many as you have records. Real records
 are concentrated where people collect, so the random points should be

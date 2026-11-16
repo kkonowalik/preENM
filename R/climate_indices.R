@@ -113,17 +113,22 @@ download_chelsa_monthly <- function(path,
                                     overwrite = FALSE) {
   if (!dir.exists(path)) dir.create(path, recursive = TRUE)
   u <- chelsa_monthly_urls(vars, period, gcm, ssp)
+  download_rasters(u$url, file.path(path, u$file), extent, overwrite)
+}
+
+# Download raster files, whole or only a region of each (read over the
+# internet by GDAL); existing files are kept (internal)
+download_rasters <- function(url, out, extent = NULL, overwrite = FALSE) {
   win <- if (is.null(extent)) NULL else lonlat_window(extent)
-  out <- file.path(path, u$file)
-  for (i in seq_len(nrow(u))) {
+  for (i in seq_along(url)) {
     if (file.exists(out[i]) && !overwrite) next
-    message("Downloading ", u$file[i], " (", i, "/", nrow(u), ")")
+    message("Downloading ", basename(out[i]), " (", i, "/", length(url), ")")
     tmp <- paste0(out[i], ".part")
     ok <- tryCatch({
       if (is.null(win)) {
-        utils::download.file(u$url[i], tmp, mode = "wb", quiet = TRUE)
+        utils::download.file(url[i], tmp, mode = "wb", quiet = TRUE)
       } else {
-        sf::gdal_utils("translate", paste0("/vsicurl/", u$url[i]), tmp,
+        sf::gdal_utils("translate", paste0("/vsicurl/", url[i]), tmp,
                        options = c("-of", "GTiff",
                                    "-projwin", num_arg(win[c(1, 4, 2, 3)]),
                                    "-co", "COMPRESS=DEFLATE",
@@ -134,7 +139,7 @@ download_chelsa_monthly <- function(path,
       }
       TRUE
     }, error = function(e) {
-      warning("Failed: ", u$file[i], " (", conditionMessage(e),
+      warning("Failed: ", basename(out[i]), " (", conditionMessage(e),
               "); run again to retry.", call. = FALSE)
       FALSE
     })
@@ -170,7 +175,8 @@ lonlat_window <- function(extent) {
 #' Finds and orders the monthly files of one variable in a folder, e.g. the
 #' files written by [download_chelsa_monthly()] or downloaded by hand. A file
 #' belongs to variable `var` and month `MM` when its name contains
-#' `_<var>_<MM>_` (so `tas` does not match `tasmax`).
+#' `_<var>_<MM>_` (so `tas` does not match `tasmax`); the month may be
+#' written `01` or `1`, as in CHELSA-TraCE21k.
 #'
 #' @param dir Folder with the files.
 #' @param var Variable, e.g. `"tasmax"`.
@@ -194,7 +200,9 @@ monthly_files <- function(dir, var, must_contain = NULL) {
     b <- b[keep]
   }
   out <- vapply(sprintf("%02d", 1:12), function(m) {
-    hit <- f[grepl(paste0("_", tolower(var), "_", m, "_"), b, fixed = TRUE)]
+    hit <- f[grepl(paste0("_", tolower(var), "_", m, "_"), b, fixed = TRUE) |
+               grepl(paste0("_", tolower(var), "_", as.integer(m), "_"), b,
+                     fixed = TRUE)]
     if (length(hit) > 1) {
       stop("Several files for ", var, " month ", m, " in ", dir,
            ": use `must_contain` to choose, e.g. the GCM and scenario.",
@@ -222,51 +230,47 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' evaporative demand, heat, and whether rain falls in the warm season), but
 #' are useful for any water- or heat-limited species.
 #'
-#' | Index | Meaning | Unit |
-#' |---|---|---|
-#' | `vpd` | mean vapour pressure deficit (FAO-56; dew point from Tmin) | kPa |
-#' | `pet` | potential evapotranspiration, Hargreaves-Samani (FAO-56) | mm/year |
-#' | `cmd` | climatic moisture deficit: sum of monthly PET - P where positive | mm/year |
-#' | `aridity` | aridity index P / PET (UNEP; < 0.05 hyper-arid, > 0.65 humid) | - |
-#' | `heat_stress` | sum over months of Tmax above `heat_threshold` | degC x months |
-#' | `sri` | summer rain index: precipitation of the warmest quarter / annual | 0-1 |
-#' | `synchronicity` | heat-rain synchrony: 1 = the warmest and wettest month coincide, 0 = six months apart | 0-1 |
-#' | `gdd` | growing degree days: monthly mean temperature above `gdd_base`, times the days of the month | degC x days |
-#' | `cold_stress` | sum over months of Tmin below `frost_threshold` | degC x months |
-#' | `frost_months` | number of months with Tmin below `frost_threshold` | months |
-#' | `continentality` | mean temperature of the warmest month minus that of the coldest | degC |
-#' | `dry_months` | number of months with P < 2 x Tmean (Bagnouls-Gaussen, the dry season of Walter-Lieth climate diagrams) | months |
-#' | `lgp` | length of the growing period: months with Tmean at or above `gdd_base` and P at least half of PET (FAO) | months |
-#' | `emberger` | Emberger's pluviothermic quotient Q = 2000 P / (M^2 - m^2), M and m in Kelvin (lower = drier) | - |
-#' | `ellenberg` | Ellenberg's quotient: mean temperature of the warmest month / annual precipitation x 1000 | degC/mm x 1000 |
-#' | `kira_warmth` | Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC | degC x months |
-#' | `kira_coldness` | Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative) | degC x months |
-#' | `ra` | mean extraterrestrial radiation over the year (a function of latitude only) | MJ m-2 day-1 |
-#' | `ra_gs` | extraterrestrial radiation received in the months with Tmean at or above `gdd_base` | MJ m-2 |
-#' | `daylength_start` | day length in the middle of the month in which the growing season starts | hours |
+#' | Index | Group | Meaning | Unit | Useful for | Source |
+#' |---|---|---|---|---|---|
+#' | `vpd` | `water` | mean vapour pressure deficit (dew point from Tmin) | kPa | dryness of the air: stomatal closure and transpiration of plants, desiccation of amphibians, snails and insects | Allen et al. 1998; Grossiord et al. 2020 |
+#' | `pet` | `water` | potential evapotranspiration (Hargreaves-Samani) | mm/year | evaporative demand and available energy; plant productivity and species richness | Hargreaves & Samani 1985; Allen et al. 1998 |
+#' | `cmd` | `water` | climatic moisture deficit: sum of monthly PET - P where positive | mm/year | drought not met by rain: forest-steppe limits, drought-sensitive trees, C3 versus C4 grasses | Stephenson 1990; Wang et al. 2012 |
+#' | `aridity` | `water` | aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid) | - | the humid-arid gradient: biome limits, dryland and desert taxa | UNEP 1992 |
+#' | `heat_stress` | `heat` | sum over months of Tmax above `heat_threshold` | degC x months | exposure to hot months: upper thermal limits of alpine and boreal taxa and of ectotherms; C4 advantage | this package; Ehleringer et al. 1997 |
+#' | `sri` | `season` | summer rain index: precipitation of the warmest quarter / annual (bio18 / bio12) | 0-1 | rain in the warm season: C4 versus C3 grasses, monsoon versus Mediterranean taxa | Teeri & Stowe 1976; Paruelo & Lauenroth 1996 |
+#' | `synchronicity` | `season` | heat-rain synchrony: 1 = the warmest and the wettest month coincide, 0 = six months apart | 0-1 | whether water arrives when it is warm: summer-rain versus winter-rain floras, C3/C4 balance | this package; Paruelo & Lauenroth 1996 |
+#' | `gdd` | `heat` | growing degree days: monthly Tmean above `gdd_base` x days | degC x days | heat sum for growth and development: cold range limits of plants, number of insect generations | Woodward 1987; Prentice et al. 1992 |
+#' | `cold_stress` | `cold` | sum over months of Tmin below `frost_threshold` | degC x months | winter severity: frost-sensitive plants, survival of overwintering stages | Woodward 1987; Sakai & Larcher 1987 |
+#' | `frost_months` | `cold` | number of months with Tmin below `frost_threshold` | months | duration of frost: evergreen versus deciduous plants, length of dormancy or hibernation | Woodward 1987; Sakai & Larcher 1987 |
+#' | `continentality` | `heat` | Tmean of the warmest month - that of the coldest | degC | annual temperature amplitude: oceanic versus continental species | Rivas-Martinez et al. 2011 |
+#' | `dry_months` | `water` | months with P < 2 x Tmean (the dry season of Walter-Lieth diagrams) | months | length of the dry season: Mediterranean and savanna taxa, drought-deciduous plants | Bagnouls & Gaussen 1953; Walter & Lieth 1960 |
+#' | `lgp` | `season` | length of the growing period: months with Tmean >= `gdd_base` and P >= PET / 2 | months | time when both warmth and water allow growth: crops and their wild relatives, annual plants | FAO 1978 |
+#' | `emberger` | `water` | Emberger's pluviothermic quotient 2000 P / (M^2 - m^2), M and m in Kelvin | - | Mediterranean bioclimatic stages (arid to humid); lower = drier | Emberger 1955; Daget 1977 |
+#' | `ellenberg` | `water` | Ellenberg's quotient: Tmean of the warmest month / annual P x 1000 | degC/mm x 1000 | humidity gradient of temperate forests: beech dominates below about 30, oaks above | Ellenberg 1963; Fang & Lechowicz 2006 |
+#' | `kira_warmth` | `heat` | Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC | degC x months | vegetation zones of East Asia (evergreen broad-leaved forest between 85 and 180) | Kira 1945; Kira 1991 |
+#' | `kira_coldness` | `cold` | Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative) | degC x months | cold limit of evergreen broad-leaved trees in East Asia (about -10) | Kira 1945; Kira 1991 |
+#' | `ra` | `light` | mean extraterrestrial radiation over the year (latitude only) | MJ m-2 day-1 | light at the top of the atmosphere; in a model a smooth stand-in for latitude | Allen et al. 1998 |
+#' | `ra_gs` | `light` | extraterrestrial radiation received in the months with Tmean >= `gdd_base` | MJ m-2 | light available while it is warm enough to grow: productivity at high latitudes and elevations | this package; Allen et al. 1998 |
+#' | `daylength_start` | `light` | day length in the middle of the month in which the growing season starts | hours | photoperiod at the onset of growth: bud burst, flowering of long-day plants, end of diapause | Koerner & Basler 2010; Way & Montgomery 2015 |
+#' | `daylength_end` | `light` | day length in the middle of the month in which the growing season ends | hours | photoperiod at the end of the season: growth cessation and bud set of trees, start of diapause | Bradshaw & Holzapfel 2007; Way & Montgomery 2015 |
+#' | `daylength_gs` | `light` | mean day length of the months with Tmean >= `gdd_base` | hours | photoperiod during growth: long-day versus short-day plants, daily activity time of diurnal animals | Saikkonen et al. 2012 |
+#' | `daylight_gs` | `light` | hours of daylight in the months with Tmean >= `gdd_base` | hours | time for photosynthesis or foraging in the season: a short northern summer with long days against a long southern one | this package; Saikkonen et al. 2012 |
+#' | `daylength_max` | `light` | day length on the summer solstice (latitude only; 24 = midnight sun) | hours | the longest day: species that need a critical day length to flower or to breed; like `ra` a stand-in for latitude | Allen et al. 1998; Bradshaw & Holzapfel 2007 |
+#' | `days_to_solstice` | `light` | days from the start of the growing season to the summer solstice (negative = it starts later) | days | share of the season on lengthening days: phenological timing, species whose flowering is triggered before the solstice | this package; Koerner & Basler 2010 |
 #'
 #' All are computed by default; choose some by name or by group with
 #' [climate_index_names()], e.g. `indices = climate_index_names("water")`
-#' or `indices = c("cold", "gdd")`. The first seven were chosen for water-
-#' and heat-limited plants; the others describe limits common to many
-#' organisms. `gdd`, `lgp`
-#' and `frost_months` measure the length and warmth of the season of
-#' growth or activity (plants, insects and other ectotherms); `cold_stress`
-#' and `frost_months` the severity and duration of frost (frost-sensitive
-#' plants, overwintering stages); `continentality` the annual temperature
-#' amplitude (oceanic versus continental species; unlike bio7 it uses mean,
-#' not extreme, temperatures); `dry_months`, `emberger` and `ellenberg` are
-#' classical indices of vegetation science: the length of the dry season,
-#' the Mediterranean bioclimatic stages, and the humidity gradient of
-#' temperate forests (in Central Europe beech dominates below about 30).
-#' Kira's indices delimit the vegetation zones of East Asia (e.g. the
-#' evergreen broad-leaved forest between warmth indices of 85 and 180);
-#' they always use 5 degC, whereas `gdd` uses `gdd_base` and counts days.
-#' `daylength_start` is the photoperiod at the onset of growth, a cue for
-#' bud burst, flowering and the end of diapause; `ra_gs` is the light
-#' available at the top of the atmosphere while it is warm enough to
-#' grow. `ra` depends on latitude alone: in a model it acts as a
-#' smooth stand-in for latitude, so use it only with that in mind.
+#' or `indices = c("cold", "gdd")`. "Useful for" gives examples of the
+#' questions an index was made for or is commonly used in, not a limit on
+#' its use; "Source" gives the origin of the index or of its ecological
+#' use (see the references), and "this package" marks definitions that are
+#' ours. Kira's indices always use 5 degC, whereas `gdd` uses `gdd_base`
+#' and counts days; `continentality` uses mean, not extreme, temperatures,
+#' unlike bio7. `ra` and `daylength_max` depend on latitude alone: in a
+#' model they act as a smooth stand-in for latitude, so use them only with
+#' that in mind. The other light indices combine latitude with the
+#' temperature season, so they differ between a mountain and its foreland
+#' and change with the climate of another period.
 #'
 #' **Formulas.** Saturation vapour pressure
 #' \eqn{e_s(T) = 0.6108 \exp(17.27 T / (T + 237.3))} (kPa); monthly VPD
@@ -291,7 +295,17 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' above `gdd_base`, counting from the coldest month (which is itself the
 #' start where every month is warm enough); cells without such a month
 #' get `NA`. Day length is \eqn{24 \omega_s / \pi} with the sunset hour
-#' angle \eqn{\omega_s} of FAO-56 (eq. 25 and 34). Several
+#' angle \eqn{\omega_s} of FAO-56 (eq. 25 and 34). The season ends in the
+#' last month at or above `gdd_base` before the coldest month
+#' (`daylength_end`). `daylength_gs` is the mean of the mid-month day
+#' lengths of the months at or above `gdd_base`, weighted by their days
+#' (`NA` without such a month), and `daylight_gs` their sum over those
+#' days (0 without such a month). For `days_to_solstice` the start of the
+#' season is placed between two mid-month days by linear interpolation of
+#' the monthly mean temperatures (where every month is warm enough it is
+#' the middle of the coldest month); the solstice is day 172 north and day
+#' 355 south of the equator, and the result lies between -182 and 182.
+#' With monthly means it is accurate to about one or two weeks. Several
 #' indices are strongly correlated with each other and with bioclim
 #' variables (e.g. `gdd` with bio1, `ellenberg` and `emberger` with
 #' `aridity`); let [select_variables()] choose among them.
@@ -317,7 +331,7 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'   of them (see [climate_index_names()]), or `"all"` (default).
 #' @param heat_threshold Temperature (degC) above which `heat_stress` sums.
 #' @param gdd_base Base temperature (degC) of `gdd`, `lgp`, `ra_gs` and
-#'   `daylength_start`: 5 suits
+#'   the day-length indices of the growing season: 5 suits
 #'   temperate plants; use 0 for arctic-alpine plants or about 10 for
 #'   thermophilous plants and many insects.
 #' @param frost_threshold Temperature (degC) below which `cold_stress`
@@ -331,22 +345,92 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'   kept and read (so interrupted runs continue).
 #' @return A [terra::SpatRaster] with one layer per index.
 #' @references Allen, R.G., Pereira, L.S., Raes, D., Smith, M. (1998) Crop
-#'   evapotranspiration. FAO Irrigation and Drainage Paper 56. Hargreaves,
-#'   G.H., Samani, Z.A. (1985) Reference crop evapotranspiration from
-#'   temperature. *Applied Engineering in Agriculture* 1, 96-99. Bagnouls,
-#'   F., Gaussen, H. (1953) Saison seche et indice xerothermique. *Bulletin
-#'   de la Societe d'Histoire Naturelle de Toulouse* 88, 193-239. Emberger,
-#'   L. (1955) A biogeographic classification of climates. *Recueil des
-#'   Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
-#'   Faculte des Sciences de l'Universite de Montpellier, Serie Botanique*
-#'   7, 3-43. Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen.
-#'   Ulmer, Stuttgart. FAO (1978) Report on the agro-ecological zones
-#'   project. World Soil Resources Report 48. Kira, T. (1945) A new
-#'   classification of climate in eastern Asia as the basis for
-#'   agricultural geography. Horticultural Institute, Kyoto University.
-#'   Karger, D.N.
-#'   et al. (2017) Climatologies at high resolution for the earth's land
-#'   surface areas. *Scientific Data* 4, 170122.
+#'   evapotranspiration. FAO Irrigation and Drainage Paper 56.
+#'
+#' Bagnouls, F., Gaussen, H. (1953) Saison seche et indice xerothermique.
+#'   *Bulletin de la Societe d'Histoire Naturelle de Toulouse* 88, 193-239.
+#'
+#' Bradshaw, W.E., Holzapfel, C.M. (2007) Evolution of animal
+#'   photoperiodism. *Annual Review of Ecology, Evolution, and Systematics*
+#'   38, 1-25.
+#'
+#' Daget, P. (1977) Le bioclimat mediterraneen: analyse des formes
+#'   climatiques par le systeme d'Emberger. *Vegetatio* 34, 87-103.
+#'
+#' Ehleringer, J.R., Cerling, T.E., Helliker, B.R. (1997) C4
+#'   photosynthesis, atmospheric CO2, and climate. *Oecologia* 112, 285-299.
+#'
+#' Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen. Ulmer,
+#'   Stuttgart.
+#'
+#' Emberger, L. (1955) A biogeographic classification of climates. *Recueil
+#'   des Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
+#'   Faculte des Sciences de l'Universite de Montpellier, Serie Botanique* 7,
+#'   3-43.
+#'
+#' Fang, J., Lechowicz, M.J. (2006) Climatic limits for the present
+#'   distribution of beech (Fagus L.) species in the world. *Journal of
+#'   Biogeography* 33, 1804-1819.
+#'
+#' FAO (1978) Report on the agro-ecological zones project. World Soil
+#'   Resources Report 48.
+#'
+#' Grossiord, C. et al. (2020) Plant responses to rising vapor pressure
+#'   deficit. *New Phytologist* 226, 1550-1566.
+#'
+#' Hargreaves, G.H., Samani, Z.A. (1985) Reference crop evapotranspiration
+#'   from temperature. *Applied Engineering in Agriculture* 1, 96-99.
+#'
+#' Karger, D.N. et al. (2017) Climatologies at high resolution for the
+#'   earth's land surface areas. *Scientific Data* 4, 170122.
+#'
+#' Kira, T. (1945) A new classification of climate in eastern Asia as the
+#'   basis for agricultural geography. Horticultural Institute, Kyoto
+#'   University.
+#'
+#' Kira, T. (1991) Forest ecosystems of East and Southeast Asia in a global
+#'   perspective. *Ecological Research* 6, 185-200.
+#'
+#' Koerner, C., Basler, D. (2010) Phenology under global warming. *Science*
+#'   327, 1461-1462.
+#'
+#' Paruelo, J.M., Lauenroth, W.K. (1996) Relative abundance of plant
+#'   functional types in grasslands and shrublands of North America.
+#'   *Ecological Applications* 6, 1212-1224.
+#'
+#' Prentice, I.C. et al. (1992) A global biome model based on plant
+#'   physiology and dominance, soil properties and climate. *Journal of
+#'   Biogeography* 19, 117-134.
+#'
+#' Rivas-Martinez, S., Rivas Saenz, S., Penas, A. (2011) Worldwide
+#'   bioclimatic classification system. *Global Geobotany* 1, 1-634.
+#'
+#' Saikkonen, K. et al. (2012) Climate change-driven species' range shifts
+#'   filtered by photoperiodism. *Nature Climate Change* 2, 239-242.
+#'
+#' Sakai, A., Larcher, W. (1987) Frost survival of plants. Springer,
+#'   Berlin.
+#'
+#' Stephenson, N.L. (1990) Climatic control of vegetation distribution: the
+#'   role of the water balance. *American Naturalist* 135, 649-670.
+#'
+#' Teeri, J.A., Stowe, L.G. (1976) Climatic patterns and the distribution
+#'   of C4 grasses in North America. *Oecologia* 23, 1-12.
+#'
+#' UNEP (1992) World atlas of desertification. Edward Arnold, London.
+#'
+#' Walter, H., Lieth, H. (1960) Klimadiagramm-Weltatlas. Fischer, Jena.
+#'
+#' Wang, T., Hamann, A., Spittlehouse, D.L., Murdock, T.Q. (2012)
+#'   ClimateWNA: high-resolution spatial climate data for western North
+#'   America. *Journal of Applied Meteorology and Climatology* 51, 16-29.
+#'
+#' Way, D.A., Montgomery, R.A. (2015) Photoperiod constraints on tree
+#'   phenology, performance and migration in a warming world. *Plant, Cell
+#'   and Environment* 38, 1725-1736.
+#'
+#' Woodward, F.I. (1987) Climate and plant distribution. Cambridge
+#'   University Press.
 #' @export
 #' @examples
 #' # a small synthetic grid: warm wet summers in the south, dry in the north
@@ -498,7 +582,10 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     make("kira_coldness", sum(terra::clamp(tmean - 5, upper = 0,
                                            values = TRUE)))
   }
-  if (any(c("ra", "ra_gs", "daylength_start") %in% indices)) {
+  light <- c("ra", "ra_gs", "daylength_start", "daylength_end",
+             "daylength_gs", "daylight_gs", "daylength_max",
+             "days_to_solstice")
+  if (any(light %in% indices)) {
     phi <- latitude_radians(tmax[[1]])
   }
   if (any(c("ra", "ra_gs") %in% indices)) {
@@ -516,6 +603,29 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     make("daylength_start", terra::app(c(tmean, phi), season_start_daylength,
                                        base = gdd_base))
   }
+  if ("daylength_end" %in% indices) {
+    make("daylength_end", terra::app(c(tmean, phi), season_light,
+                                     base = gdd_base, what = "end"))
+  }
+  if (any(c("daylength_gs", "daylight_gs") %in% indices)) {
+    dl_m <- terra::rast(lapply(1:12, function(i) day_length(phi, mid_day[i])))
+    grow <- tmean >= gdd_base
+    hours <- sum(dl_m * days * grow)
+    if ("daylength_gs" %in% indices) {
+      n <- sum(grow * days)
+      # no month warm enough: no growing season, no value
+      make("daylength_gs", terra::ifel(n > 0, hours / n, NA))
+    }
+    if ("daylight_gs" %in% indices) make("daylight_gs", hours)
+  }
+  if ("daylength_max" %in% indices) {
+    # the summer solstice of either hemisphere (declination 0.409 rad)
+    make("daylength_max", terra::mask(day_length(abs(phi), 172), tmean[[1]]))
+  }
+  if ("days_to_solstice" %in% indices) {
+    make("days_to_solstice", terra::app(c(tmean, phi), season_light,
+                                        base = gdd_base, what = "solstice"))
+  }
   terra::rast(out[intersect(indices, names(out))])
 }
 
@@ -530,12 +640,13 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
 #' | `heat` | `heat_stress`, `gdd`, `kira_warmth`, `continentality` |
 #' | `cold` | `cold_stress`, `frost_months`, `kira_coldness` |
 #' | `season` | `sri`, `synchronicity`, `lgp` |
-#' | `light` | `ra`, `ra_gs`, `daylength_start` |
+#' | `light` | `ra`, `ra_gs`, `daylength_start`, `daylength_end`, `daylength_gs`, `daylight_gs`, `daylength_max`, `days_to_solstice` |
 #'
 #' @param groups Groups to return (default: all).
 #' @param drop Indices or groups to leave out.
-#' @param table Return a data.frame with the group, meaning and unit of
-#'   each index instead of the names.
+#' @param table Return a data.frame with the group, meaning, unit,
+#'   ecological relevance and literature source of each index instead of
+#'   the names.
 #' @return A character vector of index names, or a data.frame.
 #' @export
 #' @examples
@@ -566,34 +677,159 @@ climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE) {
 # The indices in the order they are returned (internal)
 climate_index_table <- function() {
   x <- c(
-    "vpd", "water", "mean vapour pressure deficit", "kPa",
-    "pet", "water", "potential evapotranspiration", "mm/year",
-    "cmd", "water", "climatic moisture deficit", "mm/year",
-    "aridity", "water", "aridity index P / PET", "-",
-    "heat_stress", "heat", "sum of monthly Tmax above heat_threshold",
+    "vpd",
+    "water",
+    "mean vapour pressure deficit (dew point from Tmin)",
+    "kPa",
+    "dryness of the air: stomatal closure and transpiration of plants, desiccation of amphibians, snails and insects",
+    "Allen et al. 1998; Grossiord et al. 2020",
+    "pet",
+    "water",
+    "potential evapotranspiration (Hargreaves-Samani)",
+    "mm/year",
+    "evaporative demand and available energy; plant productivity and species richness",
+    "Hargreaves & Samani 1985; Allen et al. 1998",
+    "cmd",
+    "water",
+    "climatic moisture deficit: sum of monthly PET - P where positive",
+    "mm/year",
+    "drought not met by rain: forest-steppe limits, drought-sensitive trees, C3 versus C4 grasses",
+    "Stephenson 1990; Wang et al. 2012",
+    "aridity",
+    "water",
+    "aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid)",
+    "-",
+    "the humid-arid gradient: biome limits, dryland and desert taxa",
+    "UNEP 1992",
+    "heat_stress",
+    "heat",
+    "sum over months of Tmax above heat_threshold",
     "degC x months",
-    "sri", "season", "precipitation of the warmest quarter / annual", "0-1",
-    "synchronicity", "season", "heat-rain synchrony", "0-1",
-    "gdd", "heat", "growing degree days above gdd_base", "degC x days",
-    "cold_stress", "cold", "sum of monthly Tmin below frost_threshold",
+    "exposure to hot months: upper thermal limits of alpine and boreal taxa and of ectotherms; C4 advantage",
+    "this package; Ehleringer et al. 1997",
+    "sri",
+    "season",
+    "summer rain index: precipitation of the warmest quarter / annual (bio18 / bio12)",
+    "0-1",
+    "rain in the warm season: C4 versus C3 grasses, monsoon versus Mediterranean taxa",
+    "Teeri & Stowe 1976; Paruelo & Lauenroth 1996",
+    "synchronicity",
+    "season",
+    "heat-rain synchrony: 1 = the warmest and the wettest month coincide, 0 = six months apart",
+    "0-1",
+    "whether water arrives when it is warm: summer-rain versus winter-rain floras, C3/C4 balance",
+    "this package; Paruelo & Lauenroth 1996",
+    "gdd",
+    "heat",
+    "growing degree days: monthly Tmean above gdd_base x days",
+    "degC x days",
+    "heat sum for growth and development: cold range limits of plants, number of insect generations",
+    "Woodward 1987; Prentice et al. 1992",
+    "cold_stress",
+    "cold",
+    "sum over months of Tmin below frost_threshold",
     "degC x months",
-    "frost_months", "cold", "months with Tmin below frost_threshold",
+    "winter severity: frost-sensitive plants, survival of overwintering stages",
+    "Woodward 1987; Sakai & Larcher 1987",
+    "frost_months",
+    "cold",
+    "number of months with Tmin below frost_threshold",
     "months",
-    "continentality", "heat", "Tmean of the warmest - coldest month", "degC",
-    "dry_months", "water", "months with P < 2 x Tmean", "months",
-    "lgp", "season", "months with Tmean >= gdd_base and P >= PET / 2",
+    "duration of frost: evergreen versus deciduous plants, length of dormancy or hibernation",
+    "Woodward 1987; Sakai & Larcher 1987",
+    "continentality",
+    "heat",
+    "Tmean of the warmest month - that of the coldest",
+    "degC",
+    "annual temperature amplitude: oceanic versus continental species",
+    "Rivas-Martinez et al. 2011",
+    "dry_months",
+    "water",
+    "months with P < 2 x Tmean (the dry season of Walter-Lieth diagrams)",
     "months",
-    "emberger", "water", "Emberger's pluviothermic quotient", "-",
-    "ellenberg", "water", "Ellenberg's quotient", "degC/mm x 1000",
-    "kira_warmth", "heat", "Kira's warmth index", "degC x months",
-    "kira_coldness", "cold", "Kira's coldness index", "degC x months",
-    "ra", "light", "mean extraterrestrial radiation", "MJ m-2 day-1",
-    "ra_gs", "light", "extraterrestrial radiation of the growing season",
+    "length of the dry season: Mediterranean and savanna taxa, drought-deciduous plants",
+    "Bagnouls & Gaussen 1953; Walter & Lieth 1960",
+    "lgp",
+    "season",
+    "length of the growing period: months with Tmean >= gdd_base and P >= PET / 2",
+    "months",
+    "time when both warmth and water allow growth: crops and their wild relatives, annual plants",
+    "FAO 1978",
+    "emberger",
+    "water",
+    "Emberger's pluviothermic quotient 2000 P / (M^2 - m^2), M and m in Kelvin",
+    "-",
+    "Mediterranean bioclimatic stages (arid to humid); lower = drier",
+    "Emberger 1955; Daget 1977",
+    "ellenberg",
+    "water",
+    "Ellenberg's quotient: Tmean of the warmest month / annual P x 1000",
+    "degC/mm x 1000",
+    "humidity gradient of temperate forests: beech dominates below about 30, oaks above",
+    "Ellenberg 1963; Fang & Lechowicz 2006",
+    "kira_warmth",
+    "heat",
+    "Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC",
+    "degC x months",
+    "vegetation zones of East Asia (evergreen broad-leaved forest between 85 and 180)",
+    "Kira 1945; Kira 1991",
+    "kira_coldness",
+    "cold",
+    "Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative)",
+    "degC x months",
+    "cold limit of evergreen broad-leaved trees in East Asia (about -10)",
+    "Kira 1945; Kira 1991",
+    "ra",
+    "light",
+    "mean extraterrestrial radiation over the year (latitude only)",
+    "MJ m-2 day-1",
+    "light at the top of the atmosphere; in a model a smooth stand-in for latitude",
+    "Allen et al. 1998",
+    "ra_gs",
+    "light",
+    "extraterrestrial radiation received in the months with Tmean >= gdd_base",
     "MJ m-2",
-    "daylength_start", "light",
-    "day length at the start of the growing season", "hours")
-  m <- matrix(x, ncol = 4, byrow = TRUE)
+    "light available while it is warm enough to grow: productivity at high latitudes and elevations",
+    "this package; Allen et al. 1998",
+    "daylength_start",
+    "light",
+    "day length in the middle of the month in which the growing season starts",
+    "hours",
+    "photoperiod at the onset of growth: bud burst, flowering of long-day plants, end of diapause",
+    "Koerner & Basler 2010; Way & Montgomery 2015",
+    "daylength_end",
+    "light",
+    "day length in the middle of the month in which the growing season ends",
+    "hours",
+    "photoperiod at the end of the season: growth cessation and bud set of trees, start of diapause",
+    "Bradshaw & Holzapfel 2007; Way & Montgomery 2015",
+    "daylength_gs",
+    "light",
+    "mean day length of the months with Tmean >= gdd_base",
+    "hours",
+    "photoperiod during growth: long-day versus short-day plants, daily activity time of diurnal animals",
+    "Saikkonen et al. 2012",
+    "daylight_gs",
+    "light",
+    "hours of daylight in the months with Tmean >= gdd_base",
+    "hours",
+    "time for photosynthesis or foraging in the season: a short northern summer with long days against a long southern one",
+    "this package; Saikkonen et al. 2012",
+    "daylength_max",
+    "light",
+    "day length on the summer solstice (latitude only; 24 = midnight sun)",
+    "hours",
+    "the longest day: species that need a critical day length to flower or to breed; like ra a stand-in for latitude",
+    "Allen et al. 1998; Bradshaw & Holzapfel 2007",
+    "days_to_solstice",
+    "light",
+    "days from the start of the growing season to the summer solstice (negative = it starts later)",
+    "days",
+    "share of the season on lengthening days: phenological timing, species whose flowering is triggered before the solstice",
+    "this package; Koerner & Basler 2010")
+  m <- matrix(x, ncol = 6, byrow = TRUE)
   data.frame(index = m[, 1], group = m[, 2], meaning = m[, 3], unit = m[, 4],
+             relevance = m[, 5], reference = m[, 6],
              stringsAsFactors = FALSE)
 }
 
@@ -610,26 +846,67 @@ expand_indices <- function(indices) {
   tab$index[tab$index %in% indices | tab$group %in% indices]
 }
 
+# Middle day of each month (day of the year), as in FAO-56
+mid_day <- c(15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349)
+
+# Day length (hours) at latitude `phi` (radians; numbers or a SpatRaster) on
+# day `j` of the year: 24 / pi x the sunset hour angle, FAO-56 equations 24,
+# 25 and 34 (internal)
+day_length <- function(phi, j) {
+  delta <- 0.409 * sin(2 * pi / 365 * j - 1.39)
+  arg <- -tan(phi) * tan(delta)
+  arg <- if (inherits(arg, "SpatRaster")) {
+    terra::clamp(arg, lower = -1, upper = 1, values = TRUE)
+  } else pmin(pmax(arg, -1), 1)
+  24 / pi * acos(arg)
+}
+
 # Day length (hours) in the middle of the month in which the growing season
 # starts: the first month at or above `base`, counting from the coldest
 # month. `m` has one row per cell: 12 monthly mean temperatures and the
 # latitude in radians (internal)
-season_start_daylength <- function(m, base) {
+season_start_daylength <- function(m, base) season_light(m, base, "start")
+
+# Light at the limits of the growing season, for cells in the rows of `m`
+# (12 monthly mean temperatures and the latitude in radians). The season
+# starts in the first month at or above `base` counting forwards from the
+# coldest month, and ends in the first such month counting backwards from
+# it. `what`: "start" / "end" = day length in the middle of that month;
+# "solstice" = days from the start of the season to the summer solstice,
+# with the start placed between two mid-month days by linear interpolation
+# of the temperatures (internal)
+season_light <- function(m, base, what = c("start", "end", "solstice")) {
+  what <- match.arg(what)
   out <- rep(NA_real_, nrow(m))
   ok <- which(stats::complete.cases(m))
   if (!length(ok)) return(out)
   t <- m[ok, 1:12, drop = FALSE]
+  phi <- m[ok, 13]
+  row <- seq_along(ok)
   cold <- max.col(-t, ties.method = "first")
-  start <- rep(NA_integer_, length(ok))
+  hit_month <- rep(NA_integer_, length(ok))
+  step <- if (what == "end") -1 else 1
   for (k in 0:11) {
-    month <- (cold - 1 + k) %% 12 + 1
-    hit <- is.na(start) & t[cbind(seq_along(ok), month)] >= base
-    start[hit] <- month[hit]
+    month <- (cold - 1 + step * k) %% 12 + 1
+    hit <- is.na(hit_month) & t[cbind(row, month)] >= base
+    hit_month[hit] <- month[hit]
   }
-  j <- c(15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349)[start]
-  delta <- 0.409 * sin(2 * pi / 365 * j - 1.39)
-  ws <- acos(pmin(pmax(-tan(m[ok, 13]) * tan(delta), -1), 1))
-  out[ok] <- 24 / pi * ws
+  if (what != "solstice") {
+    out[ok] <- day_length(phi, mid_day[hit_month])
+    return(out)
+  }
+  # the day on which the interpolated temperature reaches the base
+  onset <- mid_day[hit_month]
+  prev <- (hit_month - 2) %% 12 + 1
+  rising <- !is.na(hit_month) & hit_month != cold
+  i <- which(rising)
+  t0 <- t[cbind(i, prev[i])]
+  t1 <- t[cbind(i, hit_month[i])]
+  gap <- (mid_day[hit_month[i]] - mid_day[prev[i]]) %% 365
+  onset[i] <- mid_day[prev[i]] + (base - t0) / (t1 - t0) * gap
+  solstice <- ifelse(phi >= 0, 172, 355)
+  d <- (solstice - onset) %% 365
+  out[ok] <- ifelse(d > 182.5, d - 365, d)
   out
 }
 

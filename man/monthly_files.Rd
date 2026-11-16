@@ -21,7 +21,8 @@ monthly_files(dir, var, must_contain = NULL)
 Finds and orders the monthly files of one variable in a folder, e.g. the
 files written by \code{\link[=download_chelsa_monthly]{download_chelsa_monthly()}} or downloaded by hand. A file
 belongs to variable \code{var} and month \code{MM} when its name contains
-\verb{_<var>_<MM>_} (so \code{tas} does not match \code{tasmax}).
+\verb{_<var>_<MM>_} (so \code{tas} does not match \code{tasmax}); the month may be
+written \code{01} or \code{1}, as in CHELSA-TraCE21k.
 }
 \examples{
 d <- tempfile()

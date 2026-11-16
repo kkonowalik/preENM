@@ -69,10 +69,14 @@
 #' @return An object of class `var_selection`; see [best_sets()],
 #'   [plot_variable_tree()], [plot_correlation()], [plot_variable_sets()] and
 #'   [write_variable_selection()]. Its elements: `sets` (all passing sets with
-#'   their scores, `pareto`, `mean_rank` and `rank` within the size),
+#'   their scores, `pareto`, `mean_rank` and `rank` within the size; with
+#'   regions also `regional_maxr`, the largest |rho| of the set inside a
+#'   region, and `worst_region`, where it occurs),
 #'   `counts` (sets surviving each filter), `pairs` (each pair: rho per data
 #'   set, largest and smallest |rho|, the data set driving it, sign changes,
-#'   regional maximum, `compatible`), `variables` (single-variable
+#'   regional maximum and the region where it occurs (`regional_driver`),
+#'   `compatible`), `regions` (one row per data set and region, see
+#'   [correlation_by_region()]), `variables` (single-variable
 #'   properties and cluster), `frequency` (how often each variable appears in
 #'   passing, Pareto and top sets), `reference_sets`, `consistency` (the two
 #'   `agreement` data sets compared per variable), `structure_agreement`
@@ -138,15 +142,24 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
   if (!length(rho)) stop("Correlations could not be computed (constant ",
                          "variables?).", call. = FALSE)
   reg_rho <- list()
+  # every region of every data set, also those too small to be screened
+  reg_info <- NULL
   if (regional && x$regions) {
     for (k in screen_sets) {
       d <- x$sets[[k]]
       for (rg in sort(unique(stats::na.omit(d$.region)))) {
         i <- which(d$.region == rg)
+        used <- FALSE
         if (length(i) >= min_region_n) {
           R <- spear(d[i, , drop = FALSE])
-          if (!anyNA(R)) reg_rho[[paste(k, rg, sep = " | ")]] <- R
+          if (!anyNA(R)) {
+            reg_rho[[paste(k, rg, sep = " | ")]] <- R
+            used <- TRUE
+          }
         }
+        reg_info <- rbind(reg_info, data.frame(
+          data_set = k, region = as.character(rg), cells = length(i),
+          screened = used, stringsAsFactors = FALSE))
       }
     }
     if (!length(reg_rho)) {
@@ -179,6 +192,12 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
   pairs$collinear_only_in_some <- pairs$max_abs >= thr_r &
     pairs$min_abs < thr_r
   pairs$max_abs_regional <- if (is.null(A_reg)) NA_real_ else A_reg[pr]
+  # the data set and region in which the pair is most correlated
+  pairs$regional_driver <- if (is.null(A_reg)) NA_character_ else {
+    rg <- vapply(reg_rho, function(R) abs(R[pr]), numeric(nrow(pr)))
+    rg <- matrix(rg, nrow = nrow(pr))
+    names(reg_rho)[max.col(rg, ties.method = "first")]
+  }
   pairs$compatible <- pairs$max_abs < thr_r &
     (is.null(A_reg) | is.na(pairs$max_abs_regional) |
        pairs$max_abs_regional < thr_r_regional)
@@ -350,6 +369,7 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
                                    character(1)),
                       res, row.names = NULL, check.names = FALSE)
     res$n_vars <- as.integer(res$n_vars)
+    res$worst_region <- vapply(cand, worst_region, character(1), Rl = reg_rho)
     usable <- names(criteria)[vapply(names(criteria), function(k)
       !all(is.na(res[[k]])), logical(1))]
     dropped <- setdiff(names(criteria), usable)
@@ -410,6 +430,7 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
       idx <- match(v, V)
       m <- metrics(idx)
       data.frame(name = nm, set = paste(v, collapse = " "), t(m),
+                 worst_region = worst_region(idx, reg_rho),
                  check.names = FALSE, row.names = NULL)
     }))
     refs$passes <- refs$worst_maxr < thr_r & refs$worst_vif <= thr_vif &
@@ -429,6 +450,9 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
               structure_agreement = agree, tree = tree,
               clusters = data.frame(var = V, cluster = as.integer(cl[V])),
               rho = rho, regional_rho = reg_rho, union = A,
+              regions = if (is.null(reg_info)) NULL else
+                region_rows(reg_info, reg_rho, V, thr_r_regional,
+                            thr_vif_regional),
               settings = list(sizes = sizes, thr_r = thr_r, thr_vif = thr_vif,
                               thr_r_regional = thr_r_regional,
                               thr_vif_regional = thr_vif_regional,
@@ -437,6 +461,95 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
                               require_one_of = require_one_of))
   class(out) <- "var_selection"
   out
+}
+
+# The region matrix in which the variables `idx` are most correlated
+# (internal)
+worst_region <- function(idx, Rl) {
+  if (!length(Rl) || length(idx) < 2) return(NA_character_)
+  m <- vapply(Rl, function(R) {
+    a <- abs(R[idx, idx, drop = FALSE])
+    diag(a) <- 0
+    max(a)
+  }, numeric(1))
+  names(Rl)[which.max(m)]
+}
+
+# One row per data set and region: the strongest correlation among the
+# variables `vars`, the pair, and the largest VIF (internal)
+region_rows <- function(info, Rl, vars, thr_r, thr_vif) {
+  key <- paste(info$data_set, info$region, sep = " | ")
+  add <- lapply(key, function(k) {
+    R <- Rl[[k]]
+    if (is.null(R) || length(vars) < 2) {
+      return(data.frame(max_abs_rho = NA_real_, pair = NA_character_,
+                        pairs_above = NA_integer_, max_vif = NA_real_,
+                        passes = NA))
+    }
+    a <- abs(R[vars, vars, drop = FALSE])
+    a[upper.tri(a, diag = TRUE)] <- 0
+    w <- which(a == max(a), arr.ind = TRUE)[1, ]
+    vif <- tryCatch(max(diag(solve(R[vars, vars, drop = FALSE]))),
+                    error = function(e) Inf)
+    data.frame(max_abs_rho = max(a),
+               pair = paste(vars[w[2]], vars[w[1]], sep = " ~ "),
+               pairs_above = sum(a >= thr_r), max_vif = vif,
+               passes = max(a) < thr_r && vif <= thr_vif)
+  })
+  out <- cbind(info, do.call(rbind, add))
+  rownames(out) <- NULL
+  out
+}
+
+#' Correlation of the variables inside every region
+#'
+#' Shows each region of each data set on its own line: how many sampled
+#' cells it has, the strongest correlation among the variables and the
+#' pair that has it, the number of pairs at or above the regional limit and
+#' the largest VIF. Without `set` the table describes all candidate
+#' variables (most regions then hold a collinear pair, which is why sets
+#' are searched); with `set` it describes that set, e.g. the one you chose,
+#' and `passes` says whether it keeps the regional limits there.
+#'
+#' @param x A `var_selection` from [select_variables()] run on a sample
+#'   with regions (see [sample_environment()]).
+#' @param set Optional variables (a character vector, or one string with
+#'   names separated by spaces, as in [best_sets()]).
+#' @return A data.frame with `data_set`, `region`, `cells`, `screened`
+#'   (`FALSE` for regions with fewer than `min_region_n` cells, which are
+#'   not used), `max_abs_rho`, `pair`, `pairs_above`, `max_vif` and
+#'   `passes`; `NULL` when the selection has no regions.
+#' @export
+#' @examples
+#' sim <- simulate_enm_data(seed = 1)
+#' e1 <- sim$env[["env1"]]
+#' e2 <- sim$env[["env2"]]
+#' now <- c(e1, e2, e1 + e2 + 0.05 * e1 * e2, e1 * e2, sqrt(e2))
+#' names(now) <- c("t", "p", "tp", "txp", "sp")
+#' past <- now - 0.2 * now[["t"]]
+#' names(past) <- names(now)
+#' # two regions: west and east of 19 degrees
+#' es <- sample_environment(list(present = now, past = past), n = 3000,
+#'                          regions = list(x = c(14, 19, 24), y = c(49, 55)),
+#'                          seed = 1, verbose = FALSE)
+#' vs <- select_variables(es, sizes = 2:3, min_region_n = 500)
+#' correlation_by_region(vs)                          # all variables
+#' correlation_by_region(vs, best_sets(vs)$set[1])    # the best set
+correlation_by_region <- function(x, set = NULL) {
+  if (!inherits(x, "var_selection")) {
+    stop("`x` must come from select_variables().", call. = FALSE)
+  }
+  if (is.null(x$regions)) return(NULL)
+  if (is.null(set)) return(x$regions)
+  if (length(set) == 1) set <- strsplit(set, " ")[[1]]
+  V <- x$variables$var
+  if (!all(set %in% V)) {
+    stop("Unknown variable(s): ", paste(setdiff(set, V), collapse = ", "),
+         call. = FALSE)
+  }
+  s <- x$settings
+  region_rows(x$regions[c("data_set", "region", "cells", "screened")],
+              x$regional_rho, set, s$thr_r_regional, s$thr_vif_regional)
 }
 
 # MESS similarity of one variable (Elith et al. 2010): negative = outside
@@ -473,7 +586,9 @@ best_sets <- function(x, n = 5, size = NULL, pareto_only = FALSE) {
   if (pareto_only) r <- r[r$pareto, , drop = FALSE]
   r <- do.call(rbind, lapply(split(r, r$n_vars), utils::head, n))
   cols <- c("set", "n_vars", "rank", "mean_rank", "pareto",
-            names(x$settings$criteria), "worst_maxr")
+            names(x$settings$criteria), "worst_maxr", "regional_maxr",
+            "worst_region")
+  if (all(is.na(r$worst_region))) r$worst_region <- r$regional_maxr <- NULL
   r <- r[intersect(unique(cols), names(r))]
   rownames(r) <- NULL
   r

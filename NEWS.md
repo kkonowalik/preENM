@@ -1,3 +1,31 @@
+# preENM 2.12.0
+
+Six additions around the model, all working with any modelling software:
+
+* `extrapolation_risk()`: maps where a projection (period, scenario or
+  region) leaves the calibration conditions: ExDet novelty of single
+  variables (`nt1`) and of their combinations (`nt2`, Mahalanobis
+  distance), mobility-oriented parity (`mop`), the number of variables
+  outside their range and the most novel variable.
+* `null_model_test()`: significance of AUC, MAEbal or any metric against
+  a null model in which the presences are random locations, drawn
+  uniformly or in proportion to recording effort. With effort, a model
+  that only predicts where people record is no longer significant.
+* `suggest_block_size()`: a block size for `spatial_folds()` from the
+  range of spatial autocorrelation of the predictors (empirical
+  semivariograms, median range over the layers), without further
+  packages.
+* `check_sample_size()`: the number of records (as occupied cells)
+  against the minimum numbers of van Proosdij et al. (2016), records per
+  predictor and records per fold.
+* `match_climate_period()`: labels records collected within, before or
+  after the period of the climate data.
+* `odmap_table()`: the ODMAP protocol (Zurell et al. 2020) with the
+  entries on cleaning, clipping (M), thinning, background, predictors,
+  collinearity, novelty, partitioning, performance and selection written
+  from the objects of your workflow; your own entries through `fields`;
+  the rest left empty to fill. Optionally written to CSV.
+
 # preENM 2.11.0
 
 Two new data-preparation checks and five more climate indices:

@@ -13,6 +13,10 @@
 #'   the predictors vary within it.
 #' * [niche_truncation()], [plot_niche_truncation()]: is the niche cut off
 #'   by the calibration area, and do projections go beyond it?
+#' * [extrapolation_risk()]: maps of novel conditions in a projection
+#'   (ExDet and MOP).
+#' * [check_sample_size()], [match_climate_period()]: enough records, and
+#'   from the period of the climate data?
 #' * [sample_environment()], [select_variables()], [best_sets()]: predictor
 #'   sets uncorrelated in every period, scenario and region, ranked.
 #' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell.
@@ -26,6 +30,13 @@
 #'   [site_bin_slices()]: dated fossil records for [temporal_validation()].
 #'
 #' Model evaluation and selection:
+#' * [suggest_block_size()], [spatial_folds()], [evaluate_cv()]: spatial
+#'   block cross-validation with a block size from the autocorrelation of
+#'   the predictors.
+#' * [null_model_test()]: are the models better than expected from where
+#'   records are collected?
+#' * [odmap_table()]: the ODMAP reporting protocol filled from the objects
+#'   of your workflow.
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto
 #'   ranking and bootstrap robustness.
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.

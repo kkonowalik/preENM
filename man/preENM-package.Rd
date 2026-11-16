@@ -20,6 +20,10 @@ and light; see \code{\link[=climate_index_names]{climate_index_names()}}) from m
 the predictors vary within it.
 \item \code{\link[=niche_truncation]{niche_truncation()}}, \code{\link[=plot_niche_truncation]{plot_niche_truncation()}}: is the niche cut off
 by the calibration area, and do projections go beyond it?
+\item \code{\link[=extrapolation_risk]{extrapolation_risk()}}: maps of novel conditions in a projection
+(ExDet and MOP).
+\item \code{\link[=check_sample_size]{check_sample_size()}}, \code{\link[=match_climate_period]{match_climate_period()}}: enough records, and
+from the period of the climate data?
 \item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}}: predictor
 sets uncorrelated in every period, scenario and region, ranked.
 \item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell.
@@ -36,6 +40,13 @@ GBIF with \code{\link[=gbif_effort_sql]{gbif_effort_sql()}}, \code{\link[=downlo
 \details{
 Model evaluation and selection:
 \itemize{
+\item \code{\link[=suggest_block_size]{suggest_block_size()}}, \code{\link[=spatial_folds]{spatial_folds()}}, \code{\link[=evaluate_cv]{evaluate_cv()}}: spatial
+block cross-validation with a block size from the autocorrelation of
+the predictors.
+\item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
+records are collected?
+\item \code{\link[=odmap_table]{odmap_table()}}: the ODMAP reporting protocol filled from the objects
+of your workflow.
 \item \code{\link[=evaluate_models]{evaluate_models()}}: AUC, MAE and bias for one or many models, Pareto
 ranking and bootstrap robustness.
 \item \code{\link[=plot_pareto]{plot_pareto()}}: publication-ready AUC-MAE plot with the Pareto front.

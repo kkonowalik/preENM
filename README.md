@@ -25,7 +25,11 @@ your own code.
 | **Coordinate uncertainty in environmental terms** | **available** | `uncertainty_environment()` |
 | **Niche truncation check** (is M large enough, do projections go beyond it?) | **available** | `niche_truncation()`, `plot_niche_truncation()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
-| **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
+| **Extrapolation risk of projections** (ExDet, MOP) | **available** | `extrapolation_risk()` |
+| **Pre-modelling checks** (sample size, record years vs climate period) | **available** | `check_sample_size()`, `match_climate_period()` |
+| **Significance against sampling bias** | **available** | `null_model_test()` |
+| **Reporting** (ODMAP protocol filled from the workflow) | **available** | `odmap_table()` |
+| **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 
 ### Model evaluation and selection
 
@@ -374,6 +378,38 @@ For a flagged variable, consider a larger M, another variable, or clamping
 and a cautious reading of the projection. The flags are a screening aid: a
 species may truly live up to a coast or a mountain crest where M ends, and
 sampling bias near an edge inflates them, so use thinned records.
+
+## Mapping where a projection extrapolates
+
+`niche_truncation()` answers per variable; `extrapolation_risk()` maps it,
+so that predictions in novel conditions can be masked or read with care:
+
+```r
+ex <- extrapolation_risk(reference = env_m, projection = env_2070)
+terra::plot(ex[[c("nt1", "nt2", "mop")]])
+novel <- ex$nt1 < 0 | ex$nt2 > 1          # outside a range, or a new combination
+```
+
+`nt1` (ExDet) is 0 inside the range of every variable and negative
+outside; `nt2` above 1 marks combinations of values that the calibration
+data lack although each value is within range, which range checks and
+MESS miss; `mop` grades similarity to the nearest tenth of the calibration
+data; `n_outside` and `most_novel` say how many variables are out of range
+and which is the farthest. `reference` can also be a table of the values
+at the records and background points used for fitting.
+
+## Checks before modelling
+
+```r
+check_sample_size(occ_thinned, env, k = 5)       # enough records? per predictor? per fold?
+occ <- match_climate_period(occ, c(1981, 2010))  # records from the period of the climate data?
+```
+
+`check_sample_size()` counts occupied cells and compares them with the
+minimum numbers of van Proosdij et al. (2016; 14 for narrow-ranged, 25 for
+widespread species), with 10 records per predictor and with 5 per fold.
+`match_climate_period()` adds `period_match` (`within`, `before`, `after`,
+`unknown`) and `years_outside`, and prints the counts.
 
 ## Selecting predictor variables across periods and regions
 
@@ -730,7 +766,8 @@ A typical workflow for choosing the algorithms of an ensemble:
 
 1. **Spatial folds.** `spatial_folds()` splits the study area into square
    blocks (side ideally larger than the spatial autocorrelation range of the
-   predictors, e.g. from `blockCV::cv_spatial_autocor()`) and assigns them to
+   predictors: `suggest_block_size(env)$block_size_km` gives the median
+   range of the layers from their semivariograms) and assigns them to
    folds with balanced numbers of presences and background points.
 2. **Fit models** on all folds but one, for each algorithm, fold and,
    optionally, several background sets. Predict on the held-out fold.
@@ -947,6 +984,41 @@ Helpers for preparing the climate of each record:
 - `age_to_period()`: Holocene / Lateglacial / Glacial from ages in cal BP.
 - `threshold_p10()`: the 10th-percentile training presence threshold, for
   sensitivity.
+
+## Testing the models against sampling bias
+
+A model can reach a high AUC by predicting where people record.
+`null_model_test()` replaces the presences by random locations drawn in
+proportion to recording effort and recomputes the metrics, many times; the
+p-value is the share of these null values at least as good as the real
+one:
+
+```r
+tab <- extract_predictions(models, presence, background)
+null_model_test(tab, pool = models, weight = effort, n_null = 499, seed = 1)
+```
+
+`pool` supplies the predictions at candidate cells (the model rasters, or
+a table); `weight` is a recording-effort raster (see
+`gbif_effort_rasters()`) or a column of the table. Without `weight` the
+draws are uniform. The models are not refitted, so it works with
+predictions of any software; it tests the locations, not the flexibility
+of the algorithm, unlike the null models of Raes and ter Steege (2007).
+
+## Reporting with ODMAP
+
+`odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
+2020) that your workflow determines, from the objects themselves, and
+leaves the others for you:
+
+```r
+od <- odmap_table(filter = res, m = m, thinning = th, records = occ_final,
+                  background = bg, variables = vs, predictors = names(env),
+                  truncation = tr, block_size = bs, folds = pts$fold,
+                  evaluation = ev, selection = sel,
+                  fields = list("Study title" = "...", "Focal Taxon" = "..."),
+                  file = "odmap.csv")
+```
 
 ## How the selection works
 

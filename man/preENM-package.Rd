@@ -51,6 +51,8 @@ block cross-validation with a block size from the autocorrelation of
 the predictors.
 \item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
 records are collected?
+\item \code{\link[=null_occurrences]{null_occurrences()}}, \code{\link[=transfer_bias_test]{transfer_bias_test()}}, \code{\link[=environment_shift]{environment_shift()}}:
+is a projected change driven by the records or by the study design?
 \item \code{\link[=odmap_table]{odmap_table()}}: the ODMAP reporting protocol filled from the objects
 of your workflow.
 \item \code{\link[=evaluate_models]{evaluate_models()}}: AUC, MAE and bias for one or many models, Pareto

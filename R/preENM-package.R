@@ -41,6 +41,8 @@
 #'   the predictors.
 #' * [null_model_test()]: are the models better than expected from where
 #'   records are collected?
+#' * [null_occurrences()], [transfer_bias_test()], [environment_shift()]:
+#'   is a projected change driven by the records or by the study design?
 #' * [odmap_table()]: the ODMAP reporting protocol filled from the objects
 #'   of your workflow.
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto

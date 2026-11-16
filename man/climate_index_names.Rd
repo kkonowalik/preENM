@@ -11,8 +11,9 @@ climate_index_names(groups = NULL, drop = NULL, table = FALSE)
 
 \item{drop}{Indices or groups to leave out.}
 
-\item{table}{Return a data.frame with the group, meaning and unit of
-each index instead of the names.}
+\item{table}{Return a data.frame with the group, meaning, unit,
+ecological relevance and literature source of each index instead of
+the names.}
 }
 \value{
 A character vector of index names, or a data.frame.
@@ -28,7 +29,7 @@ all of them, those of some groups, or all but some.
    \code{heat} \tab \code{heat_stress}, \code{gdd}, \code{kira_warmth}, \code{continentality} \cr
    \code{cold} \tab \code{cold_stress}, \code{frost_months}, \code{kira_coldness} \cr
    \code{season} \tab \code{sri}, \code{synchronicity}, \code{lgp} \cr
-   \code{light} \tab \code{ra}, \code{ra_gs}, \code{daylength_start} \cr
+   \code{light} \tab \code{ra}, \code{ra_gs}, \code{daylength_start}, \code{daylength_end}, \code{daylength_gs}, \code{daylight_gs}, \code{daylength_max}, \code{days_to_solstice} \cr
 }
 }
 \examples{

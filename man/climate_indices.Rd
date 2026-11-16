@@ -33,7 +33,7 @@ of them (see \code{\link[=climate_index_names]{climate_index_names()}}), or \cod
 \item{heat_threshold}{Temperature (degC) above which \code{heat_stress} sums.}
 
 \item{gdd_base}{Base temperature (degC) of \code{gdd}, \code{lgp}, \code{ra_gs} and
-\code{daylength_start}: 5 suits
+the day-length indices of the growing season: 5 suits
 temperate plants; use 0 for arctic-alpine plants or about 10 for
 thermophilous plants and many insects.}
 
@@ -65,53 +65,49 @@ evaporative demand, heat, and whether rain falls in the warm season), but
 are useful for any water- or heat-limited species.
 }
 \details{
-\tabular{lll}{
-   Index \tab Meaning \tab Unit \cr
-   \code{vpd} \tab mean vapour pressure deficit (FAO-56; dew point from Tmin) \tab kPa \cr
-   \code{pet} \tab potential evapotranspiration, Hargreaves-Samani (FAO-56) \tab mm/year \cr
-   \code{cmd} \tab climatic moisture deficit: sum of monthly PET - P where positive \tab mm/year \cr
-   \code{aridity} \tab aridity index P / PET (UNEP; < 0.05 hyper-arid, > 0.65 humid) \tab - \cr
-   \code{heat_stress} \tab sum over months of Tmax above \code{heat_threshold} \tab degC x months \cr
-   \code{sri} \tab summer rain index: precipitation of the warmest quarter / annual \tab 0-1 \cr
-   \code{synchronicity} \tab heat-rain synchrony: 1 = the warmest and wettest month coincide, 0 = six months apart \tab 0-1 \cr
-   \code{gdd} \tab growing degree days: monthly mean temperature above \code{gdd_base}, times the days of the month \tab degC x days \cr
-   \code{cold_stress} \tab sum over months of Tmin below \code{frost_threshold} \tab degC x months \cr
-   \code{frost_months} \tab number of months with Tmin below \code{frost_threshold} \tab months \cr
-   \code{continentality} \tab mean temperature of the warmest month minus that of the coldest \tab degC \cr
-   \code{dry_months} \tab number of months with P < 2 x Tmean (Bagnouls-Gaussen, the dry season of Walter-Lieth climate diagrams) \tab months \cr
-   \code{lgp} \tab length of the growing period: months with Tmean at or above \code{gdd_base} and P at least half of PET (FAO) \tab months \cr
-   \code{emberger} \tab Emberger's pluviothermic quotient Q = 2000 P / (M^2 - m^2), M and m in Kelvin (lower = drier) \tab - \cr
-   \code{ellenberg} \tab Ellenberg's quotient: mean temperature of the warmest month / annual precipitation x 1000 \tab degC/mm x 1000 \cr
-   \code{kira_warmth} \tab Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC \tab degC x months \cr
-   \code{kira_coldness} \tab Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative) \tab degC x months \cr
-   \code{ra} \tab mean extraterrestrial radiation over the year (a function of latitude only) \tab MJ m-2 day-1 \cr
-   \code{ra_gs} \tab extraterrestrial radiation received in the months with Tmean at or above \code{gdd_base} \tab MJ m-2 \cr
-   \code{daylength_start} \tab day length in the middle of the month in which the growing season starts \tab hours \cr
+\tabular{llllll}{
+   Index \tab Group \tab Meaning \tab Unit \tab Useful for \tab Source \cr
+   \code{vpd} \tab \code{water} \tab mean vapour pressure deficit (dew point from Tmin) \tab kPa \tab dryness of the air: stomatal closure and transpiration of plants, desiccation of amphibians, snails and insects \tab Allen et al. 1998; Grossiord et al. 2020 \cr
+   \code{pet} \tab \code{water} \tab potential evapotranspiration (Hargreaves-Samani) \tab mm/year \tab evaporative demand and available energy; plant productivity and species richness \tab Hargreaves & Samani 1985; Allen et al. 1998 \cr
+   \code{cmd} \tab \code{water} \tab climatic moisture deficit: sum of monthly PET - P where positive \tab mm/year \tab drought not met by rain: forest-steppe limits, drought-sensitive trees, C3 versus C4 grasses \tab Stephenson 1990; Wang et al. 2012 \cr
+   \code{aridity} \tab \code{water} \tab aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid) \tab - \tab the humid-arid gradient: biome limits, dryland and desert taxa \tab UNEP 1992 \cr
+   \code{heat_stress} \tab \code{heat} \tab sum over months of Tmax above \code{heat_threshold} \tab degC x months \tab exposure to hot months: upper thermal limits of alpine and boreal taxa and of ectotherms; C4 advantage \tab this package; Ehleringer et al. 1997 \cr
+   \code{sri} \tab \code{season} \tab summer rain index: precipitation of the warmest quarter / annual (bio18 / bio12) \tab 0-1 \tab rain in the warm season: C4 versus C3 grasses, monsoon versus Mediterranean taxa \tab Teeri & Stowe 1976; Paruelo & Lauenroth 1996 \cr
+   \code{synchronicity} \tab \code{season} \tab heat-rain synchrony: 1 = the warmest and the wettest month coincide, 0 = six months apart \tab 0-1 \tab whether water arrives when it is warm: summer-rain versus winter-rain floras, C3/C4 balance \tab this package; Paruelo & Lauenroth 1996 \cr
+   \code{gdd} \tab \code{heat} \tab growing degree days: monthly Tmean above \code{gdd_base} x days \tab degC x days \tab heat sum for growth and development: cold range limits of plants, number of insect generations \tab Woodward 1987; Prentice et al. 1992 \cr
+   \code{cold_stress} \tab \code{cold} \tab sum over months of Tmin below \code{frost_threshold} \tab degC x months \tab winter severity: frost-sensitive plants, survival of overwintering stages \tab Woodward 1987; Sakai & Larcher 1987 \cr
+   \code{frost_months} \tab \code{cold} \tab number of months with Tmin below \code{frost_threshold} \tab months \tab duration of frost: evergreen versus deciduous plants, length of dormancy or hibernation \tab Woodward 1987; Sakai & Larcher 1987 \cr
+   \code{continentality} \tab \code{heat} \tab Tmean of the warmest month - that of the coldest \tab degC \tab annual temperature amplitude: oceanic versus continental species \tab Rivas-Martinez et al. 2011 \cr
+   \code{dry_months} \tab \code{water} \tab months with P < 2 x Tmean (the dry season of Walter-Lieth diagrams) \tab months \tab length of the dry season: Mediterranean and savanna taxa, drought-deciduous plants \tab Bagnouls & Gaussen 1953; Walter & Lieth 1960 \cr
+   \code{lgp} \tab \code{season} \tab length of the growing period: months with Tmean >= \code{gdd_base} and P >= PET / 2 \tab months \tab time when both warmth and water allow growth: crops and their wild relatives, annual plants \tab FAO 1978 \cr
+   \code{emberger} \tab \code{water} \tab Emberger's pluviothermic quotient 2000 P / (M^2 - m^2), M and m in Kelvin \tab - \tab Mediterranean bioclimatic stages (arid to humid); lower = drier \tab Emberger 1955; Daget 1977 \cr
+   \code{ellenberg} \tab \code{water} \tab Ellenberg's quotient: Tmean of the warmest month / annual P x 1000 \tab degC/mm x 1000 \tab humidity gradient of temperate forests: beech dominates below about 30, oaks above \tab Ellenberg 1963; Fang & Lechowicz 2006 \cr
+   \code{kira_warmth} \tab \code{heat} \tab Kira's warmth index: sum over months of Tmean - 5 where Tmean > 5 degC \tab degC x months \tab vegetation zones of East Asia (evergreen broad-leaved forest between 85 and 180) \tab Kira 1945; Kira 1991 \cr
+   \code{kira_coldness} \tab \code{cold} \tab Kira's coldness index: sum over months of Tmean - 5 where Tmean < 5 degC (zero or negative) \tab degC x months \tab cold limit of evergreen broad-leaved trees in East Asia (about -10) \tab Kira 1945; Kira 1991 \cr
+   \code{ra} \tab \code{light} \tab mean extraterrestrial radiation over the year (latitude only) \tab MJ m-2 day-1 \tab light at the top of the atmosphere; in a model a smooth stand-in for latitude \tab Allen et al. 1998 \cr
+   \code{ra_gs} \tab \code{light} \tab extraterrestrial radiation received in the months with Tmean >= \code{gdd_base} \tab MJ m-2 \tab light available while it is warm enough to grow: productivity at high latitudes and elevations \tab this package; Allen et al. 1998 \cr
+   \code{daylength_start} \tab \code{light} \tab day length in the middle of the month in which the growing season starts \tab hours \tab photoperiod at the onset of growth: bud burst, flowering of long-day plants, end of diapause \tab Koerner & Basler 2010; Way & Montgomery 2015 \cr
+   \code{daylength_end} \tab \code{light} \tab day length in the middle of the month in which the growing season ends \tab hours \tab photoperiod at the end of the season: growth cessation and bud set of trees, start of diapause \tab Bradshaw & Holzapfel 2007; Way & Montgomery 2015 \cr
+   \code{daylength_gs} \tab \code{light} \tab mean day length of the months with Tmean >= \code{gdd_base} \tab hours \tab photoperiod during growth: long-day versus short-day plants, daily activity time of diurnal animals \tab Saikkonen et al. 2012 \cr
+   \code{daylight_gs} \tab \code{light} \tab hours of daylight in the months with Tmean >= \code{gdd_base} \tab hours \tab time for photosynthesis or foraging in the season: a short northern summer with long days against a long southern one \tab this package; Saikkonen et al. 2012 \cr
+   \code{daylength_max} \tab \code{light} \tab day length on the summer solstice (latitude only; 24 = midnight sun) \tab hours \tab the longest day: species that need a critical day length to flower or to breed; like \code{ra} a stand-in for latitude \tab Allen et al. 1998; Bradshaw & Holzapfel 2007 \cr
+   \code{days_to_solstice} \tab \code{light} \tab days from the start of the growing season to the summer solstice (negative = it starts later) \tab days \tab share of the season on lengthening days: phenological timing, species whose flowering is triggered before the solstice \tab this package; Koerner & Basler 2010 \cr
 }
 
 
 All are computed by default; choose some by name or by group with
 \code{\link[=climate_index_names]{climate_index_names()}}, e.g. \code{indices = climate_index_names("water")}
-or \code{indices = c("cold", "gdd")}. The first seven were chosen for water-
-and heat-limited plants; the others describe limits common to many
-organisms. \code{gdd}, \code{lgp}
-and \code{frost_months} measure the length and warmth of the season of
-growth or activity (plants, insects and other ectotherms); \code{cold_stress}
-and \code{frost_months} the severity and duration of frost (frost-sensitive
-plants, overwintering stages); \code{continentality} the annual temperature
-amplitude (oceanic versus continental species; unlike bio7 it uses mean,
-not extreme, temperatures); \code{dry_months}, \code{emberger} and \code{ellenberg} are
-classical indices of vegetation science: the length of the dry season,
-the Mediterranean bioclimatic stages, and the humidity gradient of
-temperate forests (in Central Europe beech dominates below about 30).
-Kira's indices delimit the vegetation zones of East Asia (e.g. the
-evergreen broad-leaved forest between warmth indices of 85 and 180);
-they always use 5 degC, whereas \code{gdd} uses \code{gdd_base} and counts days.
-\code{daylength_start} is the photoperiod at the onset of growth, a cue for
-bud burst, flowering and the end of diapause; \code{ra_gs} is the light
-available at the top of the atmosphere while it is warm enough to
-grow. \code{ra} depends on latitude alone: in a model it acts as a
-smooth stand-in for latitude, so use it only with that in mind.
+or \code{indices = c("cold", "gdd")}. "Useful for" gives examples of the
+questions an index was made for or is commonly used in, not a limit on
+its use; "Source" gives the origin of the index or of its ecological
+use (see the references), and "this package" marks definitions that are
+ours. Kira's indices always use 5 degC, whereas \code{gdd} uses \code{gdd_base}
+and counts days; \code{continentality} uses mean, not extreme, temperatures,
+unlike bio7. \code{ra} and \code{daylength_max} depend on latitude alone: in a
+model they act as a smooth stand-in for latitude, so use them only with
+that in mind. The other light indices combine latitude with the
+temperature season, so they differ between a mountain and its foreland
+and change with the climate of another period.
 
 \strong{Formulas.} Saturation vapour pressure
 \eqn{e_s(T) = 0.6108 \exp(17.27 T / (T + 237.3))} (kPa); monthly VPD
@@ -136,7 +132,17 @@ season of \code{daylength_start} starts in the first month with Tmean at or
 above \code{gdd_base}, counting from the coldest month (which is itself the
 start where every month is warm enough); cells without such a month
 get \code{NA}. Day length is \eqn{24 \omega_s / \pi} with the sunset hour
-angle \eqn{\omega_s} of FAO-56 (eq. 25 and 34). Several
+angle \eqn{\omega_s} of FAO-56 (eq. 25 and 34). The season ends in the
+last month at or above \code{gdd_base} before the coldest month
+(\code{daylength_end}). \code{daylength_gs} is the mean of the mid-month day
+lengths of the months at or above \code{gdd_base}, weighted by their days
+(\code{NA} without such a month), and \code{daylight_gs} their sum over those
+days (0 without such a month). For \code{days_to_solstice} the start of the
+season is placed between two mid-month days by linear interpolation of
+the monthly mean temperatures (where every month is warm enough it is
+the middle of the coldest month); the solstice is day 172 north and day
+355 south of the equator, and the result lies between -182 and 182.
+With monthly means it is accurate to about one or two weeks. Several
 indices are strongly correlated with each other and with bioclim
 variables (e.g. \code{gdd} with bio1, \code{ellenberg} and \code{emberger} with
 \code{aridity}); let \code{\link[=select_variables]{select_variables()}} choose among them.
@@ -173,20 +179,90 @@ names(climate_indices(tmax, tmin, prec, indices = c("cold", "gdd"),
 }
 \references{
 Allen, R.G., Pereira, L.S., Raes, D., Smith, M. (1998) Crop
-evapotranspiration. FAO Irrigation and Drainage Paper 56. Hargreaves,
-G.H., Samani, Z.A. (1985) Reference crop evapotranspiration from
-temperature. \emph{Applied Engineering in Agriculture} 1, 96-99. Bagnouls,
-F., Gaussen, H. (1953) Saison seche et indice xerothermique. \emph{Bulletin
-de la Societe d'Histoire Naturelle de Toulouse} 88, 193-239. Emberger,
-L. (1955) A biogeographic classification of climates. \emph{Recueil des
-Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
-Faculte des Sciences de l'Universite de Montpellier, Serie Botanique}
-7, 3-43. Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen.
-Ulmer, Stuttgart. FAO (1978) Report on the agro-ecological zones
-project. World Soil Resources Report 48. Kira, T. (1945) A new
-classification of climate in eastern Asia as the basis for
-agricultural geography. Horticultural Institute, Kyoto University.
-Karger, D.N.
-et al. (2017) Climatologies at high resolution for the earth's land
-surface areas. \emph{Scientific Data} 4, 170122.
+evapotranspiration. FAO Irrigation and Drainage Paper 56.
+
+Bagnouls, F., Gaussen, H. (1953) Saison seche et indice xerothermique.
+\emph{Bulletin de la Societe d'Histoire Naturelle de Toulouse} 88, 193-239.
+
+Bradshaw, W.E., Holzapfel, C.M. (2007) Evolution of animal
+photoperiodism. \emph{Annual Review of Ecology, Evolution, and Systematics}
+38, 1-25.
+
+Daget, P. (1977) Le bioclimat mediterraneen: analyse des formes
+climatiques par le systeme d'Emberger. \emph{Vegetatio} 34, 87-103.
+
+Ehleringer, J.R., Cerling, T.E., Helliker, B.R. (1997) C4
+photosynthesis, atmospheric CO2, and climate. \emph{Oecologia} 112, 285-299.
+
+Ellenberg, H. (1963) Vegetation Mitteleuropas mit den Alpen. Ulmer,
+Stuttgart.
+
+Emberger, L. (1955) A biogeographic classification of climates. \emph{Recueil
+des Travaux des Laboratoires de Botanique, Geologie et Zoologie de la
+Faculte des Sciences de l'Universite de Montpellier, Serie Botanique} 7,
+3-43.
+
+Fang, J., Lechowicz, M.J. (2006) Climatic limits for the present
+distribution of beech (Fagus L.) species in the world. \emph{Journal of
+Biogeography} 33, 1804-1819.
+
+FAO (1978) Report on the agro-ecological zones project. World Soil
+Resources Report 48.
+
+Grossiord, C. et al. (2020) Plant responses to rising vapor pressure
+deficit. \emph{New Phytologist} 226, 1550-1566.
+
+Hargreaves, G.H., Samani, Z.A. (1985) Reference crop evapotranspiration
+from temperature. \emph{Applied Engineering in Agriculture} 1, 96-99.
+
+Karger, D.N. et al. (2017) Climatologies at high resolution for the
+earth's land surface areas. \emph{Scientific Data} 4, 170122.
+
+Kira, T. (1945) A new classification of climate in eastern Asia as the
+basis for agricultural geography. Horticultural Institute, Kyoto
+University.
+
+Kira, T. (1991) Forest ecosystems of East and Southeast Asia in a global
+perspective. \emph{Ecological Research} 6, 185-200.
+
+Koerner, C., Basler, D. (2010) Phenology under global warming. \emph{Science}
+327, 1461-1462.
+
+Paruelo, J.M., Lauenroth, W.K. (1996) Relative abundance of plant
+functional types in grasslands and shrublands of North America.
+\emph{Ecological Applications} 6, 1212-1224.
+
+Prentice, I.C. et al. (1992) A global biome model based on plant
+physiology and dominance, soil properties and climate. \emph{Journal of
+Biogeography} 19, 117-134.
+
+Rivas-Martinez, S., Rivas Saenz, S., Penas, A. (2011) Worldwide
+bioclimatic classification system. \emph{Global Geobotany} 1, 1-634.
+
+Saikkonen, K. et al. (2012) Climate change-driven species' range shifts
+filtered by photoperiodism. \emph{Nature Climate Change} 2, 239-242.
+
+Sakai, A., Larcher, W. (1987) Frost survival of plants. Springer,
+Berlin.
+
+Stephenson, N.L. (1990) Climatic control of vegetation distribution: the
+role of the water balance. \emph{American Naturalist} 135, 649-670.
+
+Teeri, J.A., Stowe, L.G. (1976) Climatic patterns and the distribution
+of C4 grasses in North America. \emph{Oecologia} 23, 1-12.
+
+UNEP (1992) World atlas of desertification. Edward Arnold, London.
+
+Walter, H., Lieth, H. (1960) Klimadiagramm-Weltatlas. Fischer, Jena.
+
+Wang, T., Hamann, A., Spittlehouse, D.L., Murdock, T.Q. (2012)
+ClimateWNA: high-resolution spatial climate data for western North
+America. \emph{Journal of Applied Meteorology and Climatology} 51, 16-29.
+
+Way, D.A., Montgomery, R.A. (2015) Photoperiod constraints on tree
+phenology, performance and migration in a warming world. \emph{Plant, Cell
+and Environment} 38, 1725-1736.
+
+Woodward, F.I. (1987) Climate and plant distribution. Cambridge
+University Press.
 }

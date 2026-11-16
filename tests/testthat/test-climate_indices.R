@@ -164,7 +164,9 @@ test_that("Kira's indices, radiation and day length are correct", {
                         indices = c("kira_warmth", "kira_coldness", "light"),
                         gdd_base = 8)
   expect_equal(names(ci), c("kira_warmth", "kira_coldness", "ra", "ra_gs",
-                            "daylength_start"))
+                            "daylength_start", "daylength_end",
+                            "daylength_gs", "daylight_gs", "daylength_max",
+                            "days_to_solstice"))
   days <- c(31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
   mid <- c(15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349)
   for (cell in c(1, 40, 64)) {
@@ -184,6 +186,24 @@ test_that("Kira's indices, radiation and day length are correct", {
     expect_false(is.na(s))
     expect_equal(v("daylength_start"),
                  24 / pi * acos(-tan(lat) * tan(delta)), tolerance = 1e-6)
+    # the other day-length indices, from the same months
+    dl <- day_length(lat, mid)
+    g <- tm >= 8
+    e <- rev(o)[tm[rev(o)] >= 8][1]
+    expect_equal(v("daylength_end"), dl[e], tolerance = 1e-6)
+    expect_equal(v("daylength_gs"), sum((dl * days)[g]) / sum(days[g]),
+                 tolerance = 1e-6)
+    expect_equal(v("daylight_gs"), sum((dl * days)[g]), tolerance = 1e-5)
+    expect_equal(v("daylength_max"), day_length(lat, 172), tolerance = 1e-6)
+    expect_gt(v("daylength_max"), v("daylength_gs"))
+    # start between the middle of the last cold month and of the first
+    # warm one
+    before <- (s - 2) %% 12 + 1
+    wrap <- function(d) ifelse(d %% 365 > 182.5, d %% 365 - 365, d %% 365)
+    lo <- wrap(172 - mid[s])
+    hi <- wrap(172 - mid[before])
+    expect_gte(v("days_to_solstice"), lo - 1e-6)
+    expect_lte(v("days_to_solstice"), hi + 1e-6)
   }
   expect_lt(min(terra::values(ci$kira_coldness)), 0)
   expect_gt(diff(range(terra::values(ci$daylength_start), na.rm = TRUE)), 0)
@@ -207,15 +227,55 @@ test_that("day length follows the season, the hemisphere and the base", {
   expect_true(is.na(season_start_daylength(rbind(c(NA, rep(1, 12))), 5)))
 })
 
+test_that("day-length indices of the season behave as expected", {
+  g <- function(t, lat, what) season_light(rbind(c(t, lat * pi / 180)), 5,
+                                           what)
+  expect_equal(day_length(0, 100), 12, tolerance = 1e-6)
+  expect_equal(day_length(c(70, -70) * pi / 180, 172), c(24, 0))
+  expect_equal(day_length(50 * pi / 180, 172), 16.2, tolerance = 0.02)
+  # 0 degC until February, 10 degC from March: the base of 5 is reached
+  # half-way between mid-February (day 46) and mid-March (day 74)
+  t <- c(0, 0, rep(10, 10))
+  expect_equal(g(t, 50, "solstice"), 172 - 60)
+  # the same season six months later in the south
+  expect_equal(g(t[c(7:12, 1:6)], -50, "solstice"), 355 - 242.5)
+  # a season that starts after the solstice gives a negative value
+  expect_lt(g(c(rep(0, 6), 10, 10, rep(0, 4)), 50, "solstice"), 0)
+  # a later start is closer to the solstice
+  expect_lt(g(c(0, 0, 0, 0, rep(10, 8)), 50, "solstice"),
+            g(t, 50, "solstice"))
+  # the season ends in the last warm month before the coldest one
+  t2 <- c(-5, 0, 0, 10, 10, 10, 10, 10, 10, 0, 0, 0)
+  expect_equal(g(t2, 50, "end"), day_length(50 * pi / 180, 258))
+  expect_equal(g(t2, 50, "start"), day_length(50 * pi / 180, 105))
+  expect_true(is.na(g(rep(0, 12), 50, "end")))
+  expect_true(is.na(g(rep(0, 12), 50, "solstice")))
+})
+
+test_that("day-length indices handle cells without a growing season", {
+  r <- terra::rast(nrows = 2, ncols = 2, xmin = 0, xmax = 2, ymin = 60,
+                   ymax = 62, nlyrs = 12)
+  cold <- terra::rast(lapply(1:12, function(m) terra::init(r[[1]], 0) - 10))
+  ci <- climate_indices(cold + 5, cold - 5, cold * 0 + 30,
+                        indices = "light", temp_units = "C")
+  expect_true(all(is.na(terra::values(ci$daylength_gs))))
+  expect_true(all(terra::values(ci$daylight_gs) == 0))
+  expect_true(all(is.na(terra::values(ci$days_to_solstice))))
+  expect_true(all(terra::values(ci$daylength_max) > 18))
+})
+
 test_that("climate_index_names chooses indices and groups", {
   all <- climate_index_names()
-  expect_length(all, 20)
+  expect_length(all, 25)
   expect_equal(climate_index_names("cold"),
                c("cold_stress", "frost_months", "kira_coldness"))
   expect_equal(climate_index_names(drop = c("light", "emberger")),
-               setdiff(all, c("ra", "ra_gs", "daylength_start", "emberger")))
+               setdiff(all, c(climate_index_names("light"), "emberger")))
+  expect_length(climate_index_names("light"), 8)
   tab <- climate_index_names(table = TRUE)
-  expect_equal(names(tab), c("index", "group", "meaning", "unit"))
+  expect_equal(names(tab), c("index", "group", "meaning", "unit",
+                            "relevance", "reference"))
+  expect_true(all(nzchar(unlist(tab))))
   expect_equal(tab$index, all)
   expect_error(climate_index_names("x"), "Unknown group")
   expect_error(climate_index_names(drop = "x"), "Unknown index")

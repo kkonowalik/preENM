@@ -16,6 +16,16 @@ print.var_selection <- function(x, n = 5, ...) {
       "\n", sep = "")
   cat("Criteria: ", paste(names(s$criteria), s$criteria, sep = ":",
                           collapse = ", "), "\n\n", sep = "")
+  if (!is.null(x$regions)) {
+    cat("Regions, all variables (limits |rho| < ", s$thr_r_regional,
+        ", VIF <= ", s$thr_vif_regional, "; see correlation_by_region()):\n",
+        sep = "")
+    rg <- x$regions[c("data_set", "region", "cells", "screened",
+                      "max_abs_rho", "pair", "pairs_above")]
+    rg$max_abs_rho <- round(rg$max_abs_rho, 3)
+    print(rg, row.names = FALSE)
+    cat("\n")
+  }
   cat("Sets surviving each filter:\n")
   print(x$counts, row.names = FALSE)
   if (!is.null(x$sets)) {
@@ -259,6 +269,10 @@ write_variable_selection <- function(x, dir, prefix = "variables") {
   if (!is.null(x$sets)) csv(x$sets[x$sets$pareto, ], "_pareto.csv")
   csv(x$counts, "_counts.csv")
   csv(x$pairs, "_pairs.csv")
+  csv(x$regions, "_regions.csv")
+  if (!is.null(x$regions) && !is.null(x$sets) && nrow(x$sets)) {
+    csv(correlation_by_region(x, x$sets$set[1]), "_regions_best_set.csv")
+  }
   csv(x$variables, "_variables.csv")
   csv(x$frequency, "_frequency.csv")
   csv(x$reference_sets, "_reference_sets.csv")

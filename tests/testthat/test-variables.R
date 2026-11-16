@@ -220,3 +220,66 @@ test_that("plots and files", {
   expect_true(all(vapply(es$vars, grepl, logical(1), x = nwk, fixed = TRUE)))
   expect_error(best_sets(1), "select_variables")
 })
+
+test_that("regions are reported one by one", {
+  sim <- simulate_enm_data(seed = 1)
+  e1 <- sim$env[["env1"]]
+  e2 <- sim$env[["env2"]]
+  now <- c(e1, e2, e1 + e2 + 0.05 * e1 * e2, e1 * e2, sqrt(e2))
+  names(now) <- c("t", "p", "tp", "txp", "sp")
+  past <- now - 0.2 * now[["t"]]
+  names(past) <- names(now)
+  es <- sample_environment(list(present = now, past = past), n = 3000,
+                           regions = list(x = c(14, 19, 24), y = c(49, 55)),
+                           seed = 1, verbose = FALSE)
+  vs <- suppressMessages(select_variables(es, sizes = 2:3,
+                                          min_region_n = 500))
+  rg <- correlation_by_region(vs)
+  expect_equal(nrow(rg), 4)
+  expect_equal(rg$data_set, rep(c("present", "past"), each = 2))
+  expect_setequal(rg$region, c("x1_y1", "x2_y1"))
+  expect_true(all(rg$screened))
+  expect_equal(paste(rg$data_set, rg$region, sep = " | "),
+               names(vs$regional_rho))
+  # the strongest pair of each region, from its own matrix
+  for (i in seq_len(nrow(rg))) {
+    R <- abs(vs$regional_rho[[i]])
+    diag(R) <- 0
+    expect_equal(rg$max_abs_rho[i], max(R))
+    v <- strsplit(rg$pair[i], " ~ ")[[1]]
+    expect_equal(R[v[1], v[2]], max(R))
+    expect_equal(rg$pairs_above[i], sum(R[lower.tri(R)] >= 0.85))
+  }
+  expect_false(any(rg$passes))
+  # one chosen set
+  best <- best_sets(vs)
+  one <- correlation_by_region(vs, best$set[1])
+  expect_true(all(one$passes))
+  expect_equal(max(one$max_abs_rho), best$regional_maxr[1])
+  expect_equal(best$worst_region[1],
+               paste(one$data_set, one$region,
+                     sep = " | ")[which.max(one$max_abs_rho)])
+  expect_equal(correlation_by_region(vs, c("p", "sp"))$passes, rep(FALSE, 4))
+  expect_error(correlation_by_region(vs, "zz"), "Unknown variable")
+  # pairs name the region in which they are most correlated
+  expect_true(all(vs$pairs$regional_driver %in% names(vs$regional_rho)))
+  k <- match(vs$pairs$regional_driver[1], names(vs$regional_rho))
+  expect_equal(abs(vs$regional_rho[[k]][vs$pairs$var1[1], vs$pairs$var2[1]]),
+               vs$pairs$max_abs_regional[1])
+  expect_output(print(vs), "Regions, all variables")
+  # regions too small to be screened are listed, not used
+  small <- suppressMessages(select_variables(es, sizes = 2,
+                                             min_region_n = 1500))
+  expect_false(all(small$regions$screened))
+  expect_true(all(is.na(small$regions$max_abs_rho[!small$regions$screened])))
+  # without regions
+  es0 <- sample_environment(list(present = now, past = past), n = 1000,
+                            seed = 1, verbose = FALSE)
+  vs0 <- suppressMessages(select_variables(es0, sizes = 2))
+  expect_null(correlation_by_region(vs0))
+  expect_false("worst_region" %in% names(best_sets(vs0)))
+  d <- tempfile()
+  f <- write_variable_selection(vs, d)
+  expect_true(file.exists(file.path(d, "variables_regions.csv")))
+  expect_true(file.exists(file.path(d, "variables_regions_best_set.csv")))
+})

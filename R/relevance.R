@@ -33,12 +33,14 @@
 #'   rectangle: records that land on cells without values are left out, and
 #'   a shift is redrawn if fewer than half remain.
 #'
-#' Random values without spatial structure (white noise, as in
-#' [random_variables()] with `method = "shuffle"`) would be a much weaker
-#' null: real layers are smooth and records are clustered, so even a
-#' meaningless smooth layer, such as a painting, differs from the
-#' background at the records far more than noise does (Fourcade et al.
-#' 2018).
+#' * `"noise"`: the values of the layer shuffled among the cells, that is
+#'   a random variable without any spatial structure (white noise, as
+#'   [random_variables()] makes with `method = "shuffle"`). This is the
+#'   classic random variable and an option for comparison, not a
+#'   recommendation: real layers are smooth and records are clustered, so
+#'   even a meaningless smooth layer, such as a painting, differs from the
+#'   background at the records far more than noise does (Fourcade et al.
+#'   2018), and nearly every layer passes this test.
 #'
 #' **Reading the result.** `p_value` is the share of random layers with a
 #' `D` at least as large as the real one; `relevant` marks layers with
@@ -60,7 +62,7 @@
 #'   [terra::SpatVector].
 #' @param env Predictor layers of the calibration area
 #'   ([terra::SpatRaster] or file paths).
-#' @param null The null model: `"field"` or `"shift"`.
+#' @param null The null model: `"field"`, `"shift"` or `"noise"`.
 #' @param n_null Number of random layers per predictor.
 #' @param alpha Largest `p_value` of a relevant layer.
 #' @param n_bg Number of cells sampled to describe the calibration area.
@@ -96,7 +98,8 @@
 #' records <- as.data.frame(terra::xyFromCell(env, cells))
 #' names(records) <- c("lon", "lat")
 #' variable_relevance(records, env, n_null = 199)
-variable_relevance <- function(points, env, null = c("field", "shift"),
+variable_relevance <- function(points, env,
+                               null = c("field", "shift", "noise"),
                                n_null = 499, alpha = 0.05, n_bg = 10000,
                                min_shift = 0.1, coords = NULL,
                                points_crs = "EPSG:4326", seed = 1) {
@@ -144,6 +147,14 @@ variable_relevance <- function(points, env, null = c("field", "shift"),
         z <- noise_at(r, rg[[v]], rbind(xy_rec, xy_bg))
         i <- seq_len(nrow(xy_rec))
         ks_distance(z[i], z[-i])
+      }, numeric(1))
+    }, numeric(n_null))
+  } else if (null == "noise") {
+    # a layer without spatial structure: the records get the values of
+    # cells drawn at random from the area
+    vapply(vars, function(v) {
+      vapply(seq_len(n_null), function(b) {
+        ks_distance(M[sample.int(nrow(M), length(cell)), v], M[, v])
       }, numeric(1))
     }, numeric(n_null))
   } else {

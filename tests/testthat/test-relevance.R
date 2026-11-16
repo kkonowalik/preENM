@@ -113,6 +113,24 @@ test_that("a smooth random layer beats white noise, hence the null", {
   expect_gt(mean(r1$D), 1.5 * mean(r2$D))
 })
 
+test_that("the noise null is easier to pass than the structured ones", {
+  d <- relevance_data()
+  res <- variable_relevance(d$points, d$env, null = "noise", n_null = 99)
+  expect_equal(attr(res, "settings")$null, "noise")
+  expect_true(res$relevant[res$layer == "temperature"])
+  # unrelated smooth layers: larger D than noise expects, so smaller
+  # p-values than under the structured null
+  sm <- random_variables(d$env, n = 6, range_km = 100, seed = 11)
+  noise <- variable_relevance(d$points, sm, null = "noise", n_null = 99)
+  shift <- variable_relevance(d$points, sm, null = "shift", n_null = 99)
+  expect_lt(mean(noise$null_mean), mean(shift$null_mean))
+  expect_gte(sum(noise$relevant), sum(shift$relevant))
+  # white-noise layers are not flagged by the noise null
+  wn <- random_variables(d$env, n = 6, method = "shuffle", seed = 12)
+  expect_lte(sum(variable_relevance(d$points, wn, null = "noise",
+                                    n_null = 99)$relevant), 1)
+})
+
 test_that("variable_relevance checks its input", {
   d <- relevance_data()
   expect_error(variable_relevance(d$points[1:5, ], d$env), "Fewer than 10")

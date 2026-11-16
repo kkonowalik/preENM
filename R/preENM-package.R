@@ -6,9 +6,11 @@
 #' * [delimit_m()], [linking_distance()], [m_scenarios()], [plot_m_area()],
 #'   [write_m_area()], [crop_to_m()]: the accessible area (M).
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
-#' * [download_chelsa_monthly()], [monthly_files()], [climate_indices()]:
-#'   twenty derived climate variables (water balance, heat, cold, season
-#'   and light; see [climate_index_names()]) from monthly climatologies.
+#' * [download_chelsa_monthly()], [download_chelsa_trace21k()],
+#'   [monthly_files()], [climate_indices()]: twenty-five derived climate
+#'   variables (water balance, heat, cold, season and light; see
+#'   [climate_index_names()]) from monthly climatologies of the present,
+#'   the future or the past.
 #' * [uncertainty_environment()]: coordinate uncertainty judged by how much
 #'   the predictors vary within it.
 #' * [niche_truncation()], [plot_niche_truncation()]: is the niche cut off

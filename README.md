@@ -12,56 +12,6 @@ species distribution models. It does not fit models itself, so it works
 alongside any modelling software: biomod2, ENMeval, Maxent, tidymodels or
 your own code.
 
-| Step | Status | Functions |
-|---|---|---|
-| **Point filtering** (especially GBIF) | **available** | `read_gbif()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
-| **Accessible area (M)** | **available** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
-| **Cutting raster files to M** | **available** | `crop_rasters()`, `crop_to_m()` |
-| **One point per raster cell, background points** | **available** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
-| **Environmental thinning** (without truncating the niche) | **available** | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
-| **Background strategies and recording effort** | **available** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
-| **Fossil records** (optional, for hindcasts) | **available** | `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
-| **Derived climate variables** (twenty indices of water balance, heat, cold, season and light) | **available** | `download_chelsa_monthly()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
-| **Coordinate uncertainty in environmental terms** | **available** | `uncertainty_environment()` |
-| **Niche truncation check** (is M large enough, do projections go beyond it?) | **available** | `niche_truncation()`, `plot_niche_truncation()` |
-| **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
-| **Predictors against random variables** (before modelling and inside the models) | **available** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
-| **Extrapolation risk of projections** (ExDet, MOP) | **available** | `extrapolation_risk()` |
-| **Pre-modelling checks** (sample size, record years vs climate period) | **available** | `check_sample_size()`, `match_climate_period()` |
-| **Significance against sampling bias** | **available** | `null_model_test()` |
-| **Reporting** (ODMAP protocol filled from the workflow) | **available** | `odmap_table()` |
-| **Model evaluation and selection** | **available** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `temporal_validation()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
-
-### Model evaluation and selection
-
-The model-selection tools implement the approach of:
-
-> Konowalik, K., Nosol, A. (2021). Evaluation metrics and validation of
-> presence-only species distribution models based on distributional maps with
-> varying coverage. *Scientific Reports* 11, 1482.
-> <https://doi.org/10.1038/s41598-020-80062-1>
-
-One finding of the paper was that **AUC and MAE used together** are a reliable
-way to compare models (Figure 6 in the paper). AUC measures how well a model
-*ranks* presences above absences. MAE measures how *close* the predicted
-suitability values are to what was observed. A model can have an excellent
-AUC and still be badly calibrated, and MAE reveals this.
-
-On top of this, the package offers:
-
-- **any metrics you choose:** AUC vs MAE by default, plus TSS, the
-  continuous Boyce index, bias or your own metrics;
-- **Pareto-front selection** with a tolerance for ties, or conventional
-  **minimum values**;
-- **bootstrap** confidence intervals and the probability that each model is on
-  the Pareto front;
-- **spatial block cross-validation** across folds and background sets;
-- **temporal validation** of hindcasts against fossil or other dated records;
-- ready-to-publish `ggplot2` figures.
-
-Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
-Points are re-projected to each raster automatically.
-
 ## Installation
 
 Install R (≥ 4.1) from <https://cran.r-project.org> and, optionally, RStudio
@@ -73,7 +23,41 @@ remotes::install_github("kkonowalik/preENM")
 install.packages("ggrepel")   # optional: neater labels in plots
 ```
 
-## Point filtering
+## The workflow at a glance
+
+The sections follow the order of a modelling project: prepare the records
+and the calibration area, prepare and choose the predictors, fit the models
+in the software of your choice, then evaluate, select and report. Every
+step can be used on its own.
+
+| | Section | Step | Functions |
+|---|---|---|---|
+| Before | [1](#1-point-filtering) | **Point filtering** (especially GBIF) | `read_gbif()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
+| Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
+| Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
+| Before | [4](#4-computing-derived-climate-variables) | **Derived climate variables** (25 indices of water balance, heat, cold, season and light; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
+| Before | [5](#5-checks-before-modelling) | **Checks** (sample size, record years vs climate period) | `check_sample_size()`, `match_climate_period()` |
+| Before | [6](#6-keeping-imprecise-records-where-the-environment-is-uniform) | **Coordinate uncertainty in environmental terms** | `uncertainty_environment()` |
+| Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
+| Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
+| Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
+| Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough?) | `niche_truncation()`, `plot_niche_truncation()` |
+| Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
+| Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
+| Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP) | `extrapolation_risk()` |
+| After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
+| After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
+| After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
+| After | [21](#21-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
+
+Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
+Points are re-projected to each raster automatically.
+
+## Before modelling
+
+Records, calibration area and predictors.
+
+### 1. Point filtering
 
 `filter_occurrences()` removes records unsuitable for niche modelling with a
 fixed, ordered list of transparent rules. It is designed especially for
@@ -104,7 +88,7 @@ settings <- filter_settings(
   "strict",
   max_coord_unc_m = 1000,
   climate_limit = 22, climate_soft_limit = 16,         # deg C, warmest quarter
-  refuge_limit = 11, refuge_radius_km = 10,            # (values for Dryas)
+  refuge_limit = 11, refuge_radius_km = 10,            # e.g. an arctic-alpine plant
   drop_tests = "too_old")                              # switch tests off/on
 
 layers <- filter_layers(
@@ -121,7 +105,7 @@ res                                    # records removed per test
 filter_report(res, by = "countryCode") # which tests remove records where
 filter_sensitivity(res, "climate", c(16, 18, 20, 22, 24))  # choose thresholds
 record_fate(res, c("2571281411", "1701093660"))
-write_filter_results(res, "results", "dryas_strict")       # CSV files
+write_filter_results(res, "results", "species_strict")       # CSV files
 clean <- kept(res)
 ```
 
@@ -137,7 +121,7 @@ and Evolution* 10: 744-751. The other tests are specific to `preENM`: atlas
 grid detection, gridded datasets, coordinate decimals, text clues, shoreline
 distance, settlement, range, climate and isolation.
 
-## Accessible area (M)
+### 2. Accessible area (M)
 
 `delimit_m()` draws the area the species could have reached (the M of the BAM
 diagram), where background points are drawn and to which the predictors are
@@ -152,7 +136,7 @@ patch.
 
 | Method | What it draws |
 |---|---|
-| `"delaunay"` (default) | Delaunay triangles with all edges up to L, plus L/2 buffers, closed by L/2, holes filled. Follows concave outlines; the M chosen for *Dryas octopetala* (L = 340 km). |
+| `"delaunay"` (default) | Delaunay triangles with all edges up to L, plus L/2 buffers, closed by L/2, holes filled. Follows concave outlines; e.g. the M of *Dryas octopetala* in Europe (L = 340 km). |
 | `"cluster_hull"` | convex (or concave, `hull_ratio < 1`) hull of each cluster linked at L: fills hollows inside a cluster automatically |
 | `"convex_hull"` | one convex hull around all records: the most generous M |
 | `"buffer"` | buffers of fixed radius (`buffer_km`), e.g. as a reference |
@@ -197,7 +181,7 @@ sc <- m_scenarios(occ, group = "time", extent = c(-26, 74, 38, 82))
 sc$comparison                       # area, records inside, overlap, Jaccard
 plot_m_area(sc)
 
-write_m_area(m, "M_area", "dryas_M")     # GeoPackage, CSV reports, PNG maps
+write_m_area(m, "M_area", "species_M")     # GeoPackage, CSV reports, PNG maps
 env_m <- crop_to_m(env, m)               # predictors clipped to M
 ```
 
@@ -207,61 +191,107 @@ The example above uses simulated records with a hollow between two arms of the
 range. The default Delaunay M leaves the hollow out; an expert polygon or a
 cluster hull includes it.
 
-## Computing derived climate variables
+### 3. Cutting raster files to M
+
+`crop_rasters()` cuts whole folders of rasters (e.g. the layers of every period or
+scenario) to M or any polygon and writes them to a new folder. GDAL does the
+work file to file, so memory use stays low. Finished files are skipped when
+the run is repeated, and a failing file does not stop the others.
+
+```r
+res <- crop_rasters(c("climate/bio", "climate/orog"),      # folders of rasters
+                    m,                                  # or "species_M.gpkg"
+                    out_dir = "climate/M_area",
+                    variables = c("bio01", "bio04", "bio05", "bio06", "bio10",
+                                  "bio12", "bio17", "scd", "dem"))
+table(res$status)
+```
+
+**Values are copied exactly.** CHELSA stores integers with a scale and offset
+in the file metadata (e.g. temperature x 10 in Kelvin). Cropping by reading
+the values into R and writing them back in the original integer type, e.g.
+`terra::crop(r, v, mask = TRUE, filename = ..., datatype = datatype(r))`, can
+round the values and drop the scale and offset. In our test it gave errors of
+up to 0.95 deg C. `crop_rasters()` keeps the raw values, the data type, the
+scale/offset and NoData, on exactly the input grid (nothing is resampled). For
+a single raster in memory, `crop_to_m()` is enough.
+
+### 4. Computing derived climate variables
 
 Bioclimatic variables describe temperature and precipitation, but not the
-water balance or heat stress that limit many species (e.g. C3 vs C4 plants).
+water balance, the heat and cold stress, the length of the season or the
+light that limit many species.
 `climate_indices()` computes such variables from **monthly
 climatologies**: the 12 monthly means of maximum (`tasmax`), minimum
 (`tasmin`) and mean (`tas`) temperature and precipitation (`pr`). Daily data
 are not needed.
 
-| Index | Meaning | Unit |
-|---|---|---|
-| `vpd` | mean vapour pressure deficit (FAO-56, dew point from Tmin) | kPa |
-| `pet` | potential evapotranspiration, Hargreaves-Samani (FAO-56) | mm/year |
-| `cmd` | climatic moisture deficit: sum of monthly PET − P where positive | mm/year |
-| `aridity` | aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid) | – |
-| `heat_stress` | sum over months of Tmax above 30 °C (`heat_threshold`) | °C × months |
-| `sri` | summer rain index: precipitation of the warmest quarter / annual (= bio18 / bio12) | 0–1 |
-| `synchronicity` | 1 = the warmest and the wettest month coincide, 0 = six months apart | 0–1 |
+| Index | Group | Meaning | Unit | Useful for | Source |
+|---|---|---|---|---|---|
+| `vpd` | water | mean vapour pressure deficit (dew point from Tmin) | kPa | dryness of the air: stomatal closure and transpiration of plants, desiccation of amphibians, snails and insects | Allen et al. 1998; Grossiord et al. 2020 |
+| `pet` | water | potential evapotranspiration (Hargreaves-Samani) | mm/year | evaporative demand and available energy; plant productivity and species richness | Hargreaves & Samani 1985; Allen et al. 1998 |
+| `cmd` | water | climatic moisture deficit: sum of monthly PET − P where positive | mm/year | drought not met by rain: forest-steppe limits, drought-sensitive trees, C3 versus C4 grasses | Stephenson 1990; Wang et al. 2012 |
+| `aridity` | water | aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid) | – | the humid-arid gradient: biome limits, dryland and desert taxa | UNEP 1992 |
+| `heat_stress` | heat | sum over months of Tmax above `heat_threshold` | °C × months | exposure to hot months: upper thermal limits of alpine and boreal taxa and of ectotherms; C4 advantage | this package; Ehleringer et al. 1997 |
+| `sri` | season | summer rain index: precipitation of the warmest quarter / annual (bio18 / bio12) | 0-1 | rain in the warm season: C4 versus C3 grasses, monsoon versus Mediterranean taxa | Teeri & Stowe 1976; Paruelo & Lauenroth 1996 |
+| `synchronicity` | season | heat-rain synchrony: 1 = the warmest and the wettest month coincide, 0 = six months apart | 0-1 | whether water arrives when it is warm: summer-rain versus winter-rain floras, C3/C4 balance | this package; Paruelo & Lauenroth 1996 |
+| `gdd` | heat | growing degree days: monthly Tmean above `gdd_base` × days | °C × days | heat sum for growth and development: cold range limits of plants, number of insect generations | Woodward 1987; Prentice et al. 1992 |
+| `cold_stress` | cold | sum over months of Tmin below `frost_threshold` | °C × months | winter severity: frost-sensitive plants, survival of overwintering stages | Woodward 1987; Sakai & Larcher 1987 |
+| `frost_months` | cold | number of months with Tmin below `frost_threshold` | months | duration of frost: evergreen versus deciduous plants, length of dormancy or hibernation | Woodward 1987; Sakai & Larcher 1987 |
+| `continentality` | heat | Tmean of the warmest month − that of the coldest | °C | annual temperature amplitude: oceanic versus continental species | Rivas-Martínez et al. 2011 |
+| `dry_months` | water | months with P < 2 × Tmean (the dry season of Walter-Lieth diagrams) | months | length of the dry season: Mediterranean and savanna taxa, drought-deciduous plants | Bagnouls & Gaussen 1953; Walter & Lieth 1960 |
+| `lgp` | season | length of the growing period: months with Tmean ≥ `gdd_base` and P ≥ PET / 2 | months | time when both warmth and water allow growth: crops and their wild relatives, annual plants | FAO 1978 |
+| `emberger` | water | Emberger's pluviothermic quotient 2000 P / (M² − m²), M and m in Kelvin | – | Mediterranean bioclimatic stages (arid to humid); lower = drier | Emberger 1955; Daget 1977 |
+| `ellenberg` | water | Ellenberg's quotient: Tmean of the warmest month / annual P × 1000 | °C/mm × 1000 | humidity gradient of temperate forests: beech dominates below about 30, oaks above | Ellenberg 1963; Fang & Lechowicz 2006 |
+| `kira_warmth` | heat | Kira's warmth index: sum over months of Tmean − 5 where Tmean > 5 °C | °C × months | vegetation zones of East Asia (evergreen broad-leaved forest between 85 and 180) | Kira 1945; Kira 1991 |
+| `kira_coldness` | cold | Kira's coldness index: sum over months of Tmean − 5 where Tmean < 5 °C (zero or negative) | °C × months | cold limit of evergreen broad-leaved trees in East Asia (about -10) | Kira 1945; Kira 1991 |
+| `ra` | light | mean extraterrestrial radiation over the year (latitude only) | MJ m⁻² day⁻¹ | light at the top of the atmosphere; in a model a smooth stand-in for latitude | Allen et al. 1998 |
+| `ra_gs` | light | extraterrestrial radiation received in the months with Tmean ≥ `gdd_base` | MJ m⁻² | light available while it is warm enough to grow: productivity at high latitudes and elevations | this package; Allen et al. 1998 |
+| `daylength_start` | light | day length in the middle of the month in which the growing season starts | hours | photoperiod at the onset of growth: bud burst, flowering of long-day plants, end of diapause | Körner & Basler 2010; Way & Montgomery 2015 |
+| `daylength_end` | light | day length in the middle of the month in which the growing season ends | hours | photoperiod at the end of the season: growth cessation and bud set of trees, start of diapause | Bradshaw & Holzapfel 2007; Way & Montgomery 2015 |
+| `daylength_gs` | light | mean day length of the months with Tmean ≥ `gdd_base` | hours | photoperiod during growth: long-day versus short-day plants, daily activity time of diurnal animals | Saikkonen et al. 2012 |
+| `daylight_gs` | light | hours of daylight in the months with Tmean ≥ `gdd_base` | hours | time for photosynthesis or foraging in the season: a short northern summer with long days against a long southern one | this package; Saikkonen et al. 2012 |
+| `daylength_max` | light | day length on the summer solstice (latitude only; 24 = midnight sun) | hours | the longest day: species that need a critical day length to flower or to breed; like `ra` a stand-in for latitude | Allen et al. 1998; Bradshaw & Holzapfel 2007 |
+| `days_to_solstice` | light | days from the start of the growing season to the summer solstice (negative = it starts later) | days | share of the season on lengthening days: phenological timing, species whose flowering is triggered before the solstice | this package; Körner & Basler 2010 |
 
-Thirteen more indices describe limits shared by many organisms (plants,
-insects and other ectotherms):
+"Useful for" gives examples of the questions an index was made for or is
+commonly used in; it is not a limit on its use. "Source" is the origin of
+the index or of its ecological use (full references in `?climate_indices`);
+"this package" marks definitions that are ours.
 
-| Index | Meaning | Unit |
-|---|---|---|
-| `gdd` | growing degree days: monthly mean temperature above 5 °C (`gdd_base`) × days | °C × days |
-| `cold_stress` | sum over months of Tmin below 0 °C (`frost_threshold`) | °C × months |
-| `frost_months` | number of months with Tmin below `frost_threshold` | months |
-| `continentality` | mean temperature of the warmest month − that of the coldest | °C |
-| `dry_months` | months with P < 2 × Tmean (Bagnouls–Gaussen; the dry season of Walter–Lieth diagrams) | months |
-| `lgp` | length of the growing period: months with Tmean ≥ `gdd_base` and P ≥ PET / 2 (FAO) | months |
-| `emberger` | Emberger's pluviothermic quotient 2000 P / (M² − m²), M and m in Kelvin | – |
-| `ellenberg` | Ellenberg's quotient: Tmean of the warmest month / annual P × 1000 | °C/mm × 1000 |
-| `kira_warmth` | Kira's warmth index: sum over months of Tmean − 5 where Tmean > 5 °C | °C × months |
-| `kira_coldness` | Kira's coldness index: sum over months of Tmean − 5 where Tmean < 5 °C (zero or negative) | °C × months |
-| `ra` | mean extraterrestrial radiation over the year (latitude only) | MJ m⁻² day⁻¹ |
-| `ra_gs` | extraterrestrial radiation received in the months with Tmean ≥ `gdd_base` | MJ m⁻² |
-| `daylength_start` | day length in the middle of the month in which the growing season starts | hours |
+![Six of the indices for a synthetic climate](man/figures/climate_indices.png)
 
-All twenty are computed by default. Choose some by name or by group with
-`climate_index_names()`:
+All twenty-five are computed by default. Choose some by name or by group
+(the Group column) with `climate_index_names()`:
 
 ```r
 climate_index_names()                       # all names
-climate_index_names(table = TRUE)           # with group, meaning and unit
+climate_index_names(table = TRUE)           # group, meaning, unit, relevance, source
 climate_indices(tmax, tmin, prec, indices = climate_index_names("water"))
 climate_indices(tmax, tmin, prec, indices = c("cold", "gdd"))   # a group and a name
 climate_indices(tmax, tmin, prec, indices = climate_index_names(drop = "light"))
 ```
 
-The groups are `water`, `heat`, `cold`, `season` and `light`. The indices
-are computed from monthly means, so `gdd`, `lgp`, `frost_months`,
-`cold_stress` and `dry_months` approximate the daily quantities. Several
-are correlated with each other and with bioclim variables; let
-`select_variables()` choose among them. `ra` depends on latitude alone, so
-in a model it stands in for latitude.
+The indices are computed from monthly means, so `gdd`, `lgp`,
+`frost_months`, `cold_stress`, `dry_months` and the day-length indices of
+the growing season approximate the daily quantities (`days_to_solstice` to
+about one or two weeks). Several are correlated with each other and with
+bioclim variables; let `select_variables()` choose among them, and
+`variable_relevance()` tell which ones the species responds to.
+
+**Light and day length.** Day length needs no extra data: it follows from
+latitude and the day of the year. `ra` and `daylength_max` depend on
+latitude alone, so in a model they stand in for latitude. The other light
+indices combine latitude with the temperature season (when it is warm
+enough to grow, `gdd_base`), so they differ between a mountain and its
+foreland and change with the climate of another period: the photoperiod
+when growth starts (`daylength_start`) and ends (`daylength_end`), the
+mean day length and the hours of daylight of the season (`daylength_gs`,
+`daylight_gs`), and how long before the summer solstice the season starts
+(`days_to_solstice`). They are meant for photoperiod-sensitive organisms
+(bud burst and bud set of trees, flowering of long-day plants, diapause of
+insects), and can be useful outside niche modelling, e.g. in phenology or
+growth models.
 
 **1. Get the monthly files.** They can be downloaded automatically from
 CHELSA V2.1 (no account needed). With `extent`, only your region is read
@@ -311,20 +341,65 @@ afterwards if you need another projection: that is faster than projecting
 Then add the new variables to `sample_environment()` / `select_variables()`
 like any other layer.
 
+**3. The same indices for the past.** CHELSA-TraCE21k (Karger et al. 2023)
+gives monthly `tasmax`, `tasmin` and `pr` for every century of the last
+22,000 years at about 1 km, so all indices can also be computed for, say,
+the Last Glacial Maximum or the Younger Dryas, on the same grid as the
+present. `download_chelsa_trace21k()` gets the files, for a region if you
+give `extent`:
+
+```r
+trace21k_time(c(0, 12, 21))        # ka BP -> time id: 20, -100, -190
+download_chelsa_trace21k("trace_monthly", kyr_bp = c(0, 12, 21),
+                         extent = c(-26, 74, 38, 82))
+
+for (id in c(20, -100, -190)) {
+  f <- function(v) monthly_files("trace_monthly", v,
+                                 must_contain = paste0("_", id, "_V1"))
+  climate_indices(f("tasmax"), f("tasmin"), f("pr"),     # no tas: (tmax + tmin) / 2
+                  path = "indices", prefix = paste0("TraCE21k_", id, "_"))
+}
+
+# the 19 bioclimatic variables of the same time steps
+download_chelsa_trace21k("trace_bio", vars = "bio", kyr_bp = c(0, 12, 21),
+                         extent = c(-26, 74, 38, 82))
+```
+
+Compare the past with the present of the same source (time step 0 ka BP)
+or use an anomaly (`sample_environment(anomalies = ...)`), so that
+differences between data sources are not read as climate change. Day
+length is computed for today's orbit; at 21 ka BP the difference is small
+compared with the monthly resolution, but it is an approximation. Check
+the units of the downloaded files once (`terra::rast(file)`): temperatures
+are stored in tenths of Kelvin, which `climate_indices()` recognises.
+
 **Units.** Temperatures must be in °C and precipitation in mm/month.
 CHELSA V2.1 stores temperature as Kelvin × 10 with a scale and offset in the
 file, which terra applies on reading: the values are already °C, so do
 **not** divide them by 10. `climate_indices()` checks this: Kelvin is
 converted, and values that look divided by 10 stop with an explanation.
 
-**Formulas** (see `?climate_indices`): saturation vapour pressure
+**Formulas** (all of them in `?climate_indices`): saturation vapour pressure
 e(T) = 0.6108 exp(17.27 T / (T + 237.3)); VPD = (e(Tmax) + e(Tmin)) / 2 −
 e(Tmin); PET = 0.0023 × 0.408 × Ra × (Tmean + 17.8) × √(Tmax − Tmin) mm/day,
 with extraterrestrial radiation Ra (MJ m⁻² day⁻¹) from latitude and the
 mid-month day (FAO-56 eq. 21; 0.408 converts it to mm of water); summer
 quarters are any three consecutive months, including December–February.
 
-## Keeping imprecise records where the environment is uniform
+### 5. Checks before modelling
+
+```r
+check_sample_size(occ_thinned, env, k = 5)       # enough records? per predictor? per fold?
+occ <- match_climate_period(occ, c(1981, 2010))  # records from the period of the climate data?
+```
+
+`check_sample_size()` counts occupied cells and compares them with the
+minimum numbers of van Proosdij et al. (2016; 14 for narrow-ranged, 25 for
+widespread species), with 10 records per predictor and with 5 per fold.
+`match_climate_period()` adds `period_match` (`within`, `before`, `after`,
+`unknown`) and `years_outside`, and prints the counts.
+
+### 6. Keeping imprecise records where the environment is uniform
 
 Records are usually dropped above a fixed coordinate uncertainty, e.g.
 1 km. That discards many usable records, often the older ones and those
@@ -351,234 +426,7 @@ are rejected without being examined. Use the layers and the resolution you
 will model with, and run `filter_occurrences()` with a generous
 `max_coord_unc_m` beforehand.
 
-## Checking that the niche is not truncated by M
-
-A model learns only the part of a species' response that the calibration
-area contains. If the records are still frequent where the conditions of M
-end, the limit of the niche lies outside M, and a projection to conditions
-beyond M extrapolates a curve whose end was never seen.
-`niche_truncation()` checks every predictor at both ends:
-
-```r
-tr <- niche_truncation(occ, env_m,
-                       projections = list(lgm = env_lgm, ssp370 = env_2070))
-tr
-plot_niche_truncation(tr)
-```
-
-* `edge_low`, `edge_high`: how often records fall in the outer 5% of M's
-  conditions, relative to how common those conditions are in M (0 = the
-  species avoids the margin, so its limit is inside M; 1 or more = it uses
-  the margin at least as often as M offers it: `truncated_*`).
-* `gap_low`, `gap_high`: the distance between the most extreme record and
-  the limit of M, as a share of M's range.
-* For each projection, the share of cells beyond M and beyond the records,
-  and `risk_low` / `risk_high` where a truncated end is exceeded.
-
-For a flagged variable, consider a larger M, another variable, or clamping
-and a cautious reading of the projection. The flags are a screening aid: a
-species may truly live up to a coast or a mountain crest where M ends, and
-sampling bias near an edge inflates them, so use thinned records.
-
-## Mapping where a projection extrapolates
-
-`niche_truncation()` answers per variable; `extrapolation_risk()` maps it,
-so that predictions in novel conditions can be masked or read with care:
-
-```r
-ex <- extrapolation_risk(reference = env_m, projection = env_2070)
-terra::plot(ex[[c("nt1", "nt2", "mop")]])
-novel <- ex$nt1 < 0 | ex$nt2 > 1          # outside a range, or a new combination
-```
-
-`nt1` (ExDet) is 0 inside the range of every variable and negative
-outside; `nt2` above 1 marks combinations of values that the calibration
-data lack although each value is within range, which range checks and
-MESS miss; `mop` grades similarity to the nearest tenth of the calibration
-data; `n_outside` and `most_novel` say how many variables are out of range
-and which is the farthest. `reference` can also be a table of the values
-at the records and background points used for fitting.
-
-## Checks before modelling
-
-```r
-check_sample_size(occ_thinned, env, k = 5)       # enough records? per predictor? per fold?
-occ <- match_climate_period(occ, c(1981, 2010))  # records from the period of the climate data?
-```
-
-`check_sample_size()` counts occupied cells and compares them with the
-minimum numbers of van Proosdij et al. (2016; 14 for narrow-ranged, 25 for
-widespread species), with 10 records per predictor and with 5 per fold.
-`match_climate_period()` adds `period_match` (`within`, `before`, `after`,
-`unknown`) and `years_outside`, and prints the counts.
-
-## Selecting predictor variables across periods and regions
-
-Collinearity between predictors can change through time. A set that is
-uncorrelated today may be collinear at the Last Glacial Maximum or in 2070,
-or inside a mountain range, and a model projected there then rests on
-unstable relationships. `select_variables()` therefore searches **every**
-subset of the candidate variables. It keeps the sets uncorrelated in all
-periods (or scenarios) and regions, scores them on transferability, and
-returns a **ranked list of sets** for you to choose from on ecological
-grounds, instead of one automatic answer.
-
-1. `sample_environment()` draws area-proportional random cells from each
-   data set (e.g. present, LGM, future scenarios), plus cells common to all.
-   It can add anomaly ("delta") data sets at those cells, and assigns cells
-   to regions (polygons such as the Alps, the Carpathians and Scandinavia,
-   or a grid of tiles).
-2. **Screen:** a set passes when every pair has |Spearman rho| < 0.8 and the
-   rank-based VIF is at most 5 in every data set. Inside regions the limits
-   are softer (0.85 and 10). Optionally, every set must contain at least one
-   variable of each group, e.g. one temperature and one moisture variable.
-3. **Scores:**
-   - `novelty`: the share of cells of the target period outside present
-     conditions (MESS < 0);
-   - `gradient_min`: whether each variable keeps its spatial pattern
-     between periods;
-   - `agreement_min`: the agreement of two data sources for the same period;
-   - `worst_vif` and `regional_vif`.
-4. **Ranking:** within each set size, the Pareto front and a transparent
-   mean rank. There is no hand-made total score.
-
-```r
-vars <- c("bio01", "bio04", "bio05", "bio06", "bio07", "bio10", "bio11",
-          "bio12", "bio13", "bio14", "bio15", "bio16", "bio17", "scd")
-regions <- sf::st_read("regions.gpkg")        # e.g. Alps, Carpathians, Scandes
-
-es <- sample_environment(
-  list(CHELSA = "M_area_current",              # folders or SpatRasters;
-       TraCE_present = "M_area_TraCE_present", # layers matched by name,
-       LGM = "M_area_LGM"),                    # e.g. ..._bio01_... -> bio01
-  vars = vars, regions = regions, n = 1e5, seed = 1,
-  anomalies = list(LGM_delta = c(current = "CHELSA", past = "LGM",
-                                 model_present = "TraCE_present")),
-  ratio_vars = c("bio12", "bio13", "bio14", "bio16", "bio17"),
-  bounds = list(scd = c(0, 365)), fix_scale = TRUE)  # TraCE bio07 is x 10
-
-vs <- select_variables(
-  es, sizes = 3:6,
-  targets = c("LGM", "LGM_delta"),               # periods scored for novelty
-  agreement = c("CHELSA", "TraCE_present"),       # same period, two sources
-  require_one_of = list(
-    temperature = c("bio01", "bio05", "bio06", "bio10", "bio11", "scd"),
-    moisture    = c("bio12", "bio13", "bio14", "bio16", "bio17")),
-  reference_sets = list(first_choice = c("bio04", "bio05", "bio06",
-                                         "bio14", "bio15")))
-vs                               # counts per filter, best sets per size
-best_sets(vs, n = 10, size = 4)  # ranked sets with their scores
-vs$frequency                     # how often each variable is in good sets
-vs$pairs                         # each pair: rho per data set, driver, ...
-plot_variable_tree(vs, best_sets(vs)$set[1])
-plot_variable_sets(vs)
-write_variable_selection(vs, "correlation", "dryas")
-```
-
-For future climate, use the scenarios as data sets, e.g.
-`list(present = ..., ssp126_2070 = ..., ssp585_2070 = ...)`. Every scenario
-then enters the screen, and `novelty` reports the worst one.
-
-![Scored variable sets](man/figures/variable_sets.png)
-![Union tree with the best set](man/figures/variable_tree.png)
-
-The figures use simulated climate (present, a second present-day source and
-an LGM with exaggerated gradients).
-
-## Are the selected predictors better than random variables?
-
-A set of uncorrelated predictors can still hold layers that mean nothing to
-the species. The test of Konowalik (2022) answers this by modelling the
-predictors together with random variables and removing those that are no
-more important than the random ones. preENM offers it in two forms.
-
-**Before any modelling.** `variable_relevance()` compares, for each layer,
-the values at the records with the values available in the calibration
-area (Kolmogorov-Smirnov distance `D`), and asks how often a random layer
-reaches the same distance at the same records:
-
-```r
-rel <- variable_relevance(occ_thinned, env, n_null = 499)
-rel
-#>        layer     D null_mean null_95 p_value relevant shift_sd breadth_ratio
-#>  temperature 0.458     0.190   0.311   0.002     TRUE    0.705         0.459
-#>     rainfall 0.290     0.179   0.319   0.080    FALSE   -0.306         0.478
-#>        slope 0.063     0.185   0.310   0.995    FALSE   -0.029         0.911
-```
-
-The random layers are not white noise. Real layers are smooth and records
-are clustered, so a meaningless smooth layer differs from the background at
-the records far more than noise does (Fourcade et al. 2018 predicted
-distributions from paintings). The null layers therefore have the spatial
-structure of the real one: `null = "field"` draws smooth random surfaces
-with the same autocorrelation range (any shape of M), `null = "shift"`
-moves the layer itself around the raster (torus translation, Harms et al.
-2001; faster and exact, for an M that fills most of the rectangle).
-`shift_sd` and `breadth_ratio` say how the species responds: its optimum
-is shifted from the mean of the area, or its niche is narrower than the
-area.
-
-It is a screen and it has limits: it looks at one layer at a time (an
-interaction can be missed), a layer correlated with a true driver passes
-too, recording bias along a layer looks like a response (use thinned
-records), and a layer that is one gradient across the whole area cannot be
-told apart from geography.
-
-**Inside the models, with any software.** `random_variables()` writes
-random layers to add to the predictors. Each takes the values of one real
-layer (same distribution, same empty cells) and arranges them in smooth
-random patches of the same size as in the real layer; `method = "shuffle"`
-gives the classic white-noise variable.
-
-```r
-rnd <- random_variables(env, n = 5, seed = 1, filename = "random.tif")
-# fit your models with c(env, rnd), several algorithms and runs, and
-# collect the importance of every variable in a long table
-keep <- compare_to_random(importance, variable = "variable",
-                          value = "importance", algorithm = "algorithm",
-                          run = "run")
-keep
-#>     variable Maxent  GLM   RF  GBM  GAM algorithms mean_importance  keep
-#>  temperature    1.0  1.0  1.0  1.0  1.0          5            41.2  TRUE
-#>     rainfall    0.8  0.4  1.0  0.6  0.2          3            12.9  TRUE
-#>        slope    0.0  0.2  0.4  0.0  0.0          0             2.1 FALSE
-```
-
-The columns of the algorithms give the share of runs in which the
-predictor was more important than the best random variable
-(`threshold = "max"`; a number such as `0.95` uses that quantile of the
-random variables instead, which is less dependent on how many there are).
-A predictor is dropped only when most algorithms do not support it. Remove
-those, make new random variables, fit again, and repeat until every
-predictor is kept, because importance is shared among predictors and
-changes when one is removed.
-
-## Cutting raster files to M
-
-`crop_rasters()` cuts whole folders of rasters (e.g. all CHELSA-TraCE21k time
-slices) to M or any polygon and writes them to a new folder. GDAL does the
-work file to file, so memory use stays low. Finished files are skipped when
-the run is repeated, and a failing file does not stop the others.
-
-```r
-res <- crop_rasters(c("D:/GIS/ChelsaTrace21k/bio", "D:/GIS/ChelsaTrace21k/orog"),
-                    m,                                  # or "dryas_M.gpkg"
-                    out_dir = "D:/GIS/ChelsaTrace21k/Dryas",
-                    variables = c("bio01", "bio04", "bio05", "bio06", "bio10",
-                                  "bio12", "bio17", "scd", "dem"))
-table(res$status)
-```
-
-**Values are copied exactly.** CHELSA stores integers with a scale and offset
-in the file metadata (e.g. temperature x 10 in Kelvin). Cropping by reading
-the values into R and writing them back in the original integer type, e.g.
-`terra::crop(r, v, mask = TRUE, filename = ..., datatype = datatype(r))`, can
-round the values and drop the scale and offset. In our test it gave errors of
-up to 0.95 deg C. `crop_rasters()` keeps the raw values, the data type, the
-scale/offset and NoData, on exactly the input grid (nothing is resampled). For
-a single raster in memory, `crop_to_m()` is enough.
-
-## One point per raster cell and background points
+### 7. One point per raster cell and background points
 
 After filtering, merge your sources, keep one record per cell of the
 predictor rasters, and draw background points from the same grid:
@@ -588,7 +436,7 @@ env <- crop_to_m(env, m)                     # predictors within M (see above)
 
 occ <- merge_occurrences(sNMF = "genetic_samples.csv",   # your own samples
                          GBIF = clean,                     # filtered GBIF
-                         species = "Dryas octopetala")
+                         species = "Genus species")
 pres <- thin_by_cell(occ, env, priority = c("sNMF", "GBIF"))  # own samples win
 bg   <- sample_background(env, n = 10000, n_sets = 10,
                           exclude = pres, seed = 123)
@@ -607,7 +455,7 @@ rasters, or in cells where any layer has no value, are dropped.
 `sample_background()` draws only from cells where all layers have values, one
 point per cell, with an independent, reproducible seed for each set.
 
-## Environmental thinning
+### 8. Environmental thinning
 
 One record per cell still leaves densely sampled regions (e.g. the Alps or
 Scandinavia) over-represented in environmental space. `thin_environment()`
@@ -625,6 +473,8 @@ plot_env_thinning(th)                # PC pairs and the map, kept vs removed
 write_env_thinning(th, "out", "presences_envThinned")
 pres_env <- kept(th)
 ```
+
+![Kept and removed records in environmental space and on the map](man/figures/env_thinning.png)
 
 How it works:
 
@@ -649,7 +499,7 @@ after, how far removed records are from kept ones, and how the number of
 occupied bins changes with the bin width. Pass `template = th` to thin a
 subset (e.g. one lineage) in exactly the same space.
 
-## Background strategies and recording effort
+### 9. Background strategies and recording effort
 
 `sample_background(method = ...)` offers four ways to draw background
 points (each with `n_sets` reproducible sets):
@@ -699,7 +549,275 @@ GBIF_EMAIL=your_email
 save, and restart R. Cite the download DOI written to
 `gbif_effort/effort_download_DOI.txt`.
 
-## Quick start: model selection with example data
+### 10. Checking that the niche is not truncated by M
+
+A model learns only the part of a species' response that the calibration
+area contains. If the records are still frequent where the conditions of M
+end, the limit of the niche lies outside M, and a projection to conditions
+beyond M extrapolates a curve whose end was never seen.
+`niche_truncation()` checks every predictor at both ends:
+
+```r
+tr <- niche_truncation(occ, env_m,
+                       projections = list(lgm = env_lgm, ssp370 = env_2070))
+tr
+plot_niche_truncation(tr)
+```
+
+![Records and M along each predictor](man/figures/niche_truncation.png)
+
+* `edge_low`, `edge_high`: how often records fall in the outer 5% of M's
+  conditions, relative to how common those conditions are in M (0 = the
+  species avoids the margin, so its limit is inside M; 1 or more = it uses
+  the margin at least as often as M offers it: `truncated_*`).
+* `gap_low`, `gap_high`: the distance between the most extreme record and
+  the limit of M, as a share of M's range.
+* For each projection, the share of cells beyond M and beyond the records,
+  and `risk_low` / `risk_high` where a truncated end is exceeded.
+
+For a flagged variable, consider a larger M, another variable, or clamping
+and a cautious reading of the projection. The flags are a screening aid: a
+species may truly live up to a coast or a mountain crest where M ends, and
+sampling bias near an edge inflates them, so use thinned records.
+
+### 11. Selecting predictor variables across periods and regions
+
+Collinearity between predictors can change through time. A set that is
+uncorrelated today may be collinear at the Last Glacial Maximum or in 2070,
+or inside a mountain range, and a model projected there then rests on
+unstable relationships. `select_variables()` therefore searches **every**
+subset of the candidate variables. It keeps the sets uncorrelated in all
+periods (or scenarios) and regions, scores them on transferability, and
+returns a **ranked list of sets** for you to choose from on ecological
+grounds, instead of one automatic answer.
+
+1. `sample_environment()` draws area-proportional random cells from each
+   data set (e.g. present, LGM, future scenarios), plus cells common to all.
+   It can add anomaly ("delta") data sets at those cells, and assigns cells
+   to regions (polygons such as mountain ranges, or a grid of tiles).
+2. **Screen:** a set passes when every pair has |Spearman rho| < 0.8 and the
+   rank-based VIF is at most 5 in every data set. Inside regions the limits
+   are softer (0.85 and 10). Optionally, every set must contain at least one
+   variable of each group, e.g. one temperature and one moisture variable.
+3. **Scores:**
+   - `novelty`: the share of cells of the target period outside present
+     conditions (MESS < 0);
+   - `gradient_min`: whether each variable keeps its spatial pattern
+     between periods;
+   - `agreement_min`: the agreement of two data sources for the same period;
+   - `worst_vif` and `regional_vif`.
+4. **Ranking:** within each set size, the Pareto front and a transparent
+   mean rank. There is no hand-made total score.
+
+```r
+vars <- c("bio01", "bio04", "bio05", "bio06", "bio07", "bio10", "bio11",
+          "bio12", "bio13", "bio14", "bio15", "bio16", "bio17")
+regions <- sf::st_read("regions.gpkg")     # polygons, e.g. mountain ranges;
+                                           # or tiles: list(x = c(-30, 20, 70), y = c(35, 60, 85))
+es <- sample_environment(
+  list(present = "M_area_present",         # folders, files or SpatRasters;
+       YDS     = "M_area_12ka",            # layers are matched by name,
+       LGM     = "M_area_21ka"),           # e.g. ..._bio01_... -> bio01
+  vars = vars, regions = regions, n = 1e5, seed = 1,
+  fix_scale = TRUE)    # same scale in all data sets (e.g. a layer stored x 10 in one of them)
+
+vs <- select_variables(
+  es, sizes = 3:6,
+  targets = c("YDS", "LGM"),                     # periods scored for novelty
+  require_one_of = list(
+    temperature = c("bio01", "bio05", "bio06", "bio10", "bio11"),
+    moisture    = c("bio12", "bio13", "bio14", "bio16", "bio17")),
+  reference_sets = list(first_choice = c("bio04", "bio05", "bio06",
+                                         "bio14", "bio15")))
+vs                               # regions, counts per filter, best sets per size
+best_sets(vs, n = 10, size = 4)  # ranked sets with their scores
+vs$frequency                     # how often each variable is in good sets
+vs$pairs                         # each pair: rho per data set, driver, ...
+plot_variable_tree(vs, best_sets(vs)$set[1])
+plot_variable_sets(vs)
+write_variable_selection(vs, "correlation", "species")
+```
+
+**Regions.** Each region of each data set is reported on its own line, so
+you can see where a correlation comes from:
+
+```r
+correlation_by_region(vs)        # all candidate variables
+#>  data_set      region cells screened max_abs_rho          pair pairs_above max_vif passes
+#>   present        Alps 12350     TRUE       0.991 bio05 ~ bio10          21   310.2  FALSE
+#>   present Carpathians  8120     TRUE       0.987 bio01 ~ bio10          19   270.8  FALSE
+#>       LGM        Alps 11980     TRUE       0.994 bio12 ~ bio16          24   402.5  FALSE
+#>   ...
+correlation_by_region(vs, best_sets(vs)$set[1])   # the set you chose
+#>  data_set      region cells screened max_abs_rho          pair pairs_above max_vif passes
+#>   present        Alps 12350     TRUE       0.612 bio04 ~ bio15           0    2.31   TRUE
+#>   present Carpathians  8120     TRUE       0.701 bio06 ~ bio14           0    2.87   TRUE
+#>       LGM        Alps 11980     TRUE       0.823 bio05 ~ bio14           0    4.90   TRUE
+#>   ...
+```
+
+(The numbers are illustrative.) The first table shows the whole pool,
+where nearly every region holds collinear pairs; the second shows a set,
+with `passes` for the regional limits. `best_sets()` gives for every set
+its largest regional correlation (`regional_maxr`) and the region where it
+occurs (`worst_region`), and `vs$pairs` the same for every pair
+(`max_abs_regional`, `regional_driver`). Regions with fewer than
+`min_region_n` sampled cells are listed with `screened = FALSE` and not
+used; draw more cells (`n`) or lower the limit to include them.
+
+**Two sources for one period, and anomalies.** If you have the calibration
+period from two sources (e.g. an observation-based climatology and the
+present-day step of the palaeoclimate model), add both and name them in
+`agreement`: variables on which the sources disagree are scored down.
+`anomalies` builds "delta" data sets at the sampled cells, the
+high-resolution present plus the model's change:
+
+```r
+es <- sample_environment(
+  list(present = "M_area_present", model_present = "M_area_0ka",
+       LGM = "M_area_21ka"),
+  vars = vars, n = 1e5, seed = 1, fix_scale = TRUE,
+  anomalies = list(LGM_delta = c(current = "present", past = "LGM",
+                                 model_present = "model_present")),
+  ratio_vars = c("bio12", "bio13", "bio14", "bio16", "bio17"))  # change as a ratio
+vs <- select_variables(es, sizes = 3:6, targets = c("LGM", "LGM_delta"),
+                       agreement = c("present", "model_present"))
+```
+
+For future climate, use the scenarios as data sets, e.g.
+`list(present = ..., ssp126_2070 = ..., ssp585_2070 = ...)`. Every scenario
+then enters the screen, and `novelty` reports the worst one.
+
+![Scored variable sets](man/figures/variable_sets.png)
+![Union tree with the best set](man/figures/variable_tree.png)
+
+The figures use simulated climate (present, a second present-day source and
+an LGM with exaggerated gradients).
+
+### 12. Are the selected predictors better than random variables?
+
+A set of uncorrelated predictors can still hold layers that mean nothing to
+the species. The test of Konowalik (2022) answers this by modelling the
+predictors together with random variables and removing those that are no
+more important than the random ones. preENM offers it in two forms.
+
+**Before any modelling.** `variable_relevance()` compares, for each layer,
+the values at the records with the values available in the calibration
+area (Kolmogorov-Smirnov distance `D`), and asks how often a random layer
+reaches the same distance at the same records:
+
+```r
+rel <- variable_relevance(occ_thinned, env, n_null = 499)
+rel
+#>        layer     D null_mean null_95 p_value relevant shift_sd breadth_ratio
+#>  temperature 0.458     0.190   0.311   0.002     TRUE    0.705         0.459
+#>     rainfall 0.290     0.179   0.319   0.080    FALSE   -0.306         0.478
+#>        slope 0.063     0.185   0.310   0.995    FALSE   -0.029         0.911
+```
+
+The random layers are not white noise. Real layers are smooth and records
+are clustered, so a meaningless smooth layer differs from the background at
+the records far more than noise does (Fourcade et al. 2018 predicted
+distributions from paintings). The null layers therefore have the spatial
+structure of the real one: `null = "field"` draws smooth random surfaces
+with the same autocorrelation range (any shape of M), `null = "shift"`
+moves the layer itself around the raster (torus translation, Harms et al.
+2001; faster and exact, for an M that fills most of the rectangle).
+`null = "noise"` is the classic random variable without spatial structure
+(the layer's values shuffled among the cells); it is there for comparison
+and nearly every layer passes it.
+`shift_sd` and `breadth_ratio` say how the species responds: its optimum
+is shifted from the mean of the area, or its niche is narrower than the
+area.
+
+It is a screen and it has limits: it looks at one layer at a time (an
+interaction can be missed), a layer correlated with a true driver passes
+too, recording bias along a layer looks like a response (use thinned
+records), and a layer that is one gradient across the whole area cannot be
+told apart from geography.
+
+**Inside the models, with any software.** `random_variables()` writes
+random layers to add to the predictors. Each takes the values of one real
+layer (same distribution, same empty cells) and arranges them in smooth
+random patches of the same size as in the real layer; `method = "shuffle"`
+gives the classic white-noise variable.
+
+![A real layer and two random layers made from it](man/figures/random_variables.png)
+
+```r
+rnd <- random_variables(env, n = 5, seed = 1, filename = "random.tif")
+# fit your models with c(env, rnd), several algorithms and runs, and
+# collect the importance of every variable in a long table
+keep <- compare_to_random(importance, variable = "variable",
+                          value = "importance", algorithm = "algorithm",
+                          run = "run")
+keep
+#>     variable Maxent  GLM   RF  GBM  GAM algorithms mean_importance  keep
+#>  temperature    1.0  1.0  1.0  1.0  1.0          5            41.2  TRUE
+#>     rainfall    0.8  0.4  1.0  0.6  0.2          3            12.9  TRUE
+#>        slope    0.0  0.2  0.4  0.0  0.0          0             2.1 FALSE
+```
+
+The columns of the algorithms give the share of runs in which the
+predictor was more important than the best random variable
+(`threshold = "max"`; a number such as `0.95` uses that quantile of the
+random variables instead, which is less dependent on how many there are).
+A predictor is dropped only when most algorithms do not support it. Remove
+those, make new random variables, fit again, and repeat until every
+predictor is kept, because importance is shared among predictors and
+changes when one is removed.
+
+### 13. Mapping where a projection extrapolates
+
+`niche_truncation()` answers per variable; `extrapolation_risk()` maps it,
+so that predictions in novel conditions can be masked or read with care:
+
+```r
+ex <- extrapolation_risk(reference = env_m, projection = env_2070)
+terra::plot(ex[[c("nt1", "nt2", "mop")]])
+novel <- ex$nt1 < 0 | ex$nt2 > 1          # outside a range, or a new combination
+```
+
+`nt1` (ExDet) is 0 inside the range of every variable and negative
+outside; `nt2` above 1 marks combinations of values that the calibration
+data lack although each value is within range, which range checks and
+MESS miss; `mop` grades similarity to the nearest tenth of the calibration
+data; `n_outside` and `most_novel` say how many variables are out of range
+and which is the farthest. `reference` can also be a table of the values
+at the records and background points used for fitting.
+
+## After modelling
+
+Fit your models with any software, then evaluate, select and report them.
+
+### 14. Model evaluation and selection
+
+The model-selection tools implement the approach of:
+
+> Konowalik, K., Nosol, A. (2021). Evaluation metrics and validation of
+> presence-only species distribution models based on distributional maps with
+> varying coverage. *Scientific Reports* 11, 1482.
+> <https://doi.org/10.1038/s41598-020-80062-1>
+
+One finding of the paper was that **AUC and MAE used together** are a reliable
+way to compare models (Figure 6 in the paper). AUC measures how well a model
+*ranks* presences above absences. MAE measures how *close* the predicted
+suitability values are to what was observed. A model can have an excellent
+AUC and still be badly calibrated, and MAE reveals this.
+
+On top of this, the package offers:
+
+- **any metrics you choose:** AUC vs MAE by default, plus TSS, the
+  continuous Boyce index, bias or your own metrics;
+- **Pareto-front selection** with a tolerance for ties, or conventional
+  **minimum values**;
+- **bootstrap** confidence intervals and the probability that each model is on
+  the Pareto front;
+- **spatial block cross-validation** across folds and background sets;
+- **temporal validation** of hindcasts against fossil or other dated records;
+- ready-to-publish `ggplot2` figures.
+
+### 15. Quick start: model selection with example data
 
 ```r
 library(preENM)
@@ -740,7 +858,7 @@ AUC alone cannot separate them. MAE can. `Maxent_LQ` is on the Pareto front in
 `Maxent_H_rm4` and `RandomForest` reach the front only about a third of the
 time.
 
-## Choosing which metrics to compare
+### 16. Choosing which metrics to compare
 
 AUC vs MAE is the default, but any metric pair, or more than two metrics, can
 be compared. Give each criterion a direction: `"max"` (higher is better),
@@ -781,7 +899,7 @@ metric is any `function(obs, pred)` that returns one number (`obs` is 0/1,
 `criteria`. The bootstrap gives confidence intervals and `p_pareto` for
 whichever criteria you choose.
 
-## Using your own data
+### 17. Using your own data
 
 You need three things:
 
@@ -829,7 +947,7 @@ tab <- data.frame(obs = c(1, 1, 0, 0, ...),   # 1 = presence, 0 = absence
 evaluate_models(data = tab, n_boot = 1000)
 ```
 
-## Full workflow: spatial cross-validation, fossil validation, selection
+### 18. Full workflow: spatial cross-validation, fossil validation, selection
 
 A typical workflow for choosing the algorithms of an ensemble:
 
@@ -895,7 +1013,7 @@ optionally, `set`. Any modelling software's output can be put in this form.
 With biomod2, for example, project the cross-validation models on the
 evaluation points and keep, for each run, the points of its held-out fold.
 
-### Plotting any metrics, zoom and 3-D
+#### Plotting any metrics, zoom and 3-D
 
 When many algorithms perform alike, the plot gets crowded in one corner.
 `plot(sel)` (also drawn by `select_models()` in interactive sessions) shows
@@ -931,7 +1049,7 @@ browser, can be rotated and hovered over (all values of a model), and saved
 as one HTML file. Axes always run from worse to better. Static plots are
 `ggplot` objects: save them with `ggplot2::ggsave()`.
 
-### Fossil (temporal) validation
+#### Fossil (temporal) validation
 
 Hindcasts can be tested against dated records, such as fossils or pollen.
 Records have no true absences, so each record is compared with background
@@ -1054,42 +1172,7 @@ Helpers for preparing the climate of each record:
 - `threshold_p10()`: the 10th-percentile training presence threshold, for
   sensitivity.
 
-## Testing the models against sampling bias
-
-A model can reach a high AUC by predicting where people record.
-`null_model_test()` replaces the presences by random locations drawn in
-proportion to recording effort and recomputes the metrics, many times; the
-p-value is the share of these null values at least as good as the real
-one:
-
-```r
-tab <- extract_predictions(models, presence, background)
-null_model_test(tab, pool = models, weight = effort, n_null = 499, seed = 1)
-```
-
-`pool` supplies the predictions at candidate cells (the model rasters, or
-a table); `weight` is a recording-effort raster (see
-`gbif_effort_rasters()`) or a column of the table. Without `weight` the
-draws are uniform. The models are not refitted, so it works with
-predictions of any software; it tests the locations, not the flexibility
-of the algorithm, unlike the null models of Raes and ter Steege (2007).
-
-## Reporting with ODMAP
-
-`odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
-2020) that your workflow determines, from the objects themselves, and
-leaves the others for you:
-
-```r
-od <- odmap_table(filter = res, m = m, thinning = th, records = occ_final,
-                  background = bg, variables = vs, predictors = names(env),
-                  truncation = tr, block_size = bs, folds = pts$fold,
-                  evaluation = ev, selection = sel,
-                  fields = list("Study title" = "...", "Focal Taxon" = "..."),
-                  file = "odmap.csv")
-```
-
-## How the selection works
+### 19. How the selection works
 
 1. **Metrics.** For each model, compute **AUC** (Mann–Whitney formulation,
    higher is better), **MAE** (`mean(|obs − pred|)`, lower is better),
@@ -1124,6 +1207,41 @@ computed elsewhere such as AICc or omission rates:
 ```r
 pareto_rank(my_table, maximize = c("AUC", "TSS"), minimize = c("MAE", "AICc"),
             zero = "bias")
+```
+
+### 20. Testing the models against sampling bias
+
+A model can reach a high AUC by predicting where people record.
+`null_model_test()` replaces the presences by random locations drawn in
+proportion to recording effort and recomputes the metrics, many times; the
+p-value is the share of these null values at least as good as the real
+one:
+
+```r
+tab <- extract_predictions(models, presence, background)
+null_model_test(tab, pool = models, weight = effort, n_null = 499, seed = 1)
+```
+
+`pool` supplies the predictions at candidate cells (the model rasters, or
+a table); `weight` is a recording-effort raster (see
+`gbif_effort_rasters()`) or a column of the table. Without `weight` the
+draws are uniform. The models are not refitted, so it works with
+predictions of any software; it tests the locations, not the flexibility
+of the algorithm, unlike the null models of Raes and ter Steege (2007).
+
+### 21. Reporting with ODMAP
+
+`odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
+2020) that your workflow determines, from the objects themselves, and
+leaves the others for you:
+
+```r
+od <- odmap_table(filter = res, m = m, thinning = th, records = occ_final,
+                  background = bg, variables = vs, predictors = names(env),
+                  truncation = tr, block_size = bs, folds = pts$fold,
+                  evaluation = ev, selection = sel,
+                  fields = list("Study title" = "...", "Focal Taxon" = "..."),
+                  file = "odmap.csv")
 ```
 
 ## Citation

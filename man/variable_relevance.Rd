@@ -7,7 +7,7 @@
 variable_relevance(
   points,
   env,
-  null = c("field", "shift"),
+  null = c("field", "shift", "noise"),
   n_null = 499,
   alpha = 0.05,
   n_bg = 10000,
@@ -24,7 +24,7 @@ variable_relevance(
 \item{env}{Predictor layers of the calibration area
 (\link[terra:SpatRaster-class]{terra::SpatRaster} or file paths).}
 
-\item{null}{The null model: \code{"field"} or \code{"shift"}.}
+\item{null}{The null model: \code{"field"}, \code{"shift"} or \code{"noise"}.}
 
 \item{n_null}{Number of random layers per predictor.}
 
@@ -79,14 +79,15 @@ keeps its exact spatial structure (the torus-translation test of Harms
 et al. 2001). Needs a calibration area that fills most of the raster's
 rectangle: records that land on cells without values are left out, and
 a shift is redrawn if fewer than half remain.
-}
-
-Random values without spatial structure (white noise, as in
-\code{\link[=random_variables]{random_variables()}} with \code{method = "shuffle"}) would be a much weaker
-null: real layers are smooth and records are clustered, so even a
-meaningless smooth layer, such as a painting, differs from the
+\item \code{"noise"}: the values of the layer shuffled among the cells, that is
+a random variable without any spatial structure (white noise, as
+\code{\link[=random_variables]{random_variables()}} makes with \code{method = "shuffle"}). This is the
+classic random variable and an option for comparison, not a
+recommendation: real layers are smooth and records are clustered, so
+even a meaningless smooth layer, such as a painting, differs from the
 background at the records far more than noise does (Fourcade et al.
-2018).
+2018), and nearly every layer passes this test.
+}
 
 \strong{Reading the result.} \code{p_value} is the share of random layers with a
 \code{D} at least as large as the real one; \code{relevant} marks layers with

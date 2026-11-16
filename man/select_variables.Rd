@@ -74,10 +74,14 @@ cells.}
 An object of class \code{var_selection}; see \code{\link[=best_sets]{best_sets()}},
 \code{\link[=plot_variable_tree]{plot_variable_tree()}}, \code{\link[=plot_correlation]{plot_correlation()}}, \code{\link[=plot_variable_sets]{plot_variable_sets()}} and
 \code{\link[=write_variable_selection]{write_variable_selection()}}. Its elements: \code{sets} (all passing sets with
-their scores, \code{pareto}, \code{mean_rank} and \code{rank} within the size),
+their scores, \code{pareto}, \code{mean_rank} and \code{rank} within the size; with
+regions also \code{regional_maxr}, the largest |rho| of the set inside a
+region, and \code{worst_region}, where it occurs),
 \code{counts} (sets surviving each filter), \code{pairs} (each pair: rho per data
 set, largest and smallest |rho|, the data set driving it, sign changes,
-regional maximum, \code{compatible}), \code{variables} (single-variable
+regional maximum and the region where it occurs (\code{regional_driver}),
+\code{compatible}), \code{regions} (one row per data set and region, see
+\code{\link[=correlation_by_region]{correlation_by_region()}}), \code{variables} (single-variable
 properties and cluster), \code{frequency} (how often each variable appears in
 passing, Pareto and top sets), \code{reference_sets}, \code{consistency} (the two
 \code{agreement} data sets compared per variable), \code{structure_agreement}

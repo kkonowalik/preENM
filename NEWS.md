@@ -1,3 +1,34 @@
+# preENM 2.14.0
+
+* Five new day-length indices in `climate_indices()` (25 in total), all in
+  the `light` group and computed from latitude and the temperature season,
+  without extra data: `daylength_end` (photoperiod when the growing season
+  ends), `daylength_gs` (mean day length of the season), `daylight_gs`
+  (hours of daylight in the season), `daylength_max` (the longest day) and
+  `days_to_solstice` (days from the start of the season to the summer
+  solstice, with the start interpolated between monthly means).
+* `climate_index_names(table = TRUE)` and the index table of the manual now
+  give, for every index, its group, what it is useful for and its source
+  in the literature; indices defined here are marked "this package". The
+  references of `?climate_indices` are complete for all indices.
+* `download_chelsa_trace21k()`, `trace21k_urls()`, `trace21k_time()`:
+  CHELSA-TraCE21k (monthly layers and bioclimatic variables of any century
+  of the last 22,000 years), for a region only if wanted, so the climate
+  indices can be computed for the past. `monthly_files()` also finds months
+  written without a leading zero.
+* `select_variables()` reports the regions explicitly: the printed summary
+  lists every region of every data set with its cells, strongest
+  correlation and pair; `correlation_by_region()` gives the same table for
+  all variables or for a chosen set; sets carry `regional_maxr` and
+  `worst_region`, pairs `regional_driver`; regions too small to be screened
+  are listed as such. `write_variable_selection()` writes both tables.
+* `variable_relevance(null = "noise")`: the classic random variable
+  without spatial structure, as an option. The default is unchanged.
+* The manual (README) is reordered into the steps of a project: installation,
+  an overview table with links, the steps before modelling, the steps
+  after modelling. One index table instead of two, generic examples
+  (three periods instead of names from one study), new figures.
+
 # preENM 2.13.0
 
 Are the selected predictors better than random variables? The elimination

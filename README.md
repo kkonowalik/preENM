@@ -25,6 +25,7 @@ your own code.
 | **Coordinate uncertainty in environmental terms** | **available** | `uncertainty_environment()` |
 | **Niche truncation check** (is M large enough, do projections go beyond it?) | **available** | `niche_truncation()`, `plot_niche_truncation()` |
 | **Correlation analysis and variable selection** (across periods, scenarios and regions) | **available** | `sample_environment()`, `select_variables()`, `best_sets()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
+| **Predictors against random variables** (before modelling and inside the models) | **available** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | **Extrapolation risk of projections** (ExDet, MOP) | **available** | `extrapolation_risk()` |
 | **Pre-modelling checks** (sample size, record years vs climate period) | **available** | `check_sample_size()`, `match_climate_period()` |
 | **Significance against sampling bias** | **available** | `null_model_test()` |
@@ -483,6 +484,74 @@ then enters the screen, and `novelty` reports the worst one.
 
 The figures use simulated climate (present, a second present-day source and
 an LGM with exaggerated gradients).
+
+## Are the selected predictors better than random variables?
+
+A set of uncorrelated predictors can still hold layers that mean nothing to
+the species. The test of Konowalik (2022) answers this by modelling the
+predictors together with random variables and removing those that are no
+more important than the random ones. preENM offers it in two forms.
+
+**Before any modelling.** `variable_relevance()` compares, for each layer,
+the values at the records with the values available in the calibration
+area (Kolmogorov-Smirnov distance `D`), and asks how often a random layer
+reaches the same distance at the same records:
+
+```r
+rel <- variable_relevance(occ_thinned, env, n_null = 499)
+rel
+#>        layer     D null_mean null_95 p_value relevant shift_sd breadth_ratio
+#>  temperature 0.458     0.190   0.311   0.002     TRUE    0.705         0.459
+#>     rainfall 0.290     0.179   0.319   0.080    FALSE   -0.306         0.478
+#>        slope 0.063     0.185   0.310   0.995    FALSE   -0.029         0.911
+```
+
+The random layers are not white noise. Real layers are smooth and records
+are clustered, so a meaningless smooth layer differs from the background at
+the records far more than noise does (Fourcade et al. 2018 predicted
+distributions from paintings). The null layers therefore have the spatial
+structure of the real one: `null = "field"` draws smooth random surfaces
+with the same autocorrelation range (any shape of M), `null = "shift"`
+moves the layer itself around the raster (torus translation, Harms et al.
+2001; faster and exact, for an M that fills most of the rectangle).
+`shift_sd` and `breadth_ratio` say how the species responds: its optimum
+is shifted from the mean of the area, or its niche is narrower than the
+area.
+
+It is a screen and it has limits: it looks at one layer at a time (an
+interaction can be missed), a layer correlated with a true driver passes
+too, recording bias along a layer looks like a response (use thinned
+records), and a layer that is one gradient across the whole area cannot be
+told apart from geography.
+
+**Inside the models, with any software.** `random_variables()` writes
+random layers to add to the predictors. Each takes the values of one real
+layer (same distribution, same empty cells) and arranges them in smooth
+random patches of the same size as in the real layer; `method = "shuffle"`
+gives the classic white-noise variable.
+
+```r
+rnd <- random_variables(env, n = 5, seed = 1, filename = "random.tif")
+# fit your models with c(env, rnd), several algorithms and runs, and
+# collect the importance of every variable in a long table
+keep <- compare_to_random(importance, variable = "variable",
+                          value = "importance", algorithm = "algorithm",
+                          run = "run")
+keep
+#>     variable Maxent  GLM   RF  GBM  GAM algorithms mean_importance  keep
+#>  temperature    1.0  1.0  1.0  1.0  1.0          5            41.2  TRUE
+#>     rainfall    0.8  0.4  1.0  0.6  0.2          3            12.9  TRUE
+#>        slope    0.0  0.2  0.4  0.0  0.0          0             2.1 FALSE
+```
+
+The columns of the algorithms give the share of runs in which the
+predictor was more important than the best random variable
+(`threshold = "max"`; a number such as `0.95` uses that quantile of the
+random variables instead, which is less dependent on how many there are).
+A predictor is dropped only when most algorithms do not support it. Remove
+those, make new random variables, fit again, and repeat until every
+predictor is kept, because importance is shared among predictors and
+changes when one is removed.
 
 ## Cutting raster files to M
 

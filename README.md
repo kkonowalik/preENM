@@ -42,7 +42,7 @@ step can be used on its own.
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
 | Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough?) | `niche_truncation()`, `plot_niche_truncation()` |
-| Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
+| Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP) | `extrapolation_risk()` |
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
@@ -629,14 +629,46 @@ vs <- select_variables(
     moisture    = c("bio12", "bio13", "bio14", "bio16", "bio17")),
   reference_sets = list(first_choice = c("bio04", "bio05", "bio06",
                                          "bio14", "bio15")))
-vs                               # regions, counts per filter, best sets per size
-best_sets(vs, n = 10, size = 4)  # ranked sets with their scores
+vs                               # best sets, a summary in words, then the details
+best_sets(vs, n = 10, size = 4)  # ranked sets of one size with their scores
+recommend_sets(vs)               # the summary alone
 vs$frequency                     # how often each variable is in good sets
 vs$pairs                         # each pair: rho per data set, driver, ...
-plot_variable_tree(vs, best_sets(vs)$set[1])
-plot_variable_sets(vs)
-write_variable_selection(vs, "correlation", "species")
+plot_variable_sets(vs)           # score card of the best sets
+plot_variable_tree(vs)           # tree of the variables with the best sets below
+
+# save the results
+write.csv(best_sets(vs, n = 10), "best_variable_sets.csv", row.names = FALSE)
+write_variable_selection(vs, "correlation", "species")   # all tables and figures
 ```
+
+Printing `vs` shows the result in the order you need it: the **best sets**
+of every size, then **in short** a few sentences (the suggested set and how
+good it is, close alternatives, the sizes for which nothing passes and
+why, variables that the good sets share or that never pass, correlations
+that change between periods, what the regional screen excluded), then the
+details. The suggested set is the best-ranked one of the largest size that
+passes; treat it as a starting point and choose among the top sets on
+ecological grounds. If no set of a size passes, `best_sets(vs, size = 4)`
+returns no rows and says at which filter they were lost, e.g. that every
+combination of four variables contains a collinear pair.
+
+![Score card of the best sets](man/figures/variable_sets.png)
+
+In the score card each row is a set and each column a score; the shading
+compares the passing sets of one size (darker = better) and `*` marks the
+Pareto front. `plot_variable_sets(vs, type = "scatter")` shows all passing
+sets on two scores instead.
+
+![Union tree with the best sets](man/figures/variable_tree.png)
+
+In the tree, variables joined below the dashed line are collinear in at
+least one data set; these clusters are shaded alternately. Each row below
+the tree is one set (its size and rank on the left) and the dots mark its
+variables, so you can see that a set takes one variable from a cluster and
+which variables are interchangeable. The first row is in blue and its
+variables are in bold. Show your own choice next to the best set with
+`plot_variable_tree(vs, c(best = best_sets(vs)$set[1], mine = "bio05 bio15 bio17"))`.
 
 **Regions.** Each region of each data set is reported on its own line, so
 you can see where a correlation comes from:
@@ -665,6 +697,35 @@ occurs (`worst_region`), and `vs$pairs` the same for every pair
 `min_region_n` sampled cells are listed with `screened = FALSE` and not
 used; draw more cells (`n`) or lower the limit to include them.
 
+**Ice and sea in past periods.** Palaeoclimate layers usually have values
+under the ice sheets and over what was sea. Those cells are sampled like
+any other, and a region that was glaciated is screened as if it were land,
+which can exclude good sets for no reason. Leave such cells out per data
+set with `exclude` (polygons or a raster) or restrict a data set with
+`keep`, or leave a region out of the screen for one period:
+
+```r
+es <- sample_environment(
+  list(present = "M_area_present", YDS = "M_area_12ka", LGM = "M_area_21ka"),
+  vars = vars, regions = regions, n = 1e5, seed = 1,
+  exclude = list(YDS = "ice_12ka.gpkg",       # e.g. DATED-1 ice extents (Hughes et al. 2016),
+                 LGM = "ice_21ka.gpkg"),      # or a glacier raster such as TraCE21k glz
+  keep    = list(LGM = "land_21ka.tif"))      # optional: the land of that period
+
+vs <- select_variables(es, sizes = 3:6,
+                       skip_regions = "LGM | Scandes")   # or skip one region in one period
+```
+
+A raster mask takes every cell with a value other than `NA` and 0, so look
+at the layer first. Nothing is downloaded automatically: ice reconstructions
+differ between regions and authors, and the choice is yours. Without a
+mask, data sets whose names or files look like past periods (`LGM`, `21ka`,
+TraCE21k time ids, ...) give a warning; if your layers are already cut to
+the land of each period, switch it off with
+`options(preENM.past_warning = FALSE)`. The summary also names the regions
+in which pairs are excluded only by the regional screen, which is where to
+look first.
+
 **Two sources for one period, and anomalies.** If you have the calibration
 period from two sources (e.g. an observation-based climatology and the
 present-day step of the palaeoclimate model), add both and name them in
@@ -688,11 +749,8 @@ For future climate, use the scenarios as data sets, e.g.
 `list(present = ..., ssp126_2070 = ..., ssp585_2070 = ...)`. Every scenario
 then enters the screen, and `novelty` reports the worst one.
 
-![Scored variable sets](man/figures/variable_sets.png)
-![Union tree with the best set](man/figures/variable_tree.png)
-
-The figures use simulated climate (present, a second present-day source and
-an LGM with exaggerated gradients).
+The figures above use simulated climate (thirteen layers in five groups
+of collinear variables, three periods, six regions).
 
 ### 12. Are the selected predictors better than random variables?
 

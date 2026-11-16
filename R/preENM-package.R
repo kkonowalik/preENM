@@ -19,7 +19,8 @@
 #'   (ExDet and MOP).
 #' * [check_sample_size()], [match_climate_period()]: enough records, and
 #'   from the period of the climate data?
-#' * [sample_environment()], [select_variables()], [best_sets()]: predictor
+#' * [sample_environment()], [select_variables()], [best_sets()],
+#'   [recommend_sets()]: predictor
 #'   sets uncorrelated in every period, scenario and region, ranked.
 #' * [variable_relevance()], [random_variables()], [compare_to_random()]:
 #'   are the predictors more informative than random variables, before

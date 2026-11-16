@@ -29,6 +29,21 @@
 #' **Regions** are the areas within which correlations are also checked:
 #' polygons (e.g. the Alps, the Carpathians, Scandinavia) or a grid of tiles.
 #'
+#' **Ice and sea in past periods.** Palaeoclimate layers (e.g.
+#' CHELSA-TraCE21k) usually have values under the ice sheets and over what
+#' was sea, and those cells are sampled like any other. They do not belong
+#' to the area a species could live in, and a region that was under the ice
+#' is then screened as if it were land. `exclude` and `keep` leave such
+#' cells out, per data set: for example the ice extent of each period as
+#' polygons (such as the DATED-1 reconstruction of the Eurasian ice sheets,
+#' Hughes et al. 2016) or as a raster (such as the glacier layer `glz` that comes
+#' with CHELSA-TraCE21k; look at it first, a raster mask takes every cell
+#' with a value other than `NA` and 0), and a land raster of the period for `keep`. The
+#' common cells are then those unmasked in every data set. Without a mask,
+#' data sets whose names or files look like past periods give a warning
+#' (switch it off with `options(preENM.past_warning = FALSE)` when the
+#' layers are already cut to the land of each period).
+#'
 #' @param datasets Named list of data sets; each a [terra::SpatRaster] with
 #'   one layer per variable, a vector of raster files or a folder. The first is
 #'   the reference (the calibration period) unless `reference` says otherwise.
@@ -56,9 +71,19 @@
 #'   reference.
 #' @param area_weighted Area-proportional sampling for longitude/latitude
 #'   rasters.
+#' @param exclude,keep Optional masks, to leave cells out of a data set
+#'   (`exclude`, e.g. the ice sheet of that period) or to restrict it to
+#'   some cells (`keep`, e.g. the land of that period). One mask for all
+#'   data sets, or a list named by data set, e.g. `exclude = list(LGM =
+#'   "ice_21ka.gpkg")`. A mask is polygons (`sf`, [terra::SpatVector] or a
+#'   file; the cells whose centre is inside) or a raster (object or file;
+#'   the cells with a value other than `NA` and 0), in any CRS.
 #' @param seed Optional random seed.
 #' @param verbose Print progress.
 #' @return An object of class `env_sample` for [select_variables()].
+#' @references Hughes, A.L.C., Gyllencreutz, R., Lohne, O.S., Mangerud, J.,
+#'   Svendsen, J.I. (2016) The last Eurasian ice sheets: a chronological
+#'   database and time-slice reconstruction, DATED-1. *Boreas* 45, 1-45.
 #' @export
 #' @examples
 #' sim <- simulate_enm_data(seed = 1)
@@ -75,6 +100,7 @@ sample_environment <- function(datasets, vars = NULL, n = 1e5,
                                ratio_vars = NULL, ratio_limits = c(0.1, 10),
                                bounds = NULL, check_scale = TRUE,
                                fix_scale = FALSE, area_weighted = TRUE,
+                               exclude = NULL, keep = NULL,
                                seed = NULL, verbose = TRUE) {
   say <- function(...) if (verbose) message(...)
   if (!is.list(datasets) || inherits(datasets, "SpatRaster")) {
@@ -90,6 +116,28 @@ sample_environment <- function(datasets, vars = NULL, n = 1e5,
     stop("`reference` must be one of the data sets.", call. = FALSE)
   }
   if (is.null(vars)) vars <- names(ds[[reference]])
+  # a misplaced argument, e.g. bounds = list(fix_scale = TRUE)
+  if (!is.null(bounds)) {
+    if (!is.list(bounds) || is.null(names(bounds))) {
+      stop("`bounds` must be a named list of limits per variable, e.g. ",
+           "list(scd = c(0, 365)).", call. = FALSE)
+    }
+    odd <- setdiff(names(bounds), vars)
+    if (length(odd)) {
+      own <- intersect(odd, names(formals(sample_environment)))
+      warning("`bounds` has entries that are not variables and are ignored: ",
+              paste(odd, collapse = ", "), ".",
+              if (length(own)) paste0(" `", own[1], "` is an argument of its ",
+                                      "own: write ", own[1], " = ... outside ",
+                                      "`bounds`."), call. = FALSE)
+    }
+    if (is.null(anomalies) && length(setdiff(names(bounds), odd))) {
+      say("`bounds` only applies to anomaly data sets; none was requested.")
+    }
+  }
+  if (is.null(anomalies) && !is.null(ratio_vars)) {
+    say("`ratio_vars` only applies to anomaly data sets; none was requested.")
+  }
   ds <- lapply(names(ds), function(k) match_layers(ds[[k]], vars, k))
   names(ds) <- names(datasets)
   same_grid <- all(vapply(ds, function(r) {
@@ -98,9 +146,43 @@ sample_environment <- function(datasets, vars = NULL, n = 1e5,
 
   say("Finding cells with values in all ", length(vars), " variables ...")
   valid <- lapply(ds, valid_cells)
+  # cells to leave out of a data set (ice, sea) or to restrict it to (land)
+  exclude <- mask_list(exclude, names(ds), "exclude")
+  keep <- mask_list(keep, names(ds), "keep")
+  masked <- stats::setNames(rep(NA_real_, length(ds)), names(ds))
+  for (k in names(ds)) {
+    if (is.null(exclude[[k]]) && is.null(keep[[k]])) next
+    n0 <- length(valid[[k]])
+    if (!is.null(keep[[k]])) {
+      valid[[k]] <- valid[[k]][in_mask(ds[[k]], valid[[k]], keep[[k]])]
+    }
+    if (!is.null(exclude[[k]]) && length(valid[[k]])) {
+      valid[[k]] <- valid[[k]][!in_mask(ds[[k]], valid[[k]], exclude[[k]])]
+    }
+    masked[[k]] <- 1 - length(valid[[k]]) / n0
+    say(k, ": ", round(100 * masked[[k]], 1), "% of the cells with values ",
+        "left out by the mask")
+  }
   for (k in names(valid)) {
     if (!length(valid[[k]])) stop("No cells with values in all variables in ",
-                                  k, ".", call. = FALSE)
+                                  k, if (!is.na(masked[[k]])) " after masking",
+                                  ".", call. = FALSE)
+  }
+  # palaeoclimate layers have values under the ice and over the sea
+  past <- setdiff(names(ds)[is.na(masked) & looks_past(names(ds), datasets)],
+                  reference)
+  if (length(past) && !isFALSE(getOption("preENM.past_warning"))) {
+    warning("Data set(s) ", paste(past, collapse = ", "), " look like past ",
+            "periods and are sampled without a mask. Palaeoclimate layers ",
+            "usually have values under the ice sheets and over the sea, so ",
+            "such cells enter the correlations", if (!is.null(regions))
+              ", and a region that was glaciated is screened as if it were land",
+            ". Leave them out with `exclude` (ice) or `keep` (land of that ",
+            "period)", if (!is.null(regions))
+              ", or skip a region in a period with select_variables(skip_regions = )",
+            ". If the layers are already cut to the land of each period, ",
+            "silence this with options(preENM.past_warning = FALSE).",
+            call. = FALSE)
   }
   out <- with_seed(seed, {
     own <- lapply(names(ds), function(k) draw_cells(ds[[k]], valid[[k]], n,
@@ -206,7 +288,7 @@ sample_environment <- function(datasets, vars = NULL, n = 1e5,
               anomalies = names(anomalies), same_grid = same_grid,
               lonlat = terra::is.lonlat(ds[[reference]]),
               area_weighted = area_weighted,
-              regions = !is.null(regions), n = n)
+              regions = !is.null(regions), n = n, masked = masked)
   class(res) <- "env_sample"
   say("Sample: ", paste(names(sets), vapply(sets, nrow, 1L), sep = " = ",
                         collapse = ", "),
@@ -223,12 +305,77 @@ print.env_sample <- function(x, ...) {
             collapse = ", "), " cells\n", sep = "")
   cat("Common cells: ", if (is.null(x$common)) "none" else nrow(x$common[[1]]),
       "; area-proportional: ", x$lonlat && x$area_weighted, "\n", sep = "")
+  if (any(!is.na(x$masked))) {
+    m <- x$masked[!is.na(x$masked)]
+    cat("Masked (share of cells left out): ",
+        paste0(names(m), " = ", round(100 * m, 1), "%", collapse = ", "),
+        "\n", sep = "")
+  }
   if (x$regions) {
     tab <- table(x$sets[[x$reference]]$.region)
     cat("Regions (cells in the reference): ",
         paste(names(tab), tab, sep = " = ", collapse = ", "), "\n", sep = "")
   }
   invisible(x)
+}
+
+# `exclude` / `keep` as a list with one entry per data set (internal)
+mask_list <- function(m, sets, what) {
+  if (is.null(m)) return(list())
+  if (!is.list(m) || inherits(m, c("sf", "sfc", "SpatRaster", "SpatVector"))) {
+    return(stats::setNames(rep(list(m), length(sets)), sets))
+  }
+  if (is.null(names(m)) || any(!names(m) %in% sets)) {
+    stop("`", what, "` must be one mask for all data sets or a list named ",
+         "by data set (", paste(sets, collapse = ", "), ").", call. = FALSE)
+  }
+  m
+}
+
+# Are the cells of `r` inside the mask? A mask is polygons (inside) or a
+# raster (cells with a value other than NA and 0), in any CRS and on any
+# grid (internal)
+in_mask <- function(r, cells, m) {
+  if (is.character(m)) {
+    m <- if (grepl("\\.(tif|tiff|asc|nc|vrt|img)$", m[1], ignore.case = TRUE))
+      terra::rast(m) else terra::vect(m)
+  }
+  if (inherits(m, c("sf", "sfc"))) m <- terra::vect(m)
+  if (inherits(m, "SpatVector")) {
+    if (!terra::same.crs(m, r)) m <- terra::project(m, terra::crs(r))
+    g <- terra::rasterize(m, terra::rast(r[[1]]), field = 1, touches = FALSE)
+    v <- read_cells(g, cells)[, 1]
+    return(!is.na(v))
+  }
+  if (!inherits(m, "SpatRaster")) {
+    stop("A mask must be polygons or a raster (object or file).",
+         call. = FALSE)
+  }
+  m <- m[[1]]
+  v <- if (isTRUE(terra::compareGeom(m, r, stopOnError = FALSE))) {
+    read_cells(m, cells)[, 1]
+  } else {
+    xy <- terra::xyFromCell(r, cells)
+    if (!terra::same.crs(m, r)) {
+      xy <- terra::crds(terra::project(terra::vect(xy, crs = terra::crs(r)),
+                                       terra::crs(m)))
+    }
+    terra::extract(m, xy)[[1]]
+  }
+  !is.na(v) & v != 0
+}
+
+# Do the names (or the files) of the data sets suggest a past period?
+# (internal)
+looks_past <- function(nm, datasets) {
+  pat <- paste0("lgm|glaci|stadial|dryas|holocene|pleistocene|trace21k|",
+                "(^|[^a-z])(yd|ka|kyr|kya|bp)([^a-z]|$)|[0-9]ka|[0-9]kyr|",
+                "[0-9]bp|_-[0-9]+")
+  vapply(seq_along(nm), function(i) {
+    src <- datasets[[i]]
+    txt <- c(nm[i], if (is.character(src)) utils::head(basename(src), 3))
+    any(grepl(pat, txt, ignore.case = TRUE))
+  }, logical(1))
 }
 
 # --- reading helpers ---------------------------------------------------------------

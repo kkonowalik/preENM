@@ -8,27 +8,49 @@ plot_variable_sets(
   x,
   x_metric = NULL,
   y_metric = NULL,
-  n_labels = 3,
-  base_size = 10
+  n_labels = 5,
+  base_size = 10,
+  type = c("scores", "scatter"),
+  n = 8
 )
 }
 \arguments{
 \item{x}{A \code{var_selection}.}
 
-\item{x_metric, y_metric}{Scores on the axes (default: the first two
-criteria).}
+\item{x_metric, y_metric}{Scores on the axes of the scatter (default: the
+two criteria with the most distinct values). Giving one switches to
+the scatter.}
 
-\item{n_labels}{Number of best-ranked sets labelled per size.}
+\item{n_labels}{Number of best-ranked sets labelled per size in the
+scatter.}
 
 \item{base_size}{Base font size.}
+
+\item{type}{\code{"scores"} or \code{"scatter"}.}
+
+\item{n}{Number of best-ranked sets per size in the score card.}
 }
 \value{
 A \code{ggplot} object.
 }
 \description{
-Every passing set in the space of two criteria, one panel per set size;
-Pareto-front sets are filled and the best-ranked sets are labelled.
+Two views of the passing sets, one panel per set size:
+}
+\details{
+\itemize{
+\item \code{type = "scores"} (default): a score card. Rows are the best-ranked
+sets, columns the criteria and the largest correlations; each cell
+shows the value, shaded by how good it is among all passing sets of
+that size (darker = better). Sets on the Pareto front are marked \code{*}.
+\item \code{type = "scatter"}: every passing set in the space of two criteria.
+Pareto-front sets are filled blue, and the best-ranked sets carry
+their rank, with the key below the plot. Scores that take few
+distinct values (e.g. \code{gradient_min}, which is decided by one
+variable) put the sets on lines; choose other axes with \code{x_metric}
+and \code{y_metric}, or use the score card.
+}
 }
 \examples{
-# see ?select_variables; e.g. plot_variable_sets(vs)
+# see ?select_variables; e.g. plot_variable_sets(vs) and
+# plot_variable_sets(vs, type = "scatter")
 }

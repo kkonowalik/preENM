@@ -13,6 +13,7 @@ select_variables(
   thr_r_regional = 0.85,
   thr_vif_regional = 10,
   min_region_n = 1000,
+  skip_regions = NULL,
   screen_sets = NULL,
   require_one_of = NULL,
   targets = NULL,
@@ -38,6 +39,11 @@ select_variables(
 \item{thr_r_regional, thr_vif_regional}{Softer limits inside regions.}
 
 \item{min_region_n}{Regions with fewer sampled cells are ignored.}
+
+\item{skip_regions}{Regions to leave out of the regional screen: region
+names (skipped in every data set) and/or \code{"data set | region"} (as in
+the \code{regions} table), e.g. \code{"LGM | Scandes"} for a region that was
+under the ice at the Last Glacial Maximum.}
 
 \item{screen_sets}{Data sets used in the screen (default: all).}
 

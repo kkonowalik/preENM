@@ -163,7 +163,7 @@ test_that("scores, Pareto front and ranking", {
   expect_equal(nrow(b), 2)
   expect_equal(nrow(best_sets(vs, pareto_only = TRUE)),
                min(5, sum(s$pareto)))
-  expect_output(print(vs), "Best sets")
+  expect_output(print(vs), "BEST SETS")
   expect_equal(diag(vs$structure_agreement), rep(1, nrow(
     vs$structure_agreement)), ignore_attr = TRUE)
 })

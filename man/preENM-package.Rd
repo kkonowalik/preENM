@@ -26,7 +26,8 @@ by the calibration area, and do projections go beyond it?
 (ExDet and MOP).
 \item \code{\link[=check_sample_size]{check_sample_size()}}, \code{\link[=match_climate_period]{match_climate_period()}}: enough records, and
 from the period of the climate data?
-\item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}}: predictor
+\item \code{\link[=sample_environment]{sample_environment()}}, \code{\link[=select_variables]{select_variables()}}, \code{\link[=best_sets]{best_sets()}},
+\code{\link[=recommend_sets]{recommend_sets()}}: predictor
 sets uncorrelated in every period, scenario and region, ranked.
 \item \code{\link[=variable_relevance]{variable_relevance()}}, \code{\link[=random_variables]{random_variables()}}, \code{\link[=compare_to_random]{compare_to_random()}}:
 are the predictors more informative than random variables, before

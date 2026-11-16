@@ -2,15 +2,20 @@
 % Please edit documentation in R/variables_output.R
 \name{plot_variable_tree}
 \alias{plot_variable_tree}
-\title{Dendrogram of the variables}
+\title{Dendrogram of the variables, with the best sets below it}
 \usage{
-plot_variable_tree(x, set = NULL, base_size = 11)
+plot_variable_tree(x, set = NULL, n_sets = 2, base_size = 11)
 }
 \arguments{
 \item{x}{A \code{var_selection}.}
 
-\item{set}{Optional variables to highlight (a character vector, or one
-string with names separated by spaces).}
+\item{set}{Sets to show as rows: \code{NULL} (default) = the \code{n_sets}
+best-ranked sets of each size; one set as a character vector of
+variable names; or several sets, each one string with names separated
+by spaces (as in \code{\link[=best_sets]{best_sets()}}), optionally named to label the rows.}
+
+\item{n_sets}{Number of best sets per size shown when \code{set} is \code{NULL}
+(at most 10 rows in total).}
 
 \item{base_size}{Base font size.}
 }
@@ -20,9 +25,16 @@ A \code{ggplot} object.
 \description{
 The union tree of \code{\link[=select_variables]{select_variables()}}: complete linkage on 1 - the largest
 |Spearman rho| over all data sets, so variables joined below the dashed
-line (|rho| >= \code{thr_r}) are collinear in at least one data set. Give a
-\code{set} to highlight its variables (e.g. one of \code{\link[=best_sets]{best_sets()}}).
+line (|rho| >= \code{thr_r}) are collinear in at least one data set; these
+clusters are shaded alternately. Below the tree, each row is one variable
+set and the dots mark its variables: a passing set takes at most one
+variable from each cluster. By default the rows are the best-ranked sets
+of each size (largest size first), labelled with their size and rank,
+and the variables of the first row are printed in bold.
 }
 \examples{
-# see ?select_variables; e.g. plot_variable_tree(vs, best_sets(vs)$set[1])
+# see ?select_variables; e.g. plot_variable_tree(vs), or with your own
+# choice next to the best set:
+# plot_variable_tree(vs, c(best = best_sets(vs)$set[1],
+#                          mine = "bio05 bio15 bio17"))
 }

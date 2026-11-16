@@ -17,7 +17,9 @@ best_sets(x, n = 5, size = NULL, pareto_only = FALSE)
 }
 \value{
 A data.frame of sets ordered by size and mean rank, with their
-scores.
+scores. When no set of a requested size passes the screen, a message
+says at which filter the sets of that size were lost, and the
+data.frame has no rows for it.
 }
 \description{
 The best variable sets of a selection

@@ -17,12 +17,14 @@ write_variable_selection(x, dir, prefix = "variables")
 The paths of the written files, invisibly.
 }
 \description{
-Writes CSV tables (\verb{<prefix>_sets.csv} with every passing set,
+Writes CSV tables (\verb{<prefix>_best_sets.csv} with the ten best sets per
+size, \verb{_sets.csv} with every passing set, \verb{_summary.txt} with the
+sentences of \code{\link[=recommend_sets]{recommend_sets()}}, \verb{_regions.csv}, \verb{_regions_best_set.csv},
 \verb{_pareto.csv}, \verb{_counts.csv}, \verb{_pairs.csv}, \verb{_variables.csv},
 \verb{_frequency.csv}, \verb{_reference_sets.csv}, \verb{_consistency.csv},
 \verb{_structure_agreement.csv}, \verb{_union_rho.csv}, \verb{_tree.nwk}) and PNG figures
-(\verb{_tree.png} with the best set highlighted, \verb{_union_heatmap.png},
-\verb{_sets.png}).
+(\verb{_tree.png} with the best sets below the tree, \verb{_union_heatmap.png},
+\verb{_sets.png} with the score card and \verb{_sets_scatter.png}).
 }
 \examples{
 # see ?select_variables; e.g. write_variable_selection(vs, tempdir())

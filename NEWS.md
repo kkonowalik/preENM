@@ -1,3 +1,39 @@
+# preENM 2.15.0
+
+Variable selection (`sample_environment()`, `select_variables()`):
+
+* The printed selection leads with the result: the best sets of every
+  size, then a summary in plain words ("IN SHORT"), then the details
+  (clusters, filter counts, regions). `recommend_sets()` returns the
+  summary: the suggested set and its scores, close alternatives, the sizes
+  for which nothing passes and why, variables shared by the good sets or
+  never passing, correlations that change between data sets, and the
+  regions in which pairs are excluded only by the regional screen.
+* `best_sets(vs, size = k)` no longer returns `NULL` when no set of that
+  size passes: it returns a table without rows and says at which filter
+  the sets were lost.
+* Masks for single data sets: `sample_environment(exclude = , keep = )`
+  leaves out cells (e.g. the ice sheet of a period) or restricts a data
+  set (e.g. to the land of a period), with polygons or rasters in any CRS.
+  `select_variables(skip_regions = )` leaves a region out of the regional
+  screen, in all data sets or in one (`"LGM | Scandes"`). Data sets that
+  look like past periods and have no mask give a warning, because
+  palaeoclimate layers usually have values under the ice and over the sea
+  (`options(preENM.past_warning = FALSE)` switches it off).
+* A misplaced argument such as `bounds = list(fix_scale = TRUE)` is now
+  reported instead of being ignored silently; `bounds` and `ratio_vars`
+  without anomalies give a note.
+* `plot_variable_sets()` draws a score card by default: the best sets as
+  rows, the scores as columns, shaded by how good each value is among the
+  passing sets. The scatter (`type = "scatter"`) labels the best sets with
+  their rank and gives the key below the plot, and chooses the two scores
+  with the most distinct values, so the points no longer fall on lines.
+* `plot_variable_tree()` shows the best sets of each size as rows of dots
+  below the tree and shades the clusters of collinear variables; several
+  sets, e.g. your own next to the best, can be given.
+* `write_variable_selection()` also writes `_best_sets.csv`,
+  `_summary.txt` and `_sets_scatter.png`.
+
 # preENM 2.14.0
 
 * Five new day-length indices in `climate_indices()` (25 in total), all in

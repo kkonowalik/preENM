@@ -46,6 +46,10 @@
 #' @param regional Use the regions (if the sample has them) in the screen.
 #' @param thr_r_regional,thr_vif_regional Softer limits inside regions.
 #' @param min_region_n Regions with fewer sampled cells are ignored.
+#' @param skip_regions Regions to leave out of the regional screen: region
+#'   names (skipped in every data set) and/or `"data set | region"` (as in
+#'   the `regions` table), e.g. `"LGM | Scandes"` for a region that was
+#'   under the ice at the Last Glacial Maximum.
 #' @param screen_sets Data sets used in the screen (default: all).
 #' @param require_one_of Optional named list of variable groups; every set
 #'   must contain at least one variable of each group.
@@ -101,6 +105,7 @@
 select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
                              regional = TRUE, thr_r_regional = 0.85,
                              thr_vif_regional = 10, min_region_n = 1000,
+                             skip_regions = NULL,
                              screen_sets = NULL, require_one_of = NULL,
                              targets = NULL, gradient_pairs = NULL,
                              agreement = NULL, criteria = NULL,
@@ -150,7 +155,9 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
       for (rg in sort(unique(stats::na.omit(d$.region)))) {
         i <- which(d$.region == rg)
         used <- FALSE
-        if (length(i) >= min_region_n) {
+        skipped <- paste(k, rg, sep = " | ") %in% skip_regions ||
+          rg %in% skip_regions
+        if (length(i) >= min_region_n && !skipped) {
           R <- spear(d[i, , drop = FALSE])
           if (!anyNA(R)) {
             reg_rho[[paste(k, rg, sep = " | ")]] <- R
@@ -159,7 +166,11 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
         }
         reg_info <- rbind(reg_info, data.frame(
           data_set = k, region = as.character(rg), cells = length(i),
-          screened = used, stringsAsFactors = FALSE))
+          screened = used,
+          why_not = if (used) "" else if (skipped) "skipped" else
+            if (length(i) < min_region_n) "too few cells" else
+              "constant variable",
+          stringsAsFactors = FALSE))
       }
     }
     if (!length(reg_rho)) {
@@ -463,6 +474,32 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
   out
 }
 
+# Why no set of these sizes passes: the filter at which the last sets
+# were lost (internal)
+why_no_sets <- function(x, sizes) {
+  cn <- x$counts[x$counts$size %in% sizes, , drop = FALSE]
+  if (!nrow(cn)) return("These sizes were not searched (see `sizes`).")
+  s <- x$settings
+  k <- length(unique(x$clusters$cluster))
+  if (all(cn$pairs_compatible == 0)) {
+    return(paste0(
+      "Every combination of that size contains a pair with |rho| >= ",
+      s$thr_r, " in a data set", if (length(x$regional_rho))
+        paste0(" or >= ", s$thr_r_regional, " in a region"),
+      " (the variables form ", k, " cluster", if (k != 1) "s",
+      " of collinear variables", if (length(x$regional_rho))
+        "; see correlation_by_region() for the regions", ")."))
+  }
+  if (all(cn$with_required_groups == 0)) {
+    return("No compatible combination has a variable of every group in `require_one_of`.")
+  }
+  if (all(cn$vif_ok == 0)) {
+    return(paste0("All compatible combinations exceed VIF ", s$thr_vif, "."))
+  }
+  paste0("All remaining combinations exceed VIF ", s$thr_vif_regional,
+         " in a region.")
+}
+
 # The region matrix in which the variables `idx` are most correlated
 # (internal)
 worst_region <- function(idx, Rl) {
@@ -548,7 +585,8 @@ correlation_by_region <- function(x, set = NULL) {
          call. = FALSE)
   }
   s <- x$settings
-  region_rows(x$regions[c("data_set", "region", "cells", "screened")],
+  region_rows(x$regions[c("data_set", "region", "cells", "screened",
+                          "why_not")],
               x$regional_rho, set, s$thr_r_regional, s$thr_vif_regional)
 }
 
@@ -572,7 +610,9 @@ mess_var <- function(ref, p) {
 #' @param size Optional set size(s).
 #' @param pareto_only Only sets on the Pareto front.
 #' @return A data.frame of sets ordered by size and mean rank, with their
-#'   scores.
+#'   scores. When no set of a requested size passes the screen, a message
+#'   says at which filter the sets of that size were lost, and the
+#'   data.frame has no rows for it.
 #' @export
 #' @examples
 #' # see ?select_variables
@@ -581,14 +621,26 @@ best_sets <- function(x, n = 5, size = NULL, pareto_only = FALSE) {
     stop("`x` must come from select_variables().", call. = FALSE)
   }
   r <- x$sets
-  if (is.null(r)) return(r)
-  if (!is.null(size)) r <- r[r$n_vars %in% size, , drop = FALSE]
-  if (pareto_only) r <- r[r$pareto, , drop = FALSE]
-  r <- do.call(rbind, lapply(split(r, r$n_vars), utils::head, n))
+  if (is.null(r)) {
+    message("No set passes the screen. ", why_no_sets(x, x$counts$size))
+    return(invisible(NULL))
+  }
   cols <- c("set", "n_vars", "rank", "mean_rank", "pareto",
             names(x$settings$criteria), "worst_maxr", "regional_maxr",
             "worst_region")
   if (all(is.na(r$worst_region))) r$worst_region <- r$regional_maxr <- NULL
+  if (!is.null(size)) {
+    none <- setdiff(size, r$n_vars)
+    if (length(none)) {
+      message("No set of ", paste(none, collapse = ", "), " variables passes ",
+              "the screen. ", why_no_sets(x, none), " Sizes with passing ",
+              "sets: ", paste(sort(unique(r$n_vars)), collapse = ", "), ".")
+    }
+    r <- r[r$n_vars %in% size, , drop = FALSE]
+  }
+  if (pareto_only) r <- r[r$pareto, , drop = FALSE]
+  r <- if (nrow(r)) do.call(rbind, lapply(split(r, r$n_vars), utils::head, n))
+  else r
   r <- r[intersect(unique(cols), names(r))]
   rownames(r) <- NULL
   r

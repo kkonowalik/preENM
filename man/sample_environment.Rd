@@ -18,6 +18,8 @@ sample_environment(
   check_scale = TRUE,
   fix_scale = FALSE,
   area_weighted = TRUE,
+  exclude = NULL,
+  keep = NULL,
   seed = NULL,
   verbose = TRUE
 )
@@ -62,6 +64,13 @@ reference.}
 \item{area_weighted}{Area-proportional sampling for longitude/latitude
 rasters.}
 
+\item{exclude, keep}{Optional masks, to leave cells out of a data set
+(\code{exclude}, e.g. the ice sheet of that period) or to restrict it to
+some cells (\code{keep}, e.g. the land of that period). One mask for all
+data sets, or a list named by data set, e.g. \code{exclude = list(LGM = "ice_21ka.gpkg")}. A mask is polygons (\code{sf}, \link[terra:SpatVector-class]{terra::SpatVector} or a
+file; the cells whose centre is inside) or a raster (object or file;
+the cells with a value other than \code{NA} and 0), in any CRS.}
+
 \item{seed}{Optional random seed.}
 
 \item{verbose}{Print progress.}
@@ -96,6 +105,21 @@ needed): \code{anomalies = list(LGM_delta = c(current = "CHELSA", past = "LGM", 
 
 \strong{Regions} are the areas within which correlations are also checked:
 polygons (e.g. the Alps, the Carpathians, Scandinavia) or a grid of tiles.
+
+\strong{Ice and sea in past periods.} Palaeoclimate layers (e.g.
+CHELSA-TraCE21k) usually have values under the ice sheets and over what
+was sea, and those cells are sampled like any other. They do not belong
+to the area a species could live in, and a region that was under the ice
+is then screened as if it were land. \code{exclude} and \code{keep} leave such
+cells out, per data set: for example the ice extent of each period as
+polygons (such as the DATED-1 reconstruction of the Eurasian ice sheets,
+Hughes et al. 2016) or as a raster (such as the glacier layer \code{glz} that comes
+with CHELSA-TraCE21k; look at it first, a raster mask takes every cell
+with a value other than \code{NA} and 0), and a land raster of the period for \code{keep}. The
+common cells are then those unmasked in every data set. Without a mask,
+data sets whose names or files look like past periods give a warning
+(switch it off with \code{options(preENM.past_warning = FALSE)} when the
+layers are already cut to the land of each period).
 }
 \examples{
 sim <- simulate_enm_data(seed = 1)
@@ -106,4 +130,9 @@ past[["t"]] <- past[["t"]] - 0.3
 es <- sample_environment(list(present = now, past = past), n = 2000,
                          seed = 1)
 es
+}
+\references{
+Hughes, A.L.C., Gyllencreutz, R., Lohne, O.S., Mangerud, J.,
+Svendsen, J.I. (2016) The last Eurasian ice sheets: a chronological
+database and time-slice reconstruction, DATED-1. \emph{Boreas} 45, 1-45.
 }

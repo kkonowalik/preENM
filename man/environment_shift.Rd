@@ -59,7 +59,7 @@ Projected distributions of novel and disappearing climates by 2100
 AD. \emph{PNAS} 104, 5738-5742.
 
 Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021) The
-effects of climate change on Australia's only endemic Pokémon:
+effects of climate change on Australia's only endemic Pokemon:
 measuring bias in species distribution models. \emph{Methods in Ecology and
 Evolution} 12, 985-995.
 }

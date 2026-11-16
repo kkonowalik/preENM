@@ -343,7 +343,7 @@ change_metrics <- function(V, sel, thr) {
 #'   observed one), `p_value` (two-sided) and `verdict`), `null` (the
 #'   values of every null model), `maps` and `n_null`.
 #' @references Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021)
-#'   The effects of climate change on Australia's only endemic Pokémon:
+#'   The effects of climate change on Australia's only endemic Pokemon:
 #'   measuring bias in species distribution models. *Methods in Ecology and
 #'   Evolution* 12, 985-995. \doi{10.1111/2041-210X.13591}
 #'
@@ -621,10 +621,10 @@ plot_transfer_bias <- function(x, metric = "mean_change", scope = "area",
                         colour = muted) +
     ggplot2::geom_violin(fill = "#d1d5db", colour = NA, scale = "width",
                          width = 0.7) +
-    ggplot2::geom_errorbarh(
-      data = s, inherit.aes = FALSE, height = 0.15, colour = ink,
-      ggplot2::aes(xmin = .data$null_lo, xmax = .data$null_hi,
-                   y = .data$projection)) +
+    ggplot2::geom_segment(
+      data = s, inherit.aes = FALSE, colour = ink, linewidth = 0.7,
+      ggplot2::aes(x = .data$null_lo, xend = .data$null_hi,
+                   y = .data$projection, yend = .data$projection)) +
     ggplot2::geom_point(
       data = s, inherit.aes = FALSE, size = 3.2,
       ggplot2::aes(x = .data$observed, y = .data$projection,
@@ -681,7 +681,7 @@ plot_transfer_bias <- function(x, metric = "mean_change", scope = "area",
 #'   AD. *PNAS* 104, 5738-5742.
 #'
 #'   Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021) The
-#'   effects of climate change on Australia's only endemic Pokémon:
+#'   effects of climate change on Australia's only endemic Pokemon:
 #'   measuring bias in species distribution models. *Methods in Ecology and
 #'   Evolution* 12, 985-995.
 #' @seealso [transfer_bias_test()], [extrapolation_risk()],

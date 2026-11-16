@@ -143,7 +143,7 @@ tb
 }
 \references{
 Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021)
-The effects of climate change on Australia's only endemic Pokémon:
+The effects of climate change on Australia's only endemic Pokemon:
 measuring bias in species distribution models. \emph{Methods in Ecology and
 Evolution} 12, 985-995. \doi{10.1111/2041-210X.13591}
 

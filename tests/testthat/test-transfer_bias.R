@@ -138,7 +138,9 @@ test_that("predictions made elsewhere give the same result as `fit`", {
   expect_setequal(a$summary$scope, c("area", "region"))
   expect_output(print(a), "\\[region\\]")
   # files work as well, and the baseline can be named
-  d <- withr::local_tempdir()
+  d <- tempfile("null_models")
+  dir.create(d)
+  on.exit(unlink(d, recursive = TRUE), add = TRUE)
   files <- vapply(seq_along(nul), function(i) {
     fn <- file.path(d, paste0("null_", i, ".tif"))
     terra::writeRaster(nul[[i]], fn)

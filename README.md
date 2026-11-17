@@ -137,7 +137,7 @@ patch.
 
 | Method | What it draws |
 |---|---|
-| `"delaunay"` (default) | Delaunay triangles with all edges up to L, plus L/2 buffers, closed by L/2, holes filled. Follows concave outlines; e.g. the M of *Dryas octopetala* in Europe (L = 340 km). |
+| `"delaunay"` (default) | Delaunay triangles with all edges up to L, plus L/2 buffers, closed by L/2, holes filled. Follows concave outlines; e.g. the M of alpine plant *Dryas octopetala* in Europe (L = 340 km). |
 | `"cluster_hull"` | convex (or concave, `hull_ratio < 1`) hull of each cluster linked at L: fills hollows inside a cluster automatically |
 | `"convex_hull"` | one convex hull around all records: the most generous M |
 | `"buffer"` | buffers of fixed radius (`buffer_km`), e.g. as a reference |

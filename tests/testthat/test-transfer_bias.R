@@ -91,7 +91,7 @@ test_that("a change that every model predicts is called design-driven", {
   expect_equal(m$null_agreement, 1)
   expect_equal(m$verdict, "design-driven")
   expect_equal(m$signal, m$observed - m$null_mean)
-  expect_output(print(tb), "does not depend on the")
+  expect_output(print(tb), "does not\\s+depend on the")
   expect_output(print(tb), "IN SHORT")
   # maps: one stack per projection
   expect_named(tb$maps, "future")
@@ -103,19 +103,28 @@ test_that("a change that every model predicts is called design-driven", {
   expect_equal(dim(tb$null), c(2L, 3L + 29L))
 })
 
-test_that("records with a narrow niche give a data-driven change", {
+test_that("records with a narrow niche differ from random points", {
   f <- bias_fixture()
   sets <- null_occurrences(f$present, f$sim$presence, n_sets = 29)
   tb <- transfer_bias_test(fit = f$fit, points = f$sim$presence,
                            null_points = sets, threshold = 0.5,
                            verbose = FALSE)
   m <- tb$summary[tb$summary$metric == "mean_change", ]
-  expect_equal(m$verdict, "data-driven")
+  # outside the null interval, but random points predict an even larger
+  # decline: the decline itself comes from the design
+  expect_equal(m$verdict, "design-dominated")
+  expect_gt(m$design_share, 1)
   expect_lte(m$p_value, 2 / 30)
+  # with a stricter definition of "dominated" it counts as data-driven
+  tb2 <- transfer_bias_test(fit = f$fit, points = f$sim$presence,
+                            null_points = sets, threshold = 0.5,
+                            dominance = 0.99, verbose = FALSE)
+  expect_true(all(tb2$summary$verdict %in% c("data-driven",
+                                             "design-dominated")))
   expect_true("area_change" %in% tb$summary$metric)
   a <- tb$summary[tb$summary$metric == "area_change", ]
   expect_gte(a$observed, -1)
-  expect_output(print(tb), "the records add")
+  expect_output(print(tb), "The records weaken")
   p <- plot_transfer_bias(tb)
   expect_s3_class(p, "ggplot")
   expect_s3_class(plot_transfer_bias(tb, "area_change"), "ggplot")
@@ -189,4 +198,57 @@ test_that("environment_shift reports disappearing and novel conditions", {
   expect_equal(unique(one$projection), "projection")
   expect_error(environment_shift(sim$env, warmer[[1]]), "lacks layer")
   expect_error(environment_shift(sim$env, warmer, trim = 0.5), "trim")
+})
+
+
+test_that("effect size, design share and probability of exceeding", {
+  r <- terra::rast(nrows = 20, ncols = 20, xmin = 0, xmax = 20, ymin = 0,
+                   ymax = 20, crs = "EPSG:3035")
+  base <- terra::init(r, 0.5)
+  # a prediction whose future layer is the present minus `d` everywhere
+  pred <- function(d) {
+    out <- c(base, base - d)
+    names(out) <- c("present", "future")
+    out
+  }
+  set.seed(1)
+  dn <- 0.10 + stats::rnorm(50, 0, 0.01)       # random points: decline 0.10
+  null <- lapply(dn, pred)
+  mean_change <- function(tb) tb$summary[tb$summary$metric == "mean_change", ]
+  # 1. records: decline 0.125 -> outside, but 80% of it is design
+  m <- mean_change(transfer_bias_test(observed = pred(0.125), null = null))
+  expect_equal(m$ses, (-0.125 - mean(-dn)) / stats::sd(dn), tolerance = 1e-8)
+  expect_equal(m$design_share, mean(dn) / 0.125, tolerance = 1e-8)
+  expect_equal(m$verdict, "design-dominated")
+  expect_equal(m$prob_exceed, 1)
+  # 2. records: decline 0.4 -> data-driven, design gives a quarter
+  m <- mean_change(transfer_bias_test(observed = pred(0.4), null = null))
+  expect_equal(m$verdict, "data-driven")
+  expect_equal(m$design_share, mean(dn) / 0.4, tolerance = 1e-8)
+  expect_lt(m$ses, -20)
+  # 3. records: an increase -> design points the other way
+  m <- mean_change(transfer_bias_test(observed = pred(-0.05), null = null))
+  expect_lt(m$design_share, 0)
+  expect_equal(m$verdict, "data-driven")
+  # 4. within the null models
+  m <- mean_change(transfer_bias_test(observed = pred(0.1), null = null))
+  expect_equal(m$verdict, "design-driven")
+  expect_lt(abs(m$ses), 2)
+  # several models of the records: their mean, and pairs for prob_exceed
+  reps <- lapply(c(0.095, 0.105, 0.115, 0.125), pred)
+  tb <- transfer_bias_test(observed = reps, null = null)
+  m <- mean_change(tb)
+  expect_equal(m$observed, -0.11, tolerance = 1e-8)
+  a <- -c(0.095, 0.105, 0.115, 0.125)
+  expect_equal(m$prob_exceed,
+               mean(outer(a, -dn, "<")) + 0.5 * mean(outer(a, -dn, "==")))
+  expect_equal(tb$n_observed, 4)
+  expect_equal(dim(tb$observed), c(2L, 3L + 4L))
+  expect_output(print(tb), "4 models of the records")
+  expect_error(transfer_bias_test(observed = pred(0.1), null = null,
+                                  dominance = 1.5), "dominance")
+  p <- plot_transfer_bias(tb)
+  txt <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomText"),
+                      logical(1)))
+  expect_match(ggplot2::layer_data(p, txt)$label, "^SES -?[0-9.]+")
 })

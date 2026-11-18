@@ -19,11 +19,11 @@ plot_transfer_bias(x, metric = "mean_change", scope = "area", base_size = 11)
 A ggplot object.
 }
 \description{
-One panel per projection: the distribution of the change predicted by
+One row per projection: the distribution of the change predicted by
 the null models (grey; the line marks their 95\% interval), "no change"
-(dashed) and the change predicted from the real records (the coloured
-point: blue when it is outside the interval of the null models, orange
-when it is within it).
+(dashed) and the change predicted from the real records (the point,
+coloured by the verdict), labelled with the standardised effect size
+(SES) and the design share (see \code{\link[=transfer_bias_test]{transfer_bias_test()}}).
 }
 \examples{
 # see transfer_bias_test() for how `tb` is made

@@ -1,3 +1,29 @@
+# preENM 2.17.0
+
+How large is a design bias? `transfer_bias_test()` now measures how far
+the change predicted from the real records is from that of random points,
+and how much of it the design produces:
+
+* `ses`: standardised effect size, (observed - null mean) / null SD. Not
+  limited by the number of null models, unlike the p-value, so "just
+  outside" and "far outside" the null interval can be told apart, and
+  comparable between projections and metrics.
+* `design_share`: the part of the predicted change that random points
+  reproduce (1 = all of it; above 1 they predict more change than the
+  records; below 0 the opposite direction).
+* `prob_exceed`: probability that a model of the real records predicts a
+  change beyond that of a model of random points. `observed` can now be a
+  list of models of the real records (e.g. cross-validation runs), whose
+  variation then enters this probability.
+* A fourth verdict, **design-dominated**: outside the null interval, but
+  random points reproduce at least `dominance` (default half) of the
+  change, or more. **Changed:** such results were called "data-driven"
+  before; a prediction whose change random points reproduce (or exceed)
+  is not evidence about the species even when it differs from them.
+* `plot_transfer_bias()` labels each projection with its SES and design
+  share and colours the point by the verdict; the printed summary explains
+  each projection in these terms.
+
 # preENM 2.16.0
 
 Design bias of projections, after Warren et al. (2021, *Methods in Ecology

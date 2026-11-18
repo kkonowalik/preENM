@@ -1356,19 +1356,60 @@ write.csv(tb$summary, "transfer_bias.csv", row.names = FALSE)
 
 If you model in R, give your own function instead of the files:
 `transfer_bias_test(fit = my_fit, points = occ, null_points = sets)`, where
-`my_fit(points)` returns the predictions.
+`my_fit(points)` returns the predictions. If you have several models of the
+real records (cross-validation runs, background sets, bootstrap samples of
+the records), give them all as a list in `observed`: their mean is compared
+with the random points, and their own variation enters `prob_exceed`.
 
 <img src="man/figures/transfer_bias.png" width="640" alt="Change predicted from the real records against the change predicted by models of random points" />
 
 Grey is the change predicted by the models of random points and the line
-their 95% interval; the dot is the model of the real records. The verdict
-for each projection is one of three:
+their 95% interval; the dot is the model of the real records, labelled with
+two numbers explained below. The verdict for each projection is one of
+four:
 
 | Verdict | Meaning |
 |---|---|
 | **design-driven** | The real model predicts what the random-point models predict, and those agree on the direction. Any species would give this result. |
 | **not distinguishable** | The real model is within the spread of the random-point models, which do not agree on a direction. |
-| **data-driven** | The real model is outside 95% of the random-point models. `signal` is the part of the change that the design does not explain. |
+| **design-dominated** | The real model is outside 95% of the random-point models, but these predict at least half of its change (`dominance`), or even more. The records change the prediction, but the change itself comes mostly from the design. |
+| **data-driven** | The real model is outside 95% of the random-point models, and they predict less than half of its change, or the opposite direction. |
+
+**How different, and does it matter?** Whether the real model lies inside
+the grey interval is only the first question. Two numbers answer the rest:
+
+* **SES** (standardised effect size) = (observed − mean of random points) /
+  their SD: how far the real model is from the random points, in their
+  standard deviations. Unlike the p-value, which cannot go below
+  1 / (number of null models + 1) and so cannot tell "just outside" from
+  "far outside", it keeps growing with the distance and can be compared
+  between projections, metrics and studies. |SES| below about 2 means the
+  real model is among the random ones.
+* **design share** = change predicted by random points / change predicted
+  by the real model: the part of the predicted change that the study design
+  produces by itself. 0.2 = random points give 20% of the change, the
+  records the rest; 1 = all of it; above 1 (shown as "design alone 1.4x")
+  random points predict *more* change than the records, which weaken it;
+  below 0 random points predict the opposite direction.
+
+Read them together. A large SES with a design share near or above 1 (the
+figure: SES 7, design alone 1.4×) means the records clearly changed the
+prediction, yet the predicted decline is what the design produces anyway:
+it is not evidence that this species is vulnerable. A large SES with a small
+design share means the change comes from the records. In short:
+
+| SES | design share | What the predicted change is |
+|---|---|---|
+| \|SES\| < 2 | any | within the random points: design-driven or not distinguishable |
+| large | ≥ 0.5 | different from random points, but mostly the design |
+| large | < 0.5 or negative | mostly the records |
+
+`prob_exceed` gives the probability that a model of the real records
+predicts a change beyond that of a model of random points (0.5 = they
+overlap completely, 1 = always beyond). With one model of the records it is
+the share of random-point models it exceeds; with several models of the
+records (a list in `observed`), every pair of a real and a random-point
+model counts, so the variation among the real models is included.
 
 The measures are the mean change of suitability, the share of cells where
 it falls and, with a threshold, the proportional change of suitable area.

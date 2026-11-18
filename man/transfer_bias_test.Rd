@@ -13,6 +13,7 @@ transfer_bias_test(
   baseline = 1,
   region = NULL,
   threshold = NULL,
+  dominance = 0.5,
   maps = TRUE,
   coords = NULL,
   points_crs = "EPSG:4326",
@@ -23,7 +24,9 @@ transfer_bias_test(
 \item{observed}{Predictions of the model fitted to the real records: a
 \link[terra:SpatRaster-class]{terra::SpatRaster} or file(s) with the present prediction and one
 layer per projection (other period, scenario or region on the same
-grid).}
+grid). Or a list of such rasters, one per model of the real records
+(e.g. cross-validation runs): their mean is the observed value, and
+\code{prob_exceed} includes their variation.}
 
 \item{null}{Predictions of the null models: a list of rasters (or of
 file paths) with the same layers as \code{observed}, one element per null
@@ -49,6 +52,10 @@ number, or \code{"p10"} for the 10th percentile of the present prediction
 at the points each model was fitted to (needs \code{points} and
 \code{null_points}).}
 
+\item{dominance}{Smallest \code{design_share} at which a result outside the
+null interval is called "design-dominated" instead of "data-driven"
+(default 0.5: random points reproduce at least half of the change).}
+
 \item{maps}{Also return the maps.}
 
 \item{coords, points_crs}{Coordinate columns and CRS of \code{points}.}
@@ -60,9 +67,11 @@ A list of class \code{transfer_bias} with \code{summary} (one row per
 projection, scope and metric: \code{observed}, \code{null_mean}, \code{null_sd},
 \code{null_lo} and \code{null_hi} (95\% interval), \code{null_agreement} (share of
 null models with the direction of the null mean), \code{signal}
-(\code{observed - null_mean}), \code{percentile} (share of null values below the
-observed one), \code{p_value} (two-sided) and \code{verdict}), \code{null} (the
-values of every null model), \code{maps} and \code{n_null}.
+(\code{observed - null_mean}), \code{ses}, \code{design_share}, \code{prob_exceed},
+\code{percentile} (share of null values below the observed one),
+\code{p_value} (two-sided) and \code{verdict}), \code{null} (the values of every null
+model), \code{observed} (the values of every model of the records), \code{maps},
+\code{n_null} and \code{n_observed}.
 }
 \description{
 Models projected to another time (or place) can predict a decline or an
@@ -80,17 +89,57 @@ The test repeats their procedure for your study. Fit the same models
 null points from \code{\link[=null_occurrences]{null_occurrences()}}, project them to the same
 scenarios, and give the predictions here. The function measures the
 predicted change in each null model and places the change predicted
-from the real records within that distribution:
+from the real records within that distribution. The verdict has four
+classes:
 \itemize{
 \item \strong{design-driven}: the real model predicts what the random-point
 models predict, and those agree on the direction. The same result
 would have come out for any species; it says nothing about this one.
 \item \strong{not distinguishable}: the real model is within the spread of the
 random-point models, which do not agree on a direction.
+\item \strong{design-dominated}: the real model is outside 95\% of the
+random-point models, but these agree on the direction and reproduce at
+least \code{dominance} (default half) of the observed change. The records
+change the prediction, but most of the predicted change comes from the
+design. This includes the case in which random points predict a
+\emph{larger} change than the records (\code{design_share} > 1): the records
+weaken it, and the predicted change itself is not evidence about the
+species.
 \item \strong{data-driven}: the real model is outside 95\% of the random-point
-models. The records changed the prediction; \code{signal} (observed minus
-the null mean) is the part of the change that the design does not
-explain.
+models, and these reproduce less than \code{dominance} of its change (or
+point the other way, or do not agree on a direction).
+}
+
+\strong{How large is the difference?} Whether the real model lies inside the
+null interval is only the first question. Three numbers measure how far
+it is and what it means:
+\itemize{
+\item \code{ses}, the standardised effect size, (observed - null mean) / null SD
+(Gotelli and McCabe 2002): how many standard deviations of the
+random-point models separate them from the real model. Unlike the
+p-value, which cannot go below 1 / (number of null models + 1), it
+keeps growing with the distance, and it can be compared between
+projections, metrics and studies. |SES| < 2 is roughly within the
+range of random points; the interval and the p-value are exact, the
+SES assumes a roughly symmetric distribution of the null values.
+\item \code{design_share}, (null mean - no change) / (observed - no change): the
+part of the predicted change that random points reproduce. 0 = none
+of it, 1 = all of it, 0.8 = random points alone give 80\% of the
+decline; above 1 the records weaken the change the design produces,
+below 0 the design points the other way. A result can be clearly
+different from random points (large SES) and still be mostly design
+(design share near 1): "significant" is not the same as "driven by the
+records".
+\item \code{prob_exceed}: the probability that a model of the real records
+predicts a change beyond that of a model of random points, in the
+direction of the difference. Give several models of the real records
+in \code{observed} (e.g. the cross-validation runs or models of bootstrap
+samples of the records) to include their own variation: it is then
+the share of all pairs of a real and a random-point model in which the
+real one is further (the common-language effect size of McGraw and
+Wong 1992; 0.5 = the two overlap completely, 1 = every real model is
+beyond every random-point model). With one model it is the share of
+random-point models it exceeds.
 }
 
 The null models are estimates of how the study design behaves, not a
@@ -142,6 +191,13 @@ tb <- transfer_bias_test(fit = fit, points = sim$presence,
 tb
 }
 \references{
+Gotelli, N.J., McCabe, D.J. (2002) Species co-occurrence: a
+meta-analysis of J. M. Diamond's assembly rules model. \emph{Ecology} 83,
+2091-2096.
+
+McGraw, K.O., Wong, S.P. (1992) A common language effect size
+statistic. \emph{Psychological Bulletin} 111, 361-365.
+
 Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021)
 The effects of climate change on Australia's only endemic Pokemon:
 measuring bias in species distribution models. \emph{Methods in Ecology and

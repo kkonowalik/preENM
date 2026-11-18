@@ -274,17 +274,56 @@ change_metrics <- function(V, sel, thr) {
 #' null points from [null_occurrences()], project them to the same
 #' scenarios, and give the predictions here. The function measures the
 #' predicted change in each null model and places the change predicted
-#' from the real records within that distribution:
+#' from the real records within that distribution. The verdict has four
+#' classes:
 #'
 #' * **design-driven**: the real model predicts what the random-point
 #'   models predict, and those agree on the direction. The same result
 #'   would have come out for any species; it says nothing about this one.
 #' * **not distinguishable**: the real model is within the spread of the
 #'   random-point models, which do not agree on a direction.
+#' * **design-dominated**: the real model is outside 95% of the
+#'   random-point models, but these agree on the direction and reproduce at
+#'   least `dominance` (default half) of the observed change. The records
+#'   change the prediction, but most of the predicted change comes from the
+#'   design. This includes the case in which random points predict a
+#'   *larger* change than the records (`design_share` > 1): the records
+#'   weaken it, and the predicted change itself is not evidence about the
+#'   species.
 #' * **data-driven**: the real model is outside 95% of the random-point
-#'   models. The records changed the prediction; `signal` (observed minus
-#'   the null mean) is the part of the change that the design does not
-#'   explain.
+#'   models, and these reproduce less than `dominance` of its change (or
+#'   point the other way, or do not agree on a direction).
+#'
+#' **How large is the difference?** Whether the real model lies inside the
+#' null interval is only the first question. Three numbers measure how far
+#' it is and what it means:
+#'
+#' * `ses`, the standardised effect size, (observed - null mean) / null SD
+#'   (Gotelli and McCabe 2002): how many standard deviations of the
+#'   random-point models separate them from the real model. Unlike the
+#'   p-value, which cannot go below 1 / (number of null models + 1), it
+#'   keeps growing with the distance, and it can be compared between
+#'   projections, metrics and studies. |SES| < 2 is roughly within the
+#'   range of random points; the interval and the p-value are exact, the
+#'   SES assumes a roughly symmetric distribution of the null values.
+#' * `design_share`, (null mean - no change) / (observed - no change): the
+#'   part of the predicted change that random points reproduce. 0 = none
+#'   of it, 1 = all of it, 0.8 = random points alone give 80% of the
+#'   decline; above 1 the records weaken the change the design produces,
+#'   below 0 the design points the other way. A result can be clearly
+#'   different from random points (large SES) and still be mostly design
+#'   (design share near 1): "significant" is not the same as "driven by the
+#'   records".
+#' * `prob_exceed`: the probability that a model of the real records
+#'   predicts a change beyond that of a model of random points, in the
+#'   direction of the difference. Give several models of the real records
+#'   in `observed` (e.g. the cross-validation runs or models of bootstrap
+#'   samples of the records) to include their own variation: it is then
+#'   the share of all pairs of a real and a random-point model in which the
+#'   real one is further (the common-language effect size of McGraw and
+#'   Wong 1992; 0.5 = the two overlap completely, 1 = every real model is
+#'   beyond every random-point model). With one model it is the share of
+#'   random-point models it exceeds.
 #'
 #' The null models are estimates of how the study design behaves, not a
 #' hypothesis that must be rejected before a model may be used: a
@@ -314,7 +353,9 @@ change_metrics <- function(V, sel, thr) {
 #' @param observed Predictions of the model fitted to the real records: a
 #'   [terra::SpatRaster] or file(s) with the present prediction and one
 #'   layer per projection (other period, scenario or region on the same
-#'   grid).
+#'   grid). Or a list of such rasters, one per model of the real records
+#'   (e.g. cross-validation runs): their mean is the observed value, and
+#'   `prob_exceed` includes their variation.
 #' @param null Predictions of the null models: a list of rasters (or of
 #'   file paths) with the same layers as `observed`, one element per null
 #'   set.
@@ -332,6 +373,9 @@ change_metrics <- function(V, sel, thr) {
 #'   number, or `"p10"` for the 10th percentile of the present prediction
 #'   at the points each model was fitted to (needs `points` and
 #'   `null_points`).
+#' @param dominance Smallest `design_share` at which a result outside the
+#'   null interval is called "design-dominated" instead of "data-driven"
+#'   (default 0.5: random points reproduce at least half of the change).
 #' @param maps Also return the maps.
 #' @param coords,points_crs Coordinate columns and CRS of `points`.
 #' @param verbose Show progress when `fit` is run.
@@ -339,10 +383,19 @@ change_metrics <- function(V, sel, thr) {
 #'   projection, scope and metric: `observed`, `null_mean`, `null_sd`,
 #'   `null_lo` and `null_hi` (95% interval), `null_agreement` (share of
 #'   null models with the direction of the null mean), `signal`
-#'   (`observed - null_mean`), `percentile` (share of null values below the
-#'   observed one), `p_value` (two-sided) and `verdict`), `null` (the
-#'   values of every null model), `maps` and `n_null`.
-#' @references Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021)
+#'   (`observed - null_mean`), `ses`, `design_share`, `prob_exceed`,
+#'   `percentile` (share of null values below the observed one),
+#'   `p_value` (two-sided) and `verdict`), `null` (the values of every null
+#'   model), `observed` (the values of every model of the records), `maps`,
+#'   `n_null` and `n_observed`.
+#' @references Gotelli, N.J., McCabe, D.J. (2002) Species co-occurrence: a
+#'   meta-analysis of J. M. Diamond's assembly rules model. *Ecology* 83,
+#'   2091-2096.
+#'
+#'   McGraw, K.O., Wong, S.P. (1992) A common language effect size
+#'   statistic. *Psychological Bulletin* 111, 361-365.
+#'
+#'   Warren, D.L., Dornburg, A., Zapfe, K., Iglesias, T.L. (2021)
 #'   The effects of climate change on Australia's only endemic Pokemon:
 #'   measuring bias in species distribution models. *Methods in Ecology and
 #'   Evolution* 12, 985-995. \doi{10.1111/2041-210X.13591}
@@ -379,8 +432,12 @@ change_metrics <- function(V, sel, thr) {
 transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
                                points = NULL, null_points = NULL,
                                baseline = 1, region = NULL, threshold = NULL,
-                               maps = TRUE, coords = NULL,
+                               dominance = 0.5, maps = TRUE, coords = NULL,
                                points_crs = "EPSG:4326", verbose = TRUE) {
+  if (!is.numeric(dominance) || length(dominance) != 1 || dominance <= 0 ||
+      dominance >= 1) {
+    stop("`dominance` must be a number between 0 and 1.", call. = FALSE)
+  }
   if (!is.null(fit)) {
     if (!is.function(fit)) stop("`fit` must be a function.", call. = FALSE)
     if (is.null(points) || is.null(null_points)) {
@@ -394,6 +451,13 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
   n_null <- if (is.null(fit)) length(null) else length(null_points)
   if (n_null < 2) stop("At least 2 null models are needed.", call. = FALSE)
   pts <- NULL
+  # several models of the real records (e.g. cross-validation runs)
+  obs_list <- NULL
+  if (is.null(fit) && is.list(observed) && !inherits(observed, "SpatRaster")) {
+    if (length(observed) < 1) stop("`observed` is empty.", call. = FALSE)
+    obs_list <- observed
+    observed <- observed[[1]]
+  }
   get_obs <- function() {
     if (is.null(fit)) return(as_grid(observed))
     as_grid(fit(pts))
@@ -451,7 +515,19 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
     cl <- terra::cellFromXY(obs, as.matrix(as.data.frame(p)[, c("x", "y")]))
     threshold_p10(V[cl, 1])
   }
-  om <- change_metrics(Vobs, sel, thr_of(Vobs, pts))
+  # one column per model of the real records
+  if (is.null(obs_list)) {
+    om <- change_metrics(Vobs, sel, thr_of(Vobs, pts))
+    om_reps <- matrix(om$value, ncol = 1)
+  } else {
+    Vs <- lapply(obs_list, read)
+    reps <- lapply(Vs, function(V) change_metrics(V, sel, thr_of(V, pts)))
+    om <- reps[[1]]
+    om_reps <- vapply(reps, function(m) m$value, numeric(nrow(om)))
+    om_reps <- matrix(om_reps, nrow = nrow(om))
+    om$value <- rowMeans(om_reps, na.rm = TRUE)
+    Vobs <- Reduce(`+`, Vs) / length(Vs)
+  }
   nproj <- length(lyr) - 1
   S <- S2 <- matrix(0, nrow(Vobs), nproj)
   N <- matrix(0L, nrow(Vobs), nproj)
@@ -492,24 +568,55 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
   hi <- q(0.975)
   inside <- !is.na(om$value) & om$value >= lo & om$value <= hi
   directed <- (lo - centre) * (hi - centre) > 0
+  sdn <- apply(nm, 1, stats::sd, na.rm = TRUE)
+  signal <- om$value - mu
+  # standardised effect size: distance from the null mean in null SDs
+  ses <- ifelse(sdn > 0, signal / sdn,
+                ifelse(abs(signal) > 0, sign(signal) * Inf, 0))
+  # share of the observed change (from "no change") that random points
+  # reproduce: 1 = all of it, 0 = none, > 1 = the records weaken it,
+  # < 0 = the design points the other way
+  oc <- om$value - centre
+  design_share <- ifelse(abs(oc) > 1e-12, (mu - centre) / oc, NA_real_)
+  # probability that a model of the real records predicts a change beyond
+  # that of a model of random points, in the direction of the signal
+  # (pairs of models; with one model of the records, the share of null
+  # models it exceeds)
+  prob_exceed <- vapply(seq_len(nrow(nm)), function(i) {
+    a <- om_reps[i, ]
+    b <- nm[i, ]
+    a <- a[!is.na(a)]
+    b <- b[!is.na(b)]
+    if (!length(a) || !length(b) || is.na(signal[i])) return(NA_real_)
+    gt <- mean(outer(a, b, ">")) + 0.5 * mean(outer(a, b, "=="))
+    if (signal[i] >= 0) gt else 1 - gt
+  }, numeric(1))
+  dominated <- !is.na(design_share) & design_share >= dominance &
+    directed
   summary <- data.frame(
     om[c("projection", "scope", "metric")],
-    observed = om$value, null_mean = mu,
-    null_sd = apply(nm, 1, stats::sd, na.rm = TRUE),
+    observed = om$value, null_mean = mu, null_sd = sdn,
     null_lo = lo, null_hi = hi, null_agreement = agree,
-    signal = om$value - mu,
+    signal = signal, ses = ses, design_share = design_share,
+    prob_exceed = prob_exceed,
     percentile = rowMeans(nm < om$value, na.rm = TRUE),
     p_value = pval,
     verdict = ifelse(is.na(om$value), NA_character_,
-                     ifelse(!inside, "data-driven",
+                     ifelse(inside,
                             ifelse(directed, "design-driven",
-                                   "not distinguishable"))),
+                                   "not distinguishable"),
+                            ifelse(dominated, "design-dominated",
+                                   "data-driven"))),
     stringsAsFactors = FALSE, row.names = NULL)
   colnames(nm) <- sprintf("null_%03d", seq_len(n_null))
+  colnames(om_reps) <- sprintf("observed_%03d", seq_len(ncol(om_reps)))
   out <- list(summary = summary,
               null = cbind(om[c("projection", "scope", "metric")], nm),
-              maps = NULL, n_null = n_null, baseline = lyr[b],
-              threshold = threshold)
+              observed = cbind(om[c("projection", "scope", "metric")],
+                               om_reps),
+              maps = NULL, n_null = n_null, n_observed = ncol(om_reps),
+              baseline = lyr[b], threshold = threshold,
+              dominance = dominance)
   if (maps) {
     mean_map <- S / pmax(N, 1)
     sd_map <- sqrt(pmax(S2 / pmax(N, 1) - mean_map^2, 0) *
@@ -532,10 +639,13 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
 #' @export
 print.transfer_bias <- function(x, digits = 3, ...) {
   s <- x$summary
+  nobs <- if (is.null(x$n_observed)) 1 else x$n_observed
   cat("Design bias of projected change (", x$n_null, " null models, ",
+      if (nobs > 1) paste0(nobs, " models of the records, "),
       "present = ", x$baseline, ")\n\n", sep = "")
-  show <- s[c("projection", "scope", "metric", "observed", "null_mean",
-              "null_lo", "null_hi", "p_value", "verdict")]
+  show <- s[intersect(c("projection", "scope", "metric", "observed",
+                        "null_mean", "null_lo", "null_hi", "ses",
+                        "design_share", "p_value", "verdict"), names(s))]
   num <- vapply(show, is.numeric, logical(1))
   show[num] <- lapply(show[num], signif, digits)
   if (length(unique(show$scope)) == 1) show$scope <- NULL
@@ -545,37 +655,74 @@ print.transfer_bias <- function(x, digits = 3, ...) {
   for (i in seq_len(nrow(main))) {
     r <- main[i, ]
     where <- if (length(unique(s$scope)) > 1) paste0(" [", r$scope, "]") else ""
-    dir <- function(v) if (v < 0) "a decline" else "an increase"
-    txt <- switch(
-      r$verdict,
-      "design-driven" = paste0(
-        "models of random points predict ", dir(r$null_mean), " too (",
-        round(100 * r$null_agreement), "% agree), and the real model is ",
-        "within their range. This result does not depend on the records."),
-      "not distinguishable" = paste0(
-        "the real model is within the range of models of random points, ",
-        "which do not agree on a direction. The records add little."),
-      "data-driven" = paste0(
-        "the real model (", signif(r$observed, digits), ") differs from ",
-        "the models of random points (design alone gives ",
-        signif(r$null_mean, digits), ", the records add ",
-        sprintf("%+.3g", r$signal), ")."))
-    cat(strwrap(paste0(r$projection, where, ": ", txt), width = 78,
-                exdent = 2, prefix = "  ", initial = "- "), sep = "\n")
+    cat(strwrap(paste0(r$projection, where, ": ", transfer_text(r, digits)),
+                width = 78, exdent = 2, prefix = "  ", initial = "- "),
+        sep = "\n")
   }
+  cat("\nSES: distance from the random-point models in their SDs. ",
+      "design share: part of\nthe change that random points reproduce ",
+      "(1 = all of it).\n", sep = "")
   if (x$n_null < 99) {
-    cat("\nFewer than 99 null models: the intervals are rough.\n")
+    cat("Fewer than 99 null models: the intervals are rough.\n")
   }
   invisible(x)
 }
 
+# One projection in words (internal)
+transfer_text <- function(r, digits = 3) {
+  dir <- function(v) if (v < 0) "a decline" else "an increase"
+  f <- function(v) signif(v, digits)
+  ses <- if (is.finite(r$ses)) sprintf("%.1f", r$ses) else
+    if (r$ses > 0) "+Inf" else "-Inf"
+  pct <- function(v) paste0(round(100 * v), "%")
+  ds <- r$design_share
+  switch(
+    r$verdict,
+    "design-driven" = paste0(
+      "models of random points predict ", dir(r$null_mean), " too (",
+      round(100 * r$null_agreement), "% agree), and the real model is ",
+      "within their range (SES = ", ses, "). This result does not ",
+      "depend on the records."),
+    "not distinguishable" = paste0(
+      "the real model is within the range of models of random points ",
+      "(SES = ", ses, "), which do not agree on a direction. The records ",
+      "add little."),
+    "design-dominated" = if (ds > 1) {
+      paste0(
+        "random points alone predict ", dir(r$null_mean), " of ",
+        f(r$null_mean), ", larger than that of the real model (",
+        f(r$observed), "; SES = ", ses, "). The records weaken the ",
+        "change; the predicted ", sub("^an? ", "", dir(r$observed)),
+        " itself comes from the design, not from this species.")
+    } else {
+      paste0(
+        "the real model (", f(r$observed), ") differs from models of ",
+        "random points (SES = ", ses, "), but random points alone give ",
+        pct(ds), " of this change (", f(r$null_mean), "). Most of the ",
+        "predicted change is a product of the design; the records add ",
+        sprintf("%+.3g", r$signal), ".")
+    },
+    "data-driven" = paste0(
+      "the real model (", f(r$observed), ") differs from models of random ",
+      "points (SES = ", ses, ", p = ", f(r$p_value), "). ",
+      if (is.na(ds)) "" else if (ds < 0) {
+        paste0("Random points predict the opposite direction (",
+               f(r$null_mean), "), so the change comes from the records.")
+      } else {
+        paste0("Random points alone give ", pct(ds), " of it (",
+               f(r$null_mean), "); the records add ",
+               sprintf("%+.3g", r$signal), ".")
+      }),
+    "")
+}
+
 #' Plot the design bias of a projected change
 #'
-#' One panel per projection: the distribution of the change predicted by
+#' One row per projection: the distribution of the change predicted by
 #' the null models (grey; the line marks their 95% interval), "no change"
-#' (dashed) and the change predicted from the real records (the coloured
-#' point: blue when it is outside the interval of the null models, orange
-#' when it is within it).
+#' (dashed) and the change predicted from the real records (the point,
+#' coloured by the verdict), labelled with the standardised effect size
+#' (SES) and the design share (see [transfer_bias_test()]).
 #'
 #' @param x Result of [transfer_bias_test()].
 #' @param metric `"mean_change"`, `"share_declining"` or `"area_change"`.
@@ -609,7 +756,17 @@ plot_transfer_bias <- function(x, metric = "mean_change", scope = "area",
   lev <- unique(s$projection)
   long$projection <- factor(long$projection, lev)
   s$projection <- factor(s$projection, lev)
-  s$outside <- s$verdict == "data-driven"
+  verdicts <- c("data-driven", "design-dominated", "not distinguishable",
+                "design-driven")
+  s$verdict <- factor(s$verdict, verdicts)
+  fmt_ses <- function(v) ifelse(is.finite(v), sprintf("%.1f", v),
+                                ifelse(v > 0, "+Inf", "-Inf"))
+  ds <- s$design_share
+  s$label <- paste0("SES ", fmt_ses(s$ses),
+                    ifelse(is.na(ds), "",
+                    ifelse(ds < 0, "  |  design: opposite direction",
+                    ifelse(ds > 1, sprintf("  |  design alone %.1fx", ds),
+                           paste0("  |  design ", round(100 * ds), "%")))))
   ink <- "#1f2933"
   muted <- "#6b7280"
   zero <- if (metric == "share_declining") 0.5 else 0
@@ -628,17 +785,29 @@ plot_transfer_bias <- function(x, metric = "mean_change", scope = "area",
     ggplot2::geom_point(
       data = s, inherit.aes = FALSE, size = 3.2,
       ggplot2::aes(x = .data$observed, y = .data$projection,
-                   colour = .data$outside)) +
+                   colour = .data$verdict)) +
+    ggplot2::geom_text(
+      data = s, inherit.aes = FALSE, colour = ink, size = base_size / 3.6,
+      vjust = -1.4,
+      ggplot2::aes(x = .data$observed, y = .data$projection,
+                   label = .data$label)) +
     ggplot2::scale_colour_manual(
-      values = c(`TRUE` = "#1d4ed8", `FALSE` = "#d97706"),
-      labels = c(`TRUE` = "real records: differ from random points",
-                 `FALSE` = "real records: as random points"),
-      name = NULL, drop = FALSE) +
+      values = c(`data-driven` = "#1d4ed8", `design-dominated` = "#7c3aed",
+                 `not distinguishable` = "#d97706",
+                 `design-driven` = "#b91c1c"),
+      labels = c(`data-driven` = "data-driven",
+                 `design-dominated` = "differs, but mostly design",
+                 `not distinguishable` = "not distinguishable",
+                 `design-driven` = "design-driven"),
+      name = "Real records:", drop = TRUE) +
     ggplot2::labs(
       x = lab, y = NULL,
       title = "Projected change: real records against random points",
       subtitle = paste0("Grey: ", x$n_null, " models of random points, ",
-                        "line = their 95% interval; dashed = no change")) +
+                        "line = their 95% interval; dashed = no change.\n",
+                        "SES = distance from them in their SDs.\n",
+                        "design = share of the change they reproduce ",
+                        "(above 1x: more change than the records).")) +
     theme_enm(base_size, ink, muted) +
     ggplot2::theme(legend.position = "bottom")
 }

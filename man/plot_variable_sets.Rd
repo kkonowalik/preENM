@@ -11,7 +11,11 @@ plot_variable_sets(
   n_labels = 5,
   base_size = 10,
   type = c("scores", "scatter"),
-  n = 8
+  n = 8,
+  sizes = NULL,
+  file = NULL,
+  width = 10,
+  height = NULL
 )
 }
 \arguments{
@@ -28,10 +32,21 @@ scatter.}
 
 \item{type}{\code{"scores"} or \code{"scatter"}.}
 
-\item{n}{Number of best-ranked sets per size in the score card.}
+\item{n}{Number of best-ranked sets per size in the score card, or
+\code{"all"} (also \code{Inf}) for every passing set.}
+
+\item{sizes}{Optional set sizes to show, e.g. \code{2:3}; default all sizes
+that were searched.}
+
+\item{file}{Optional file to save the plot to; the format follows the
+extension (\code{.pdf}, \code{.png}, \code{.svg}, ...). The height grows with the
+number of rows. The plot is also returned.}
+
+\item{width, height}{Size of the saved plot in inches (\code{height}
+default: from the number of rows).}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object (invisibly when \code{file} is given).
 }
 \description{
 Two views of the passing sets, one panel per set size:
@@ -41,7 +56,10 @@ Two views of the passing sets, one panel per set size:
 \item \code{type = "scores"} (default): a score card. Rows are the best-ranked
 sets, columns the criteria and the largest correlations; each cell
 shows the value, shaded by how good it is among all passing sets of
-that size (darker = better). Sets on the Pareto front are marked \code{*}.
+that size: darker = better, which is the \emph{lowest} value in columns
+marked "lower is better" (e.g. novelty, VIF, correlations) and the
+\emph{highest} in columns marked "higher is better". Sets on the Pareto
+front are marked \code{*}.
 \item \code{type = "scatter"}: every passing set in the space of two criteria.
 Pareto-front sets are filled blue, and the best-ranked sets carry
 their rank, with the key below the plot. Scores that take few
@@ -51,6 +69,10 @@ and \code{y_metric}, or use the score card.
 }
 }
 \examples{
-# see ?select_variables; e.g. plot_variable_sets(vs) and
+# see ?select_variables; e.g.
+# plot_variable_sets(vs)                          # 8 best sets per size
+# plot_variable_sets(vs, sizes = 2:3, n = 4)      # sizes 2 and 3, 4 each
+# plot_variable_sets(vs, sizes = 3, n = "all")    # every passing 3-set
+# plot_variable_sets(vs, file = "variable_sets.pdf")
 # plot_variable_sets(vs, type = "scatter")
 }

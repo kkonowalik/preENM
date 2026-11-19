@@ -283,3 +283,33 @@ test_that("regions are reported one by one", {
   expect_true(file.exists(file.path(d, "variables_regions.csv")))
   expect_true(file.exists(file.path(d, "variables_regions_best_set.csv")))
 })
+
+test_that("score card: sizes, all sets and saving", {
+  sim <- simulate_enm_data(seed = 1)
+  e1 <- sim$env[["env1"]]
+  e2 <- sim$env[["env2"]]
+  now <- c(e1, e2, e1 + e2 + 0.05 * e1 * e2, e1 * e2, sqrt(e2))
+  names(now) <- c("t", "p", "tp", "txp", "sp")
+  past <- now - 0.2 * now[["t"]]
+  names(past) <- names(now)
+  es <- sample_environment(list(present = now, past = past), n = 2000,
+                           seed = 1, verbose = FALSE)
+  vs <- suppressMessages(select_variables(es, sizes = 2:3))
+  p <- plot_variable_sets(vs, sizes = 2, n = 2)
+  expect_true(all(grepl("^2 ", unique(as.character(p$data$size)))))
+  expect_lte(length(unique(p$data$row)), 2)
+  pa <- plot_variable_sets(vs, sizes = 2, n = "all")
+  expect_equal(length(unique(pa$data$row)), sum(vs$sets$n_vars == 2))
+  expect_match(pa$labels$subtitle, "All passing sets")
+  expect_match(pa$labels$subtitle, "lowest value where lower is better")
+  f <- tempfile(fileext = ".pdf")
+  expect_message(plot_variable_sets(vs, file = f), "Saved")
+  expect_true(file.exists(f))
+  expect_error(plot_variable_sets(vs, sizes = 9), "chosen sizes")
+  expect_error(plot_variable_sets(vs, n = 0), "at least 1")
+  d <- tempfile()
+  w <- write_variable_selection(vs, d, format = c("png", "pdf"))
+  expect_true(all(file.exists(file.path(d, c("variables_sets.pdf",
+                                              "variables_sets.png",
+                                              "variables_tree.pdf")))))
+})

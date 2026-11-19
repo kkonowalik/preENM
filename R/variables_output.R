@@ -445,7 +445,10 @@ plot_correlation <- function(x, which = "union", base_size = 10) {
 #' * `type = "scores"` (default): a score card. Rows are the best-ranked
 #'   sets, columns the criteria and the largest correlations; each cell
 #'   shows the value, shaded by how good it is among all passing sets of
-#'   that size (darker = better). Sets on the Pareto front are marked `*`.
+#'   that size: darker = better, which is the *lowest* value in columns
+#'   marked "lower is better" (e.g. novelty, VIF, correlations) and the
+#'   *highest* in columns marked "higher is better". Sets on the Pareto
+#'   front are marked `*`.
 #' * `type = "scatter"`: every passing set in the space of two criteria.
 #'   Pareto-front sets are filled blue, and the best-ranked sets carry
 #'   their rank, with the key below the plot. Scores that take few
@@ -461,21 +464,56 @@ plot_correlation <- function(x, which = "union", base_size = 10) {
 #'   scatter.
 #' @param base_size Base font size.
 #' @param type `"scores"` or `"scatter"`.
-#' @param n Number of best-ranked sets per size in the score card.
-#' @return A `ggplot` object.
+#' @param n Number of best-ranked sets per size in the score card, or
+#'   `"all"` (also `Inf`) for every passing set.
+#' @param sizes Optional set sizes to show, e.g. `2:3`; default all sizes
+#'   that were searched.
+#' @param file Optional file to save the plot to; the format follows the
+#'   extension (`.pdf`, `.png`, `.svg`, ...). The height grows with the
+#'   number of rows. The plot is also returned.
+#' @param width,height Size of the saved plot in inches (`height`
+#'   default: from the number of rows).
+#' @return A `ggplot` object (invisibly when `file` is given).
 #' @export
 #' @examples
-#' # see ?select_variables; e.g. plot_variable_sets(vs) and
+#' # see ?select_variables; e.g.
+#' # plot_variable_sets(vs)                          # 8 best sets per size
+#' # plot_variable_sets(vs, sizes = 2:3, n = 4)      # sizes 2 and 3, 4 each
+#' # plot_variable_sets(vs, sizes = 3, n = "all")    # every passing 3-set
+#' # plot_variable_sets(vs, file = "variable_sets.pdf")
 #' # plot_variable_sets(vs, type = "scatter")
 plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
                                n_labels = 5, base_size = 10,
-                               type = c("scores", "scatter"), n = 8) {
+                               type = c("scores", "scatter"), n = 8,
+                               sizes = NULL, file = NULL, width = 10,
+                               height = NULL) {
   check_vs(x)
   type <- if (missing(type) && (!is.null(x_metric) || !is.null(y_metric))) {
     "scatter"
   } else match.arg(type)
+  if (identical(n, "all")) n <- Inf
+  if (!is.numeric(n) || length(n) != 1 || is.na(n) || n < 1) {
+    stop("`n` must be a number of at least 1 or \"all\".", call. = FALSE)
+  }
   r <- x$sets
   if (is.null(r) || !nrow(r)) stop("No passing sets to plot.", call. = FALSE)
+  if (!is.null(sizes)) {
+    miss_s <- setdiff(sizes, r$n_vars)
+    if (length(miss_s)) {
+      message("No passing sets of size ", paste(miss_s, collapse = ", "),
+              "; sizes with passing sets: ",
+              paste(sort(unique(r$n_vars)), collapse = ", "), ".")
+    }
+    r <- r[r$n_vars %in% sizes, , drop = FALSE]
+    if (!nrow(r)) stop("No passing sets of the chosen sizes.", call. = FALSE)
+  }
+  save_plot <- function(p, rows) {
+    if (is.null(file)) return(p)
+    h <- if (is.null(height)) min(max(3.5, 1.6 + 0.24 * rows), 49) else height
+    ggplot2::ggsave(file, p, width = width, height = h, limitsize = FALSE)
+    message("Saved: ", file)
+    invisible(p)
+  }
   crit <- x$settings$criteria
   ax <- c(names(crit), "worst_vif", "worst_maxr")
   miss <- setdiff(c(x_metric, y_metric), names(r))
@@ -519,7 +557,9 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
     d$metric <- factor(head_lab[d$metric], levels = head_lab)
     d$label <- formatC(d$value, digits = 3, format = "fg", flag = "#")
     d$dark <- d$good > 0.6
-    return(
+    n_txt <- if (is.finite(n)) paste0("The ", n, " best sets per size") else
+      "All passing sets"
+    return(save_plot(
       ggplot2::ggplot(d, ggplot2::aes(.data$metric, .data$row)) +
         ggplot2::geom_tile(ggplot2::aes(fill = .data$good), colour = "white",
                            linewidth = 0.6) +
@@ -528,8 +568,10 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
                            size = base_size / 3.4) +
         ggplot2::scale_fill_gradient(low = "#f4f3ef", high = "#1c5cab",
                                      limits = c(0, 1), breaks = c(0, 1),
-                                     labels = c("worst", "best"),
-                                     name = "Among the\npassing sets\nof the size") +
+                                     labels = c("worst value", "best value"),
+                                     name = paste0("Among the\npassing sets",
+                                                   "\nof the size:\ndarker =",
+                                                   " better")) +
         ggplot2::scale_colour_manual(values = c(`TRUE` = "white",
                                                 `FALSE` = "#3a3a38"),
                                      guide = "none") +
@@ -538,14 +580,16 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
         ggplot2::labs(x = NULL, y = NULL,
                       title = "Best variable sets and their scores",
                       subtitle = paste0(
-                        "The ", n, " best sets per size by mean rank (#); ",
-                        "* = on the Pareto front")) +
+                        n_txt, " by mean rank (#); * = on the Pareto ",
+                        "front.\nShading: darker = better within the size, ",
+                        "i.e. the lowest value where lower is better, the ",
+                        "highest where higher is better.")) +
         theme_enm(base_size, "#3a3a38", "#8a8a86") +
         ggplot2::theme(panel.grid = ggplot2::element_blank(),
                        axis.text.y = ggplot2::element_text(
                          hjust = 0, family = "mono", colour = "#3a3a38"),
-                       strip.text.y = ggplot2::element_text(angle = 0))
-    )
+                       strip.text.y = ggplot2::element_text(angle = 0)),
+      length(unique(d$row)) + length(unique(d$size))))
   }
 
   # scatter: axes with the most distinct values, unless chosen
@@ -575,7 +619,7 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
     ggplot2::facet_wrap(~size, scales = "free")
   if (nrow(lab)) p <- p + label_layer(lab, "#3a3a38", "#8a8a86",
                                       base_size * 1.15)
-  p + ggplot2::labs(x = dl(x_metric), y = dl(y_metric),
+  p <- p + ggplot2::labs(x = dl(x_metric), y = dl(y_metric),
                     title = "Variable sets passing the collinearity screen",
                     subtitle = paste0("Numbers: rank by mean rank within ",
                                       "the size (key below)"),
@@ -585,6 +629,7 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
                    plot.caption = ggplot2::element_text(hjust = 0,
                                                         colour = "#3a3a38"),
                    plot.caption.position = "plot")
+  save_plot(p, 12 * ceiling(length(unique(r$size)) / 2) + length(key))
 }
 
 #' Write a variable selection to files
@@ -594,19 +639,23 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
 #' sentences of [recommend_sets()], `_regions.csv`, `_regions_best_set.csv`,
 #' `_pareto.csv`, `_counts.csv`, `_pairs.csv`, `_variables.csv`,
 #' `_frequency.csv`, `_reference_sets.csv`, `_consistency.csv`,
-#' `_structure_agreement.csv`, `_union_rho.csv`, `_tree.nwk`) and PNG figures
-#' (`_tree.png` with the best sets below the tree, `_union_heatmap.png`,
-#' `_sets.png` with the score card and `_sets_scatter.png`).
+#' `_structure_agreement.csv`, `_union_rho.csv`, `_tree.nwk`) and figures
+#' (`_tree`, with the best sets below the tree, `_union_heatmap`, `_sets`
+#' with the score card and `_sets_scatter`), as PNG and/or PDF.
 #'
 #' @param x A `var_selection`.
 #' @param dir Output folder.
 #' @param prefix File name prefix.
+#' @param format Figure format(s): `"png"` (default), `"pdf"` or both,
+#'   `c("png", "pdf")`.
 #' @return The paths of the written files, invisibly.
 #' @export
 #' @examples
 #' # see ?select_variables; e.g. write_variable_selection(vs, tempdir())
-write_variable_selection <- function(x, dir, prefix = "variables") {
+write_variable_selection <- function(x, dir, prefix = "variables",
+                                     format = "png") {
   check_vs(x)
+  format <- match.arg(format, c("png", "pdf"), several.ok = TRUE)
   if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
   f <- function(s) file.path(dir, paste0(prefix, s))
   paths <- character(0)
@@ -634,22 +683,20 @@ write_variable_selection <- function(x, dir, prefix = "variables") {
   csv(x$union, "_union_rho.csv", rn = TRUE)
   writeLines(hclust_newick(x$tree), f("_tree.nwk"))
   paths[["_tree.nwk"]] <- f("_tree.nwk")
-  ggplot2::ggsave(f("_tree.png"), plot_variable_tree(x), width = 8.5,
-                  height = 6.5, dpi = 150)
-  ggplot2::ggsave(f("_union_heatmap.png"), plot_correlation(x), width = 7.5,
-                  height = 7, dpi = 150)
-  paths[["_tree.png"]] <- f("_tree.png")
-  paths[["_union_heatmap.png"]] <- f("_union_heatmap.png")
+  fig <- function(s, p, width, height) {
+    for (ext in format) {
+      fn <- f(paste0(s, ".", ext))
+      ggplot2::ggsave(fn, p, width = width, height = height, dpi = 150,
+                      limitsize = FALSE)
+      paths[[paste0(s, ".", ext)]] <<- fn
+    }
+  }
+  fig("_tree", plot_variable_tree(x), 8.5, 6.5)
+  fig("_union_heatmap", plot_correlation(x), 7.5, 7)
   if (!is.null(x$sets) && nrow(x$sets)) {
     nrow_card <- sum(pmin(table(x$sets$n_vars), 8))
-    ggplot2::ggsave(f("_sets.png"), plot_variable_sets(x), width = 10,
-                    height = max(3.5, 1.6 + 0.3 * nrow_card), dpi = 150,
-                    limitsize = FALSE)
-    ggplot2::ggsave(f("_sets_scatter.png"),
-                    plot_variable_sets(x, type = "scatter"), width = 10,
-                    height = 6.5, dpi = 150)
-    paths[["_sets.png"]] <- f("_sets.png")
-    paths[["_sets_scatter.png"]] <- f("_sets_scatter.png")
+    fig("_sets", plot_variable_sets(x), 10, max(3.5, 1.6 + 0.3 * nrow_card))
+    fig("_sets_scatter", plot_variable_sets(x, type = "scatter"), 10, 6.5)
   }
   invisible(paths)
 }

@@ -15,6 +15,9 @@
 #'   the predictors vary within it.
 #' * [niche_truncation()], [plot_niche_truncation()]: is the niche cut off
 #'   by the calibration area, and do projections go beyond it?
+#' * [niche_coverage()], [plot_niche_coverage()]: how much of a widespread
+#'   species' niche a region of interest contains; is a nested
+#'   (hierarchical) model needed?
 #' * [extrapolation_risk()]: maps of novel conditions in a projection
 #'   (ExDet and MOP).
 #' * [check_sample_size()], [match_climate_period()]: enough records, and

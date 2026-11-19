@@ -41,7 +41,7 @@ step can be used on its own.
 | Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
-| Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough?) | `niche_truncation()`, `plot_niche_truncation()` |
+| Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()` |
 | Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
@@ -581,6 +581,41 @@ and a cautious reading of the projection. The flags are a screening aid: a
 species may truly live up to a coast or a mountain crest where M ends, and
 sampling bias near an edge inflates them, so use thinned records.
 
+**Modelling a widespread species in one region: is a nested model
+needed?** Many studies model a species only in a region of interest, e.g.
+one country, although it lives far beyond. The regional model then learns
+only the conditions the species meets there, which is the truncation above
+caused by the borders of the study rather than by M. Spatially nested
+(hierarchical) models combine a model of the whole range, often coarser,
+with the regional one (e.g. the regional model gets the whole-range model as
+a covariate, or the two are multiplied). In 108 tree species of Spain and
+Switzerland, they removed truncation and extrapolation and predicted better
+than regional-only models (Goicolea et al. 2025, *Ecography* e07328). Whether
+you need one depends on how much of the niche your region contains.
+`niche_coverage()` measures this from records of the whole range (e.g.
+GBIF) and layers covering it:
+
+```r
+nc <- niche_coverage(occ_whole_range, env_whole_range, region = country)
+nc
+plot_niche_coverage(nc)
+```
+
+![The niche of the whole range and the part in the region](man/figures/niche_coverage.png)
+
+| Result | Meaning |
+|---|---|
+| `unfilling` | share of the species' niche (whole-range records in the first two principal components) without a regional record, the measure of Goicolea et al. (2025) |
+| `not_available` | share of the niche in conditions that do not occur in the region at all; no regional model can learn them |
+| per variable: `coverage`, `outside_records`, `outside_region` | part of the variable's range covered by the regional records, and the share of whole-range records beyond the regional records and beyond the region's conditions |
+| `advice` | unfilling below 10%: a regional model is sufficient; 10–50%: a nested model is worth considering, above all for projections; above 50% ("very poorly filled"): strongly advised (`limits` to change) |
+
+If `unfilling` is much larger than `not_available`, the missing conditions
+exist in the region but the species has no records there (absent,
+undersampled or limited by other factors), which a nested model does not
+solve by itself. Then run `niche_truncation()` on the regional calibration
+area to see along which predictors and at which end the response is cut.
+
 ### 11. Selecting predictor variables across periods and regions
 
 Collinearity between predictors can change through time. A set that is
@@ -656,10 +691,21 @@ combination of four variables contains a collinear pair.
 
 ![Score card of the best sets](man/figures/variable_sets.png)
 
-In the score card each row is a set and each column a score; the shading
-compares the passing sets of one size (darker = better) and `*` marks the
-Pareto front. `plot_variable_sets(vs, type = "scatter")` shows all passing
-sets on two scores instead.
+In the score card each row is a set and each column a score, and `*` marks
+the Pareto front. The shading compares the passing sets of one size:
+darker = better, i.e. the **lowest** value in columns marked "lower is
+better" (novelty, VIF, correlations) and the **highest** in columns marked
+"higher is better". Choose what it shows and save it:
+
+```r
+plot_variable_sets(vs, sizes = 2:3, n = 4)       # sizes 2 and 3, 4 sets each
+plot_variable_sets(vs, sizes = 3, n = "all")     # every passing set of size 3
+plot_variable_sets(vs, file = "variable_sets.pdf")   # or .png, .svg
+write_variable_selection(vs, "out", format = c("png", "pdf"))
+```
+
+`plot_variable_sets(vs, type = "scatter")` shows all passing sets on two
+scores instead.
 
 ![Union tree with the best sets](man/figures/variable_tree.png)
 

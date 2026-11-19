@@ -1,3 +1,20 @@
+# preENM 2.18.0
+
+* `niche_coverage()` and `plot_niche_coverage()`: for a widespread species
+  modelled in one region (e.g. a country), how much of its niche the region
+  contains: `unfilling` (share of the whole-range niche without regional
+  records, as in Goicolea et al. 2025, *Ecography* e07328), the share in
+  conditions the region lacks, per-variable coverage, and advice on whether
+  a spatially nested (hierarchical) model is needed. Manual section 10
+  explains nested models and when to use them.
+* `plot_variable_sets()`: `sizes` shows only some set sizes (e.g.
+  `sizes = 2:3`), `n = "all"` shows every passing set, and `file` saves the
+  plot (PDF, PNG, SVG, ... by extension; height from the number of rows).
+  The legend and subtitle of the score card now say what the shading means:
+  darker = better, i.e. the lowest value where lower is better and the
+  highest where higher is better.
+* `write_variable_selection(format = )`: figures as PNG, PDF or both.
+
 # preENM 2.17.0
 
 How large is a design bias? `transfer_bias_test()` now measures how far

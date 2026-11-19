@@ -4,7 +4,7 @@
 \alias{write_variable_selection}
 \title{Write a variable selection to files}
 \usage{
-write_variable_selection(x, dir, prefix = "variables")
+write_variable_selection(x, dir, prefix = "variables", format = "png")
 }
 \arguments{
 \item{x}{A \code{var_selection}.}
@@ -12,6 +12,9 @@ write_variable_selection(x, dir, prefix = "variables")
 \item{dir}{Output folder.}
 
 \item{prefix}{File name prefix.}
+
+\item{format}{Figure format(s): \code{"png"} (default), \code{"pdf"} or both,
+\code{c("png", "pdf")}.}
 }
 \value{
 The paths of the written files, invisibly.
@@ -22,9 +25,9 @@ size, \verb{_sets.csv} with every passing set, \verb{_summary.txt} with the
 sentences of \code{\link[=recommend_sets]{recommend_sets()}}, \verb{_regions.csv}, \verb{_regions_best_set.csv},
 \verb{_pareto.csv}, \verb{_counts.csv}, \verb{_pairs.csv}, \verb{_variables.csv},
 \verb{_frequency.csv}, \verb{_reference_sets.csv}, \verb{_consistency.csv},
-\verb{_structure_agreement.csv}, \verb{_union_rho.csv}, \verb{_tree.nwk}) and PNG figures
-(\verb{_tree.png} with the best sets below the tree, \verb{_union_heatmap.png},
-\verb{_sets.png} with the score card and \verb{_sets_scatter.png}).
+\verb{_structure_agreement.csv}, \verb{_union_rho.csv}, \verb{_tree.nwk}) and figures
+(\verb{_tree}, with the best sets below the tree, \verb{_union_heatmap}, \verb{_sets}
+with the score card and \verb{_sets_scatter}), as PNG and/or PDF.
 }
 \examples{
 # see ?select_variables; e.g. write_variable_selection(vs, tempdir())

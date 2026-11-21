@@ -20,6 +20,7 @@ from <https://posit.co/download/rstudio-desktop/>. Then run in R:
 ```r
 install.packages("remotes")
 remotes::install_github("kkonowalik/preENM")
+
 install.packages("ggrepel")   # optional: neater labels in plots
 ```
 

@@ -627,10 +627,23 @@ the regional model.
 
 | Result | Meaning |
 |---|---|
-| `unfilling` | share of the species' niche (whole-range records in the first two principal components) without a regional record, the measure of Goicolea et al. (2025) |
-| `not_available` | share of the niche in conditions that do not occur in the region at all; no regional model can learn them |
+| `unfilling` | share of the species' niche without a regional record, the measure of Goicolea et al. (2025): the space of the first two principal components is cut into cells, the niche is the cells holding whole-range records, and each cell counts once however many records it holds |
+| `not_available` | share of the niche cells whose conditions do not occur in the region at all; no regional model can learn them |
+| `unfilling_records`, `not_available_records` | the same counted by records; for comparison only (see below) |
 | per variable: `coverage`, `outside_records`, `outside_region` | part of the variable's range covered by the regional records, and the share of whole-range records beyond the regional records and beyond the region's conditions |
 | `advice` | unfilling below 10%: a regional model is sufficient; 10–50%: a nested model is worth considering, above all for projections; above 50% ("very poorly filled"): strongly advised (`limits` to change); "cannot be judged" if all records lie in the region |
+
+**Why niche cells and not records.** Regions of interest are usually the
+best-sampled part of a range. If 93% of the records come from the region,
+the share of *records* in the unfilled niche can never exceed 7%, even if
+the other 7% reveal a large part of the niche: a broad niche known from few
+records elsewhere would hardly count, and the advice would wrongly say that
+a regional model is enough. Counting each occupied cell of environmental
+space once removes this dependence on sampling effort. The printout gives
+both, and the plot frames the unfilled niche cells in red. Per variable,
+the shares are smaller than in the niche, because a record can lie within
+the range of every single variable but in a combination of conditions that
+the region lacks.
 
 If `unfilling` is much larger than `not_available`, the missing conditions
 exist in the region but the species has no records there (absent,

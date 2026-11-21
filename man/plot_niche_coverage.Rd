@@ -23,7 +23,9 @@ A ggplot object.
 }
 \description{
 The environmental space of the first two principal components of the
-records of the whole range: the conditions of the region (shaded), the
+records of the whole range: the conditions of the region (beige), the
+niche cells without regional records (red frames; their share is
+\code{unfilling}), the
 whole-range records outside the region (grey) and inside it (blue), and
 separate regional records if given (\code{region_points}, red crosses); the
 legend gives their numbers. Grey points outside the shaded area are

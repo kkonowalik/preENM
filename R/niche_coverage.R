@@ -14,15 +14,25 @@
 #' you how much a regional model would miss, from the records of the whole
 #' range and layers covering it:
 #'
-#' * `unfilling`: the share of the species' niche (records of the whole
-#'   range in the space of the first two principal components) that the
-#'   regional records do not occupy. This is the measure of Goicolea et al.
-#'   (2025), there computed with `ecospat.niche.similarity.test()`; here the
-#'   environmental space is cut into `n_bins` x `n_bins` cells and the share
-#'   of whole-range records in cells without a regional record is counted.
-#' * `not_available`: the share of whole-range records in conditions that do
-#'   not occur in the region at all. No regional model can learn these;
-#'   they matter when the region moves into them (e.g. under warming).
+#' * `unfilling`: the share of the species' niche that the regional records
+#'   do not occupy, the measure used by Goicolea et al. (2025). The space of
+#'   the first two principal components of the whole-range records is cut
+#'   into `n_bins` x `n_bins` cells; the niche is the cells that hold at
+#'   least `min_records` whole-range records, and `unfilling` is the share
+#'   of these cells without a regional record. **Every cell counts once**,
+#'   however many records it holds.
+#' * `not_available`: the share of the niche cells whose conditions do not
+#'   occur in the region at all. No regional model can learn these; they
+#'   matter when the region moves into them (e.g. under warming).
+#' * `unfilling_records`, `not_available_records`: the same counted by
+#'   records, i.e. the share of whole-range records in such cells. These
+#'   are biased when most records come from the region (often the case:
+#'   regions of interest are usually the best sampled): they can never
+#'   exceed the share of records outside the region, so a large part of the
+#'   niche known from few records elsewhere hardly counts. They are reported
+#'   for comparison; the advice uses the niche cells. Sparse records still
+#'   occupy fewer cells than dense ones would, so even `unfilling` is
+#'   conservative where the rest of the range is poorly sampled.
 #' * Per variable: the share of the whole-range records outside the range
 #'   of the regional records (`outside_records`) and outside the conditions
 #'   of the region (`outside_region`), and the part of the range of the
@@ -64,6 +74,9 @@
 #'   per variable (default the central 98%, so that a few outliers do not
 #'   decide it).
 #' @param n_bins Number of bins per principal component for `unfilling`.
+#' @param min_records Records a cell of the environmental space needs to
+#'   count as part of the niche; e.g. 2 ignores cells with a single,
+#'   possibly erroneous record.
 #' @param limits Two `unfilling` values separating "regional model
 #'   sufficient", "nested model worth considering" and "nested model
 #'   strongly advised".
@@ -74,7 +87,10 @@
 #'   [plot_niche_coverage()]), e.g. `c("coverage.png", "coverage.pdf")`.
 #' @param width,height Size of the saved plot in inches.
 #' @return A `niche_coverage` object: a list with `summary` (records in
-#'   total and in the region, `unfilling`, `not_available`, `advice`),
+#'   total and in the region, `niche_cells`, `unfilling`, `not_available`,
+#'   `unfilling_records`, `not_available_records`, `advice`), `bins` (one
+#'   row per niche cell: centre, records, whether it has regional records
+#'   and occurs in the region),
 #'   `variables` (one row per layer), `pca` (the PCA of the whole-range
 #'   records) and the scores used by [plot_niche_coverage()].
 #' @references Goicolea, T., Adde, A., Broennimann, O., Garcia-Vinas, J.I.,
@@ -108,6 +124,7 @@
 #' # plot_niche_coverage(nc, file = c("coverage.png", "coverage.pdf"))
 niche_coverage <- function(points, env, region, region_points = NULL,
                            probs = c(0.01, 0.99), n_bins = 20,
+                           min_records = 1,
                            limits = c(0.1, 0.5), n = 1e5, coords = NULL,
                            points_crs = "EPSG:4326", seed = 1, file = NULL,
                            width = 7.5, height = 5.5) {
@@ -221,8 +238,27 @@ niche_coverage <- function(points, env, region, region_points = NULL,
   SRec <- stats::predict(pca, Er)[, seq_len(k), drop = FALSE]
   b_reg <- unique(stats::na.omit(bin_of(SRec)))
   b_env <- unique(stats::na.omit(bin_of(SR)))
-  unfilling <- mean(!b_all %in% b_reg)
-  not_available <- mean(!b_all %in% b_env)
+  # by niche space: every cell of the environmental space with at least
+  # `min_records` whole-range records counts once, however many records it
+  # holds, so densely sampled parts of the range do not dominate
+  tab <- table(b_all)
+  occ <- names(tab)[tab >= min_records]
+  if (!length(occ)) stop("No cell of the environmental space has ",
+                         min_records, " records; lower `min_records`.",
+                         call. = FALSE)
+  unfilling <- mean(!occ %in% b_reg)
+  not_available <- mean(!occ %in% b_env)
+  # by records: the share of whole-range records in such cells
+  unfilling_records <- mean(!b_all %in% b_reg)
+  not_available_records <- mean(!b_all %in% b_env)
+  cell_xy <- do.call(rbind, strsplit(occ, " "))
+  width_pc <- (lim[2, ] - lim[1, ]) / n_bins
+  bins <- data.frame(
+    pc1 = lim[1, 1] + (as.numeric(cell_xy[, 1]) - 0.5) * width_pc[1],
+    pc2 = if (k > 1) lim[1, 2] + (as.numeric(cell_xy[, 2]) - 0.5) *
+      width_pc[2] else 0,
+    records = as.integer(tab[occ]), regional = occ %in% b_reg,
+    available = occ %in% b_env)
   advice <- if (is.null(region_points) && all(inside)) {
     "cannot be judged"
   } else if (unfilling < limits[1]) {
@@ -236,9 +272,11 @@ niche_coverage <- function(points, env, region, region_points = NULL,
                         share_region = mean(inside),
                         region_points = if (is.null(region_points)) NA else
                           nrow(Er),
-                        unfilling = unfilling,
-                        not_available = not_available, advice = advice,
-                        stringsAsFactors = FALSE)
+                        niche_cells = length(occ), unfilling = unfilling,
+                        not_available = not_available,
+                        unfilling_records = unfilling_records,
+                        not_available_records = not_available_records,
+                        advice = advice, stringsAsFactors = FALSE)
   out <- structure(
     list(summary = summary, variables = per_var, pca = pca,
          scores = data.frame(pc1 = S[, 1], pc2 = if (k > 1) S[, 2] else 0,
@@ -247,7 +285,9 @@ niche_coverage <- function(points, env, region, region_points = NULL,
                                     pc2 = if (k > 1) SR[, 2] else 0),
          region_point_scores = if (is.null(region_points)) NULL else
            data.frame(pc1 = SRec[, 1], pc2 = if (k > 1) SRec[, 2] else 0),
+         bins = bins, bin_width = width_pc,
          settings = list(probs = probs, n_bins = n_bins, limits = limits,
+                         min_records = min_records,
                          separate_region_points = !is.null(region_points))),
     class = "niche_coverage")
   if (!is.null(file)) plot_niche_coverage(out, file = file, width = width,
@@ -280,13 +320,25 @@ print.niche_coverage <- function(x, digits = 3, ...) {
     "coverage = part of the range of the whole-range records that ", reg,
     " cover; outside_records = share of whole-range records beyond the range ",
     "of ", reg, "; outside_region = share beyond the conditions of the ",
-    "region."), width = 78, prefix = "  "), sep = "\n")
+    "region. Each variable is judged alone, so these shares are smaller ",
+    "than those of the niche below, which counts combinations of ",
+    "conditions."), width = 78, prefix = "  "), sep = "\n")
   cat("\nIN SHORT\n")
+  n_un <- round(s$unfilling * s$niche_cells)
+  out_share <- if (sep) NA else 1 - s$share_region
   txt <- c(
     paste0(pct(s$unfilling), " of the species' niche has no record in the ",
-           "region (unfilling)."),
+           "region: ", n_un, " of the ", s$niche_cells, " cells of ",
+           "environmental space that the species occupies (unfilling)."),
     paste0(pct(s$not_available), " of the niche lies in conditions that do ",
            "not occur anywhere in the region (not available)."),
+    paste0("Counted by records instead, ", pct(s$unfilling_records),
+           " of the whole-range records lie in the unfilled part",
+           if (!is.na(out_share)) paste0(
+             "; this share cannot exceed the share of records outside the ",
+             "region (", pct(out_share), ")"),
+           ". It understates the gap when most records come from the ",
+           "region, so the advice uses the niche space."),
     paste0("Advice: ", s$advice, ". ", switch(
       s$advice,
       "regional model sufficient" = paste0(
@@ -314,17 +366,20 @@ print.niche_coverage <- function(x, digits = 3, ...) {
         sep = "\n")
   }
   cat(strwrap(paste0(
-    "Niche: the whole-range records in the space of the first two ",
-    "principal components of the variables, cut into ", x$settings$n_bins,
-    " x ", x$settings$n_bins, " cells."), width = 78, prefix = "  "),
-    sep = "\n")
+    "Niche: the cells of the space of the first two principal components ",
+    "of the variables (cut into ", x$settings$n_bins, " x ",
+    x$settings$n_bins, ") that hold at least ", x$settings$min_records,
+    " whole-range record(s); each counts once."), width = 78,
+    prefix = "  "), sep = "\n")
   invisible(x)
 }
 
 #' Plot the niche coverage of a region
 #'
 #' The environmental space of the first two principal components of the
-#' records of the whole range: the conditions of the region (shaded), the
+#' records of the whole range: the conditions of the region (beige), the
+#' niche cells without regional records (red frames; their share is
+#' `unfilling`), the
 #' whole-range records outside the region (grey) and inside it (blue), and
 #' separate regional records if given (`region_points`, red crosses); the
 #' legend gives their numbers. Grey points outside the shaded area are
@@ -374,25 +429,62 @@ plot_niche_coverage <- function(x, base_size = 11,
   cols <- stats::setNames(c("#9a9a95", "#1c5cab", "#c8553d"),
                           c(lab_out, lab_in, lab_reg))
   shapes <- stats::setNames(c(16, 16, 4), c(lab_out, lab_in, lab_reg))
+  # conditions of the region as tiles of a 40 x 40 grid
+  rs <- x$region_scores
+  rg <- rbind(range(c(rs$pc1, x$scores$pc1)), range(c(rs$pc2, x$scores$pc2)))
+  rt_w <- pmax((rg[, 2] - rg[, 1]) / 40, 1e-9)
+  ix <- floor((rs$pc1 - rg[1, 1]) / rt_w[1])
+  iy <- floor((rs$pc2 - rg[2, 1]) / rt_w[2])
+  rt <- unique(data.frame(ix, iy))
+  rt <- data.frame(pc1 = rg[1, 1] + (rt$ix + 0.5) * rt_w[1],
+                   pc2 = rg[2, 1] + (rt$iy + 0.5) * rt_w[2])
+  b <- x$bins
+  if (!is.null(b)) {
+    b <- b[!b$regional, , drop = FALSE]
+    lab_gap <- sprintf("niche cells without regional records (%d of %d)",
+                       nrow(b), nrow(x$bins))
+    b$what <- factor(lab_gap, levels = lab_gap)
+  }
   ve <- summary(x$pca)$importance[2, ]
   ax <- function(j) sprintf("PC%d (%.0f%% of the variance)", j, 100 * ve[j])
   ggplot2::ggplot(s, ggplot2::aes(.data$pc1, .data$pc2)) +
-    ggplot2::geom_bin_2d(data = x$region_scores, bins = 40,
-                         fill = "#e9e2cf", colour = NA) +
+    ggplot2::geom_tile(data = rt, inherit.aes = FALSE,
+                       ggplot2::aes(.data$pc1, .data$pc2), width = rt_w[1],
+                       height = rt_w[2], fill = "#e9e2cf", colour = NA) +
+    (if (!is.null(b) && nrow(b)) {
+      ggplot2::geom_tile(data = b, inherit.aes = FALSE,
+                         ggplot2::aes(.data$pc1, .data$pc2, fill = .data$what),
+                         width = x$bin_width[1],
+                         height = if (length(x$bin_width) > 1)
+                           x$bin_width[2] else 1,
+                         colour = "#c8553d", linewidth = 0.25, alpha = 0.35)
+    }) +
+    (if (!is.null(b) && nrow(b)) {
+      ggplot2::scale_fill_manual(values = stats::setNames("#f2b8a8",
+                                                          levels(b$what)),
+                                 name = NULL)
+    }) +
     ggplot2::geom_point(ggplot2::aes(colour = .data$group,
-                                     shape = .data$group), size = 1.4,
-                        alpha = 0.8) +
+                                     shape = .data$group,
+                                     size = .data$group), alpha = 0.8) +
+    ggplot2::scale_size_manual(values = stats::setNames(c(1.4, 1.4, 0.9),
+                                                        c(lab_out, lab_in,
+                                                          lab_reg)),
+                               name = NULL, drop = TRUE) +
     ggplot2::scale_colour_manual(values = cols, name = NULL, drop = TRUE) +
     ggplot2::scale_shape_manual(values = shapes, name = NULL, drop = TRUE) +
-    ggplot2::guides(colour = ggplot2::guide_legend(ncol = 1),
-                    shape = ggplot2::guide_legend(ncol = 1)) +
+    ggplot2::guides(colour = ggplot2::guide_legend(ncol = 1, order = 1),
+                    shape = ggplot2::guide_legend(ncol = 1, order = 1),
+                    size = ggplot2::guide_legend(ncol = 1, order = 1),
+                    fill = ggplot2::guide_legend(order = 2)) +
     ggplot2::labs(
       x = ax(1), y = ax(min(2, length(ve))),
       title = "How much of the niche does the region contain?",
-      subtitle = sprintf(paste0("Shaded: conditions that occur in the ",
-                                "region.\n%.0f%% of the niche has no record ",
-                                "in the region, %.0f%% is not available ",
-                                "there.\nAdvice: %s."),
+      subtitle = sprintf(paste0("Beige: conditions that occur in the ",
+                                "region; red frames: niche cells without ",
+                                "regional records.\n%.0f%% of the niche has ",
+                                "no record in the region, %.0f%% is not ",
+                                "available there.\nAdvice: %s."),
                          100 * x$summary$unfilling,
                          100 * x$summary$not_available,
                          x$summary$advice)) +

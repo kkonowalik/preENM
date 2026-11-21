@@ -26,7 +26,7 @@ test_that("a region with part of the range misses part of the niche", {
   expect_equal(small$summary$advice, "nested model strongly advised")
   expect_gt(half$summary$unfilling, 0.2)
   expect_lt(half$summary$unfilling, 0.6)
-  expect_lt(all$summary$unfilling, 0.05)
+  expect_lt(all$summary$unfilling, 0.1)
   expect_equal(all$summary$advice, "regional model sufficient")
   expect_lte(half$summary$not_available, half$summary$unfilling + 1e-9)
   v <- half$variables
@@ -95,4 +95,38 @@ test_that("every plotting function can save its plot", {
   expect_message(plot_models(sel, x = "MAE", y = "AUC",
                              file = file.path(d, "pm.jpeg")), "Saved")
   expect_error(plot_pareto(ev, file = file.path(d, "x.docx")), "Unsupported|Unknown")
+})
+
+
+test_that("unfilling counts niche cells, not records", {
+  # the region is the cold half; the warm half of the niche is known only
+  # from few records outside it
+  set.seed(1)
+  r <- terra::rast(nrows = 60, ncols = 60, xmin = 0, xmax = 20, ymin = 40,
+                   ymax = 60, crs = "EPSG:4326")
+  y <- terra::init(r, "y")
+  env <- c(20 - (y - 40), terra::init(r, "x") / 2 +
+             terra::setValues(r, stats::rnorm(terra::ncell(r), 0, 0.3)))
+  names(env) <- c("temp", "wet")
+  yv <- terra::values(y)[, 1]
+  xy <- rbind(terra::xyFromCell(r, sample(which(yv > 50), 1500)),
+              terra::xyFromCell(r, sample(which(yv < 50), 120)))
+  pts <- data.frame(lon = xy[, 1], lat = xy[, 2])
+  region <- terra::as.polygons(terra::ext(0, 20, 50, 60), crs = "EPSG:4326")
+  nc <- niche_coverage(pts, env, region)
+  s <- nc$summary
+  # by records the gap can be no larger than the share of records outside
+  expect_lte(s$unfilling_records, 1 - s$share_region + 1e-9)
+  expect_lt(s$unfilling_records, 0.1)
+  # by niche cells it shows that a large part of the niche is missing
+  expect_gt(s$unfilling, 0.25)
+  expect_false(s$advice == "regional model sufficient")
+  b <- nc$bins
+  expect_equal(nrow(b), s$niche_cells)
+  expect_equal(mean(!b$regional), s$unfilling)
+  expect_equal(sum(b$records), s$records)
+  expect_output(print(nc), "cannot exceed the share of records outside")
+  # ignoring cells with a single record
+  nc2 <- niche_coverage(pts, env, region, min_records = 2)
+  expect_lt(nc2$summary$niche_cells, s$niche_cells)
 })

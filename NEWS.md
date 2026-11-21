@@ -1,3 +1,21 @@
+# preENM 2.20.0
+
+* `niche_coverage()`: **`unfilling` and `not_available` now count cells of
+  environmental space, not records.** Each cell occupied by the species
+  counts once, however many records it holds. Before, they were shares of
+  records, which can never exceed the share of records outside the region:
+  with a well-sampled region (often 90% or more of the records) a large
+  part of the niche known from few records elsewhere hardly counted, and
+  the advice could wrongly say that a regional model is enough. The
+  record-based shares are still given (`unfilling_records`,
+  `not_available_records`) for comparison. New `min_records` (records a
+  cell needs to count) and `bins` (one row per niche cell).
+* `plot_niche_coverage()` frames the niche cells without regional records
+  in red, with their number in the legend; regional records are drawn
+  smaller so the records below stay visible.
+* The printout explains why the per-variable shares are smaller than those
+  of the niche (single variables against combinations of conditions).
+
 # preENM 2.19.0
 
 * **Every plotting function can save its figure**: `file = "fig.pdf"`

@@ -11,6 +11,7 @@ niche_coverage(
   region_points = NULL,
   probs = c(0.01, 0.99),
   n_bins = 20,
+  min_records = 1,
   limits = c(0.1, 0.5),
   n = 1e+05,
   coords = NULL,
@@ -44,6 +45,10 @@ decide it).}
 
 \item{n_bins}{Number of bins per principal component for \code{unfilling}.}
 
+\item{min_records}{Records a cell of the environmental space needs to
+count as part of the niche; e.g. 2 ignores cells with a single,
+possibly erroneous record.}
+
 \item{limits}{Two \code{unfilling} values separating "regional model
 sufficient", "nested model worth considering" and "nested model
 strongly advised".}
@@ -61,7 +66,10 @@ strongly advised".}
 }
 \value{
 A \code{niche_coverage} object: a list with \code{summary} (records in
-total and in the region, \code{unfilling}, \code{not_available}, \code{advice}),
+total and in the region, \code{niche_cells}, \code{unfilling}, \code{not_available},
+\code{unfilling_records}, \code{not_available_records}, \code{advice}), \code{bins} (one
+row per niche cell: centre, records, whether it has regional records
+and occurs in the region),
 \code{variables} (one row per layer), \code{pca} (the PCA of the whole-range
 records) and the scores used by \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}.
 }
@@ -80,15 +88,25 @@ range and layers covering it:
 }
 \details{
 \itemize{
-\item \code{unfilling}: the share of the species' niche (records of the whole
-range in the space of the first two principal components) that the
-regional records do not occupy. This is the measure of Goicolea et al.
-(2025), there computed with \code{ecospat.niche.similarity.test()}; here the
-environmental space is cut into \code{n_bins} x \code{n_bins} cells and the share
-of whole-range records in cells without a regional record is counted.
-\item \code{not_available}: the share of whole-range records in conditions that do
-not occur in the region at all. No regional model can learn these;
-they matter when the region moves into them (e.g. under warming).
+\item \code{unfilling}: the share of the species' niche that the regional records
+do not occupy, the measure used by Goicolea et al. (2025). The space of
+the first two principal components of the whole-range records is cut
+into \code{n_bins} x \code{n_bins} cells; the niche is the cells that hold at
+least \code{min_records} whole-range records, and \code{unfilling} is the share
+of these cells without a regional record. \strong{Every cell counts once},
+however many records it holds.
+\item \code{not_available}: the share of the niche cells whose conditions do not
+occur in the region at all. No regional model can learn these; they
+matter when the region moves into them (e.g. under warming).
+\item \code{unfilling_records}, \code{not_available_records}: the same counted by
+records, i.e. the share of whole-range records in such cells. These
+are biased when most records come from the region (often the case:
+regions of interest are usually the best sampled): they can never
+exceed the share of records outside the region, so a large part of the
+niche known from few records elsewhere hardly counts. They are reported
+for comparison; the advice uses the niche cells. Sparse records still
+occupy fewer cells than dense ones would, so even \code{unfilling} is
+conservative where the rest of the range is poorly sampled.
 \item Per variable: the share of the whole-range records outside the range
 of the regional records (\code{outside_records}) and outside the conditions
 of the region (\code{outside_region}), and the part of the range of the

@@ -42,7 +42,7 @@ step can be used on its own.
 | Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
-| Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()` |
+| Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()`, `classify_points()`, `unfilled_records()` |
 | Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
@@ -605,9 +605,11 @@ GBIF) and layers covering it:
 
 ```r
 nc <- niche_coverage(occ_whole_range, env_whole_range, region = country,
+                     log_vars = "auto",   # log1p of precipitation amounts
                      file = c("niche_coverage.png", "niche_coverage.pdf"))
-nc
-plot_niche_coverage(nc)
+nc                                    # results, statistics, advice
+plot_niche_coverage(nc)               # niche space and map side by side
+unfilled_records(nc)                  # records in the unfilled niche, to check
 
 # with a separate regional data set (e.g. a national survey), the usual
 # case for nested models
@@ -623,7 +625,7 @@ region trivially contains their niche: the function warns and the advice
 reads "cannot be judged". The region itself can be a country or the M of
 the regional model.
 
-![The niche of the whole range and the part in the region](man/figures/niche_coverage.png)
+![The niche of the whole range and the part in the region, in the niche space and on the map](man/figures/niche_coverage.png)
 
 | Result | Meaning |
 |---|---|
@@ -631,7 +633,25 @@ the regional model.
 | `not_available` | share of the niche cells whose conditions do not occur in the region at all; no regional model can learn them |
 | `unfilling_records`, `not_available_records` | the same counted by records; for comparison only (see below) |
 | per variable: `coverage`, `outside_records`, `outside_region` | part of the variable's range covered by the regional records, and the share of whole-range records beyond the regional records and beyond the region's conditions |
+| `unfilling_lo`, `unfilling_hi` | bootstrap 95% interval of `unfilling` (resampled records) |
+| `unfilling_null`, `unfilling_ses`, `unfilling_p` | the unfilling a random sample of the whole-range records of the size of the regional records would leave, and how far the region's value is beyond it |
+| robustness table | `unfilling` when a niche cell needs 1, 2, 3 or 5 records; the printout says when the advice changes |
 | `advice` | unfilling below 10%: a regional model is sufficient; 10–50%: a nested model is worth considering, above all for projections; above 50% ("very poorly filled"): strongly advised (`limits` to change); "cannot be judged" if all records lie in the region |
+
+**How serious is the gap?** The bootstrap interval says how much the
+unfilling depends on the particular records. The null comparison separates
+two causes: if the region leaves much more of the niche unfilled than a
+random sample of the same number of whole-range records would (large SES,
+small p), the region lacks conditions of the niche; if not, the gap is
+about what its number of records alone would leave, and more regional
+records may close it.
+
+**Sparse records.** One record in a remote cell counts as much as a
+thousand in another, so a handful of outliers, records of a related taxon or
+wrong coordinates can decide the advice. The robustness table shows the
+unfilling when cells need 2, 3 or 5 records, and the printout warns when
+the advice changes; `unfilled_records()` lists those records with their
+coordinates so you can map and check them.
 
 **Why niche cells and not records.** Regions of interest are usually the
 best-sampled part of a range. If 93% of the records come from the region,
@@ -650,6 +670,33 @@ exist in the region but the species has no records there (absent,
 undersampled or limited by other factors), which a nested model does not
 solve by itself. Then run `niche_truncation()` on the regional calibration
 area to see along which predictors and at which end the response is cut.
+
+**Will a nested model help my projections?** Only where the conditions you
+predict for fall into the part of the niche known from elsewhere.
+`classify_points()` places any points in the same niche space: the region
+under a future (or past) climate, evaluation sites, fossil sites. With
+`predicted` (whether your regional model predicted each point as suitable),
+it counts the misses per category:
+
+```r
+fut <- terra::spatSample(env_2070_region, 5000, na.rm = TRUE)  # or values at sites
+cl <- classify_points(nc, values = fut)
+cl                                         # share of points per category
+cl <- classify_points(nc, values = site_values, predicted = suitable)
+cl                                         # where the misses are
+```
+
+| Category | Meaning for a nested model |
+|---|---|
+| `filled` | conditions known from regional records: a nested model adds nothing; misses here come from the model, the variables or the records |
+| `elsewhere, available` / `elsewhere, absent` | conditions known only from records outside the region (occurring in the region today, or not): a nested model can help |
+| `region only`, `available, unoccupied`, `unoccupied` | conditions with too few or no records of the species anywhere |
+| `outside` | beyond all conditions the species is known from: extrapolation for any model |
+
+New values must be in the units of the layers used in `niche_coverage()`;
+points that land far beyond the whole range in the niche space, or
+variables with a median far from that of the records (e.g. Kelvin against
+degrees Celsius), give a warning.
 
 ### 11. Selecting predictor variables across periods and regions
 

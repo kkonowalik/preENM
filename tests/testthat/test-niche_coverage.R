@@ -38,7 +38,7 @@ test_that("a region with part of the range misses part of the niche", {
   expect_equal(half$summary$records_region,
                sum(f$pts$lat > 45 & f$pts$lat < 55))
   expect_output(print(half), "nested model worth considering")
-  expect_s3_class(plot_niche_coverage(half), "ggplot")
+  expect_s3_class(plot_niche_coverage(half, type = "pca"), "ggplot")
   # stricter limits change the advice, not the numbers
   h2 <- niche_coverage(f$pts, f$env, f$box(45, 55), limits = c(0.6, 0.9))
   expect_equal(h2$summary$unfilling, half$summary$unfilling)
@@ -71,7 +71,7 @@ test_that("records outside the layers are reported; separate regional data", {
   base <- niche_coverage(f$pts, f$env, region)
   expect_gt(nc$summary$unfilling, base$summary$unfilling)
   expect_output(print(nc), "Regional records")
-  p <- plot_niche_coverage(nc)
+  p <- plot_niche_coverage(nc, type = "pca")
   expect_true(any(grepl("regional records", levels(p$data$group))))
 })
 
@@ -122,11 +122,79 @@ test_that("unfilling counts niche cells, not records", {
   expect_gt(s$unfilling, 0.25)
   expect_false(s$advice == "regional model sufficient")
   b <- nc$bins
-  expect_equal(nrow(b), s$niche_cells)
-  expect_equal(mean(!b$regional), s$unfilling)
+  expect_equal(sum(b$records >= 1), s$niche_cells)
+  niche <- b$records >= 1
+  expect_equal(mean(b$regional_records[niche] == 0), s$unfilling)
   expect_equal(sum(b$records), s$records)
   expect_output(print(nc), "cannot exceed the share of records outside")
   # ignoring cells with a single record
   nc2 <- niche_coverage(pts, env, region, min_records = 2)
   expect_lt(nc2$summary$niche_cells, s$niche_cells)
+})
+
+
+test_that("statistics, robustness, log transform and unfilled records", {
+  f <- cov_fixture()
+  region <- f$box(45, 55)
+  nc <- niche_coverage(f$pts, f$env, region, n_boot = 99, n_null = 99)
+  s <- nc$summary
+  expect_true(s$unfilling_lo <= s$unfilling && s$unfilling <= s$unfilling_hi)
+  # the region (half of the temperature gradient) leaves much more unfilled
+  # than a random sample of the same size
+  expect_lt(s$unfilling_null, s$unfilling)
+  expect_gt(s$unfilling_ses, 3)
+  expect_lte(s$unfilling_p, 0.05)
+  rb <- nc$robustness
+  expect_equal(rb$min_records, c(1, 2, 3, 5))
+  expect_true(all(diff(rb$niche_cells) <= 0))
+  expect_equal(rb$unfilling[1], s$unfilling)
+  ur <- unfilled_records(nc)
+  expect_true(all(ur$category %in% c("elsewhere, available",
+                                     "elsewhere, absent")))
+  expect_true(all(!ur$in_region))
+  expect_true(all(c("lon", "lat") %in% names(ur)))
+  expect_equal(nrow(unfilled_records(nc, all = TRUE)), s$records)
+  # log transform of a variable
+  env2 <- f$env
+  env2$wet <- exp(env2$wet)
+  nl <- niche_coverage(f$pts, env2, region, log_vars = "wet", n_boot = 0,
+                       n_null = 0)
+  expect_equal(nl$settings$log_vars, "wet")
+  expect_error(niche_coverage(f$pts, f$env, region, log_vars = "nope"),
+               "log_vars")
+  expect_s3_class(plot_niche_coverage(nc, type = "map"), "ggplot")
+  expect_s3_class(plot_niche_coverage(nc, type = "pca"), "ggplot")
+  grDevices::pdf(NULL)
+  both <- plot_niche_coverage(nc)
+  grDevices::dev.off()
+  expect_named(both, c("pca", "map"))
+})
+
+test_that("classify_points places new points and counts misses", {
+  f <- cov_fixture()
+  region <- f$box(45, 55)
+  nc <- niche_coverage(f$pts, f$env, region, n_boot = 0, n_null = 0)
+  v <- data.frame(temp = c(10, 18, 5, 100), wet = c(5, 5, 5, 5))
+  expect_warning(cl <- classify_points(nc, values = v,
+                                       predicted = c(FALSE, FALSE, TRUE,
+                                                     TRUE)), "units")
+  expect_s3_class(cl, "niche_classes")
+  # 10 degrees: a temperature of the region with records -> filled
+  expect_equal(as.character(cl$category[1]), "filled")
+  # 18 degrees: occupied only south of the region -> elsewhere, absent
+  expect_equal(as.character(cl$category[2]), "elsewhere, absent")
+  expect_equal(as.character(cl$category[4]), "outside")
+  m <- attr(cl, "misses")
+  expect_equal(sum(m$missed), 2)
+  expect_output(print(cl), "nested model\\s+could help")
+  # the same through points and layers, and through predict()
+  pts <- data.frame(lon = c(10, 10), lat = c(50, 42))
+  cl2 <- predict(nc, pts, env = f$env)
+  expect_equal(as.character(cl2$category[1]), "filled")
+  expect_equal(as.character(cl2$category[2]), "elsewhere, absent")
+  # units guard: temperatures in Kelvin
+  vk <- data.frame(temp = c(10, 12, 8) + 273.15, wet = 5)
+  expect_warning(expect_warning(classify_points(nc, values = vk), "units"),
+                 "units")
+  expect_error(classify_points(nc, values = data.frame(temp = 1)), "wet")
 })

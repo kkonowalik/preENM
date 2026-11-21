@@ -9,17 +9,20 @@ niche_coverage(
   env,
   region,
   region_points = NULL,
+  log_vars = NULL,
   probs = c(0.01, 0.99),
   n_bins = 20,
   min_records = 1,
   limits = c(0.1, 0.5),
+  n_boot = 199,
+  n_null = 199,
   n = 1e+05,
   coords = NULL,
   points_crs = "EPSG:4326",
   seed = 1,
   file = NULL,
-  width = 7.5,
-  height = 5.5
+  width = 14,
+  height = 6
 )
 }
 \arguments{
@@ -39,25 +42,32 @@ regional model uses more precise regional data). Then \code{unfilling} and
 the per-variable values compare these with \code{points}; by default the
 records of \code{points} that fall in \code{region} are the regional records.}
 
+\item{log_vars}{Variables log-transformed (\code{log1p}) before the PCA, e.g.
+skewed precipitation amounts: names, \code{"auto"} for bioclim
+precipitation amounts recognised by name (bio12-14, bio16-19), or
+\code{NULL} (default) for none.}
+
 \item{probs}{Quantiles of the whole-range records that define their range
 per variable (default the central 98\%, so that a few outliers do not
 decide it).}
 
-\item{n_bins}{Number of bins per principal component for \code{unfilling}.}
+\item{n_bins}{Number of bins per principal component.}
 
-\item{min_records}{Records a cell of the environmental space needs to
-count as part of the niche; e.g. 2 ignores cells with a single,
-possibly erroneous record.}
+\item{min_records}{Records a cell needs to count as part of the niche;
+e.g. 2 ignores cells with a single, possibly erroneous record.}
 
 \item{limits}{Two \code{unfilling} values separating "regional model
 sufficient", "nested model worth considering" and "nested model
 strongly advised".}
 
+\item{n_boot, n_null}{Bootstrap resamples and random samples for the
+statistics (0 to skip).}
+
 \item{n}{Number of cells sampled from the region.}
 
 \item{coords, points_crs}{Coordinate columns and CRS of \code{points}.}
 
-\item{seed}{Seed for the cell sample.}
+\item{seed}{Seed for the cell sample and the statistics.}
 
 \item{file}{Optional file(s) to save the plot to (see
 \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}), e.g. \code{c("coverage.png", "coverage.pdf")}.}
@@ -65,13 +75,15 @@ strongly advised".}
 \item{width, height}{Size of the saved plot in inches.}
 }
 \value{
-A \code{niche_coverage} object: a list with \code{summary} (records in
-total and in the region, \code{niche_cells}, \code{unfilling}, \code{not_available},
-\code{unfilling_records}, \code{not_available_records}, \code{advice}), \code{bins} (one
-row per niche cell: centre, records, whether it has regional records
-and occurs in the region),
-\code{variables} (one row per layer), \code{pca} (the PCA of the whole-range
-records) and the scores used by \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}.
+A \code{niche_coverage} object: a list with \code{summary} (records,
+\code{niche_cells}, \code{unfilling} with \code{unfilling_lo}/\code{unfilling_hi},
+\code{unfilling_null}, \code{unfilling_ses}, \code{unfilling_p}, \code{not_available},
+the record-based shares and \code{advice}), \code{robustness} (unfilling for
+several \code{min_records}), \code{variables} (one row per layer), \code{bins} (one
+row per cell with records: centre, records, regional records, regional
+density percentile, category), \code{records} (the whole-range records with
+coordinates and category, see \code{\link[=unfilled_records]{unfilled_records()}}) and what
+\code{\link[=classify_points]{classify_points()}} and \code{\link[=plot_niche_coverage]{plot_niche_coverage()}} need.
 }
 \description{
 Many studies model a widespread species only in a region of interest, e.g.
@@ -84,44 +96,55 @@ address this by combining a model of the whole range, often at a coarser
 resolution, with the regional model (Pearson et al. 2004; Mateo et al.
 2019; Chevalier et al. 2021; Goicolea et al. 2025). This function tells
 you how much a regional model would miss, from the records of the whole
-range and layers covering it:
+range and layers covering it.
 }
 \details{
+\strong{The niche.} The records of the whole range are placed in the space of
+the first two principal components of the variables (after \code{log_vars}
+are log-transformed), which is cut into \code{n_bins} x \code{n_bins} cells. The
+niche is the cells holding at least \code{min_records} whole-range records;
+\strong{every cell counts once}, however many records it holds, so that the
+well-sampled region does not dominate.
 \itemize{
-\item \code{unfilling}: the share of the species' niche that the regional records
-do not occupy, the measure used by Goicolea et al. (2025). The space of
-the first two principal components of the whole-range records is cut
-into \code{n_bins} x \code{n_bins} cells; the niche is the cells that hold at
-least \code{min_records} whole-range records, and \code{unfilling} is the share
-of these cells without a regional record. \strong{Every cell counts once},
-however many records it holds.
+\item \code{unfilling}: the share of the niche cells without a regional record,
+the measure used by Goicolea et al. (2025).
 \item \code{not_available}: the share of the niche cells whose conditions do not
 occur in the region at all. No regional model can learn these; they
 matter when the region moves into them (e.g. under warming).
 \item \code{unfilling_records}, \code{not_available_records}: the same counted by
-records, i.e. the share of whole-range records in such cells. These
-are biased when most records come from the region (often the case:
-regions of interest are usually the best sampled): they can never
-exceed the share of records outside the region, so a large part of the
-niche known from few records elsewhere hardly counts. They are reported
-for comparison; the advice uses the niche cells. Sparse records still
-occupy fewer cells than dense ones would, so even \code{unfilling} is
-conservative where the rest of the range is poorly sampled.
-\item Per variable: the share of the whole-range records outside the range
-of the regional records (\code{outside_records}) and outside the conditions
-of the region (\code{outside_region}), and the part of the range of the
-whole-range records covered by the regional ones (\code{coverage}).
+records. They can never exceed the share of records outside the
+region, so with a well-sampled region they understate the gap; given
+for comparison only.
+\item Per variable: the part of the range of the whole-range records covered
+by the regional ones (\code{coverage}), and the shares of whole-range
+records beyond the range of the regional records (\code{outside_records})
+and beyond the conditions of the region (\code{outside_region}).
 }
 
-The printed advice uses \code{unfilling}: below the first of \code{limits}
-(default 10\%) a regional model sees nearly the whole niche; between the
-limits a nested model is worth considering, above the second (50\%, "very
-poorly filled" in Goicolea et al. 2025) it is strongly advised. A low
-\code{unfilling} with a high \code{not_available} share cannot happen; a high
-\code{unfilling} with a low \code{not_available} share means that the conditions
-exist in the region but the species has no records there (absent,
-undersampled, or excluded by other factors), which a nested model does
-not solve by itself.
+\strong{How serious is the gap?} Two statistics, both in the printout:
+\itemize{
+\item A bootstrap interval of \code{unfilling} (\code{n_boot} resamples of the
+records): how much it depends on the particular records.
+\item A null comparison: the unfilling left by random samples of the
+whole-range records of the same size as the regional records
+(\code{n_null} samples). If the region leaves much more unfilled than a
+random sample of the same size (large \code{unfilling_ses}, small
+\code{unfilling_p}), the gap comes from the conditions of the region, not
+from its number of records.
+}
+
+\strong{Robustness.} Single records in remote cells (outliers, other taxa,
+errors) can drive \code{unfilling}. The printout gives it for \code{min_records}
+1, 2, 3 and 5 and says when the advice changes; check the records in
+unfilled cells with \code{\link[=unfilled_records]{unfilled_records()}} (e.g. their taxonomy).
+
+\strong{Advice} (from \code{unfilling} and \code{limits}): below 10\% a regional model
+sees nearly the whole niche; 10-50\% a nested model is worth considering,
+above 50\% ("very poorly filled" in Goicolea et al. 2025) it is strongly
+advised. A nested model helps only where the conditions you predict for
+(the region now, in the future or the past, evaluation sites) fall into
+cells occupied elsewhere: check that with \code{\link[=classify_points]{classify_points()}}. Where they
+fall into filled cells, problems of the model are not due to the extent.
 
 \strong{The records and layers must cover the whole range.} Records outside
 the layers have no values and are left out (their number is reported);
@@ -137,9 +160,11 @@ along which predictors and at which end the response is cut.
 sim <- simulate_enm_data(seed = 1, n_presence = 200)
 # the region of interest: the western third of the range
 west <- terra::as.polygons(terra::ext(14, 17, 49, 55), crs = "EPSG:4326")
-nc <- niche_coverage(sim$presence, sim$env, west)
+nc <- niche_coverage(sim$presence, sim$env, west, n_boot = 49,
+                     n_null = 49)
 nc
 plot_niche_coverage(nc)
+head(unfilled_records(nc))
 # plot_niche_coverage(nc, file = c("coverage.png", "coverage.pdf"))
 }
 \references{
@@ -164,5 +189,6 @@ distributions in Britain: a hierarchical integration of climate and
 land-cover data. \emph{Ecography} 27, 285-298.
 }
 \seealso{
-\code{\link[=niche_truncation]{niche_truncation()}}, \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}
+\code{\link[=plot_niche_coverage]{plot_niche_coverage()}}, \code{\link[=classify_points]{classify_points()}},
+\code{\link[=unfilled_records]{unfilled_records()}}, \code{\link[=niche_truncation]{niche_truncation()}}
 }

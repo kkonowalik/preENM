@@ -4,10 +4,20 @@
 \alias{plot_niche_coverage}
 \title{Plot the niche coverage of a region}
 \usage{
-plot_niche_coverage(x, base_size = 11, file = NULL, width = 7.5, height = 5.5)
+plot_niche_coverage(
+  x,
+  type = c("both", "pca", "map"),
+  base_size = 11,
+  file = NULL,
+  width = NULL,
+  height = NULL
+)
 }
 \arguments{
 \item{x}{Result of \code{\link[=niche_coverage]{niche_coverage()}}.}
+
+\item{type}{\code{"both"} (default; the two panels side by side), \code{"pca"} or
+\code{"map"}.}
 
 \item{base_size}{Base font size.}
 
@@ -16,22 +26,23 @@ plot_niche_coverage(x, base_size = 11, file = NULL, width = 7.5, height = 5.5)
 name without extension is saved as PNG and PDF. The plot is also
 returned.}
 
-\item{width, height}{Size of the saved plot in inches.}
+\item{width, height}{Size of the saved plot in inches (default: 14 x 6
+for both panels, 7.5 x 5.5 for one).}
 }
 \value{
-A ggplot object.
+For one panel a ggplot object; for both, the two ggplots in a
+list (invisibly), after drawing them.
 }
 \description{
-The environmental space of the first two principal components of the
-records of the whole range: the conditions of the region (beige), the
-niche cells without regional records (red frames; their share is
-\code{unfilling}), the
-whole-range records outside the region (grey) and inside it (blue), and
-separate regional records if given (\code{region_points}, red crosses); the
-legend gives their numbers. Grey points outside the shaded area are
-conditions the region does not have; grey points inside it without blue
-points nearby are conditions the region has but where the species has no
-regional records.
+Two panels. \strong{Niche space}: the space of the first two principal
+components of the records of the whole range, with the conditions of the
+region (beige), the niche cells without regional records (red frames;
+their share is \code{unfilling}), the whole-range records outside the region
+(grey) and inside it (blue), and separate regional records if given
+(\code{region_points}, red crosses); the legend gives their numbers. \strong{Map}:
+the whole-range records coloured by the category of their niche cell
+(filled by regional records; known only from elsewhere, with conditions
+available in the region or absent from it), with the region outlined.
 }
 \examples{
 # see niche_coverage()

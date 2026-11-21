@@ -1,3 +1,37 @@
+# preENM 2.21.0
+
+`niche_coverage()` extended after its first use on a real circumpolar
+species:
+
+* **How serious is the gap?** A bootstrap 95% interval of `unfilling`
+  (`n_boot`) and a null comparison: the unfilling that a random sample of
+  the whole-range records of the size of the regional records would leave
+  (`n_null`), with SES and p-value. A large SES means the region lacks
+  conditions of the niche; a small one that the gap is about what the
+  number of regional records alone would leave.
+* **Robustness:** the unfilling for `min_records` = 1, 2, 3 and 5, with a
+  note when the advice changes (sparse, remote records can decide it).
+* `unfilled_records()`: the whole-range records in unfilled niche cells,
+  with coordinates, to map and check them.
+* `classify_points()` (and `predict()`): places new points (the region
+  under another climate, evaluation or fossil sites) in the fitted niche
+  space and grid, in seven categories (filled; occupied elsewhere with the
+  conditions available in the region or absent from it; region only;
+  available but unoccupied; unoccupied inside the space; outside it), with
+  the regional record density of each point's cell. With `predicted` it
+  counts the misses per category, i.e. whether a nested model could help.
+  Unit guard: warns when points land far beyond the whole range in the
+  niche space or a variable's median is far from that of the records
+  (e.g. Kelvin against degrees Celsius).
+* `log_vars`: variables log-transformed before the PCA (`"auto"` for
+  bioclim precipitation amounts).
+* Per niche cell (`bins`): records, regional records, regional density
+  percentile and category; the advice text mentions the sensitivity to
+  sparse records and when a nested model helps.
+* `plot_niche_coverage()` draws the niche space **and a map** of the
+  whole-range records coloured by their niche cell, with the region
+  outlined (`type = "both"`, `"pca"` or `"map"`).
+
 # preENM 2.20.0
 
 * `niche_coverage()`: **`unfilling` and `not_available` now count cells of

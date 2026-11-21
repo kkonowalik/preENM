@@ -22,9 +22,10 @@ the future or the past.
 the predictors vary within it.
 \item \code{\link[=niche_truncation]{niche_truncation()}}, \code{\link[=plot_niche_truncation]{plot_niche_truncation()}}: is the niche cut off
 by the calibration area, and do projections go beyond it?
-\item \code{\link[=niche_coverage]{niche_coverage()}}, \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}: how much of a widespread
-species' niche a region of interest contains; is a nested
-(hierarchical) model needed?
+\item \code{\link[=niche_coverage]{niche_coverage()}}, \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}, \code{\link[=classify_points]{classify_points()}},
+\code{\link[=unfilled_records]{unfilled_records()}}: how much of a widespread species' niche a region
+of interest contains; is a nested (hierarchical) model needed, and
+would it help the points you predict for?
 \item \code{\link[=extrapolation_risk]{extrapolation_risk()}}: maps of novel conditions in a projection
 (ExDet and MOP).
 \item \code{\link[=check_sample_size]{check_sample_size()}}, \code{\link[=match_climate_period]{match_climate_period()}}: enough records, and

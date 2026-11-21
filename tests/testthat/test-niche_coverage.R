@@ -48,3 +48,51 @@ test_that("a region with part of the range misses part of the niche", {
   expect_error(suppressWarnings(
     niche_coverage(f$pts, f$env, f$box(10, 11, 30, 31))), "region")
 })
+
+test_that("records outside the layers are reported; separate regional data", {
+  f <- cov_fixture()
+  region <- f$box(45, 55)
+  env_m <- terra::mask(f$env, region)          # layers of the region only
+  expect_warning(
+    expect_message(bad <- niche_coverage(f$pts, env_m, region),
+                   "outside the layers"),
+    "trivially")
+  expect_equal(bad$summary$advice, "cannot be judged")
+  expect_gt(bad$summary$records_dropped, 0)
+  expect_output(print(bad), "left out")
+  # a national data set from the west of the region only
+  natl <- f$pts[f$pts$lat > 45 & f$pts$lat < 55 & f$pts$lon < 10, ]
+  d <- tempfile()
+  nc <- niche_coverage(f$pts, f$env, region, region_points = natl,
+                       file = file.path(d, "coverage"))
+  expect_true(all(file.exists(file.path(d, c("coverage.png",
+                                              "coverage.pdf")))))
+  expect_equal(nc$summary$region_points, nrow(natl))
+  base <- niche_coverage(f$pts, f$env, region)
+  expect_gt(nc$summary$unfilling, base$summary$unfilling)
+  expect_output(print(nc), "Regional records")
+  p <- plot_niche_coverage(nc)
+  expect_true(any(grepl("regional records", levels(p$data$group))))
+})
+
+test_that("every plotting function can save its plot", {
+  f <- cov_fixture()
+  nc <- niche_coverage(f$pts, f$env, f$box(45, 55))
+  d <- tempfile()
+  expect_message(plot_niche_coverage(nc, file = file.path(d, "a.pdf")),
+                 "Saved")
+  expect_true(file.exists(file.path(d, "a.pdf")))
+  sim <- simulate_enm_data(seed = 1)
+  ev <- evaluate_models(sim$models, sim$presence, sim$absence)
+  expect_message(plot_pareto(ev, file = file.path(d, "pareto.png")), "Saved")
+  sel <- select_models(as.data.frame(ev), plot = FALSE)
+  expect_message(plot_selection(sel, file = file.path(d, "sel")), "Saved")
+  expect_true(all(file.exists(file.path(d, c("sel.png", "sel.pdf")))))
+  grDevices::pdf(NULL)
+  expect_message(plot(sel, file = file.path(d, "both.pdf")), "Saved")
+  grDevices::dev.off()
+  expect_true(file.exists(file.path(d, "both.pdf")))
+  expect_message(plot_models(sel, x = "MAE", y = "AUC",
+                             file = file.path(d, "pm.jpeg")), "Saved")
+  expect_error(plot_pareto(ev, file = file.path(d, "x.docx")), "Unsupported|Unknown")
+})

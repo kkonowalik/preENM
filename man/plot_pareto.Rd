@@ -13,10 +13,23 @@ plot_pareto(
   error_bars = TRUE,
   zoom = FALSE,
   bar_colour = "#c8553d",
-  base_size = 12
+  base_size = 12,
+  file = NULL,
+  width = 7,
+  height = 5
 )
 
-\method{plot}{enm_evaluation}(x, y, x_metric = NULL, y_metric = NULL, zoom = "auto", ...)
+\method{plot}{enm_evaluation}(
+  x,
+  y,
+  x_metric = NULL,
+  y_metric = NULL,
+  zoom = "auto",
+  ...,
+  file = NULL,
+  width = 14,
+  height = 5.5
+)
 }
 \arguments{
 \item{x}{An \code{enm_evaluation} object from \code{\link[=evaluate_models]{evaluate_models()}}.}
@@ -40,6 +53,13 @@ in the subtitle.}
 \item{bar_colour}{Colour of the error bars.}
 
 \item{base_size}{Base font size passed to \code{\link[ggplot2:ggtheme]{ggplot2::theme_minimal()}}.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 
 \item{y}{Ignored.}
 

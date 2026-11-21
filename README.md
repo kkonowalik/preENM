@@ -55,6 +55,13 @@ step can be used on its own.
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
 Points are re-projected to each raster automatically.
 
+**Every figure can be saved** by the function that draws it: add
+`file = "figure.pdf"` (or `.png`, `.jpeg`, `.tiff`, `.svg`),
+`file = c("figure.png", "figure.pdf")` for several formats, or a name
+without extension (`file = "figure"`) for both PNG and PDF; `width` and
+`height` set the size in inches. The plot is still returned and can be
+changed further with ggplot2.
+
 ## Before modelling
 
 Records, calibration area and predictors.
@@ -597,10 +604,24 @@ you need one depends on how much of the niche your region contains.
 GBIF) and layers covering it:
 
 ```r
-nc <- niche_coverage(occ_whole_range, env_whole_range, region = country)
+nc <- niche_coverage(occ_whole_range, env_whole_range, region = country,
+                     file = c("niche_coverage.png", "niche_coverage.pdf"))
 nc
 plot_niche_coverage(nc)
+
+# with a separate regional data set (e.g. a national survey), the usual
+# case for nested models
+nc <- niche_coverage(occ_whole_range, env_whole_range, region = country,
+                     region_points = occ_national)
 ```
+
+**The records and the layers must cover the whole range of the species.**
+Records outside the layers have no values and are left out; the function
+says how many. If only the records of the region remain (e.g. the layers
+were cut to M, or the records are those already thinned within M), the
+region trivially contains their niche: the function warns and the advice
+reads "cannot be judged". The region itself can be a country or the M of
+the regional model.
 
 ![The niche of the whole range and the part in the region](man/figures/niche_coverage.png)
 
@@ -609,7 +630,7 @@ plot_niche_coverage(nc)
 | `unfilling` | share of the species' niche (whole-range records in the first two principal components) without a regional record, the measure of Goicolea et al. (2025) |
 | `not_available` | share of the niche in conditions that do not occur in the region at all; no regional model can learn them |
 | per variable: `coverage`, `outside_records`, `outside_region` | part of the variable's range covered by the regional records, and the share of whole-range records beyond the regional records and beyond the region's conditions |
-| `advice` | unfilling below 10%: a regional model is sufficient; 10–50%: a nested model is worth considering, above all for projections; above 50% ("very poorly filled"): strongly advised (`limits` to change) |
+| `advice` | unfilling below 10%: a regional model is sufficient; 10–50%: a nested model is worth considering, above all for projections; above 50% ("very poorly filled"): strongly advised (`limits` to change); "cannot be judged" if all records lie in the region |
 
 If `unfilling` is much larger than `not_available`, the missing conditions
 exist in the region but the species has no records there (absent,

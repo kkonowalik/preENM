@@ -17,6 +17,8 @@ plot_models(
   directions = NULL,
   file = NULL,
   browse = interactive(),
+  width = 7,
+  height = 5,
   base_size = 12
 )
 }
@@ -47,10 +49,14 @@ package does not know, e.g. \code{c(fossil_AUC_deep = "max")} (\code{"max"},
 MAEbal, bias, TSS, Boyce and any column ending in \verb{_AUC*}, \verb{_sens},
 \verb{_lift} (higher is better) or \verb{_area} (lower is better).}
 
-\item{file}{Optional \code{.html} file to save an interactive plot to (for a
-static plot use \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}).}
+\item{file}{Optional file(s) to save the plot to. Interactive plots:
+an \code{.html} file. Static plots: e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; a name without extension is saved as PNG
+and PDF.}
 
 \item{browse}{Open the saved file in the web browser.}
+
+\item{width, height}{Size of a saved static plot in inches.}
 
 \item{base_size}{Base font size of static plots.}
 }

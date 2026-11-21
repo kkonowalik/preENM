@@ -38,9 +38,13 @@
 #' undersampled, or excluded by other factors), which a nested model does
 #' not solve by itself.
 #'
-#' Use thinned records of the whole range (e.g. GBIF, filtered with
-#' [filter_occurrences()] and [thin_by_cell()]) and the same climate
-#' variables as for the regional model; the layers may be coarser.
+#' **The records and layers must cover the whole range.** Records outside
+#' the layers have no values and are left out (their number is reported);
+#' if only the regional records remain, the region trivially contains
+#' their niche, and the function warns. Use thinned records of the whole
+#' range (e.g. GBIF, filtered with [filter_occurrences()] and
+#' [thin_by_cell()]) and the same climate variables as for the regional
+#' model, for the whole range; the layers may be coarser.
 #' [niche_truncation()] then checks, for the chosen calibration area,
 #' along which predictors and at which end the response is cut.
 #'
@@ -49,7 +53,13 @@
 #' @param env Layers covering the whole range ([terra::SpatRaster] or
 #'   files).
 #' @param region The region of interest: polygons (`sf`, `SpatVector`,
-#'   file) or a raster (cells with values).
+#'   file) or a raster (cells with values), e.g. a country or the M of a
+#'   regional model.
+#' @param region_points Optional regional records from another source, e.g.
+#'   a national survey (the usual case for nested models, where the
+#'   regional model uses more precise regional data). Then `unfilling` and
+#'   the per-variable values compare these with `points`; by default the
+#'   records of `points` that fall in `region` are the regional records.
 #' @param probs Quantiles of the whole-range records that define their range
 #'   per variable (default the central 98%, so that a few outliers do not
 #'   decide it).
@@ -60,6 +70,9 @@
 #' @param n Number of cells sampled from the region.
 #' @param coords,points_crs Coordinate columns and CRS of `points`.
 #' @param seed Seed for the cell sample.
+#' @param file Optional file(s) to save the plot to (see
+#'   [plot_niche_coverage()]), e.g. `c("coverage.png", "coverage.pdf")`.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `niche_coverage` object: a list with `summary` (records in
 #'   total and in the region, `unfilling`, `not_available`, `advice`),
 #'   `variables` (one row per layer), `pca` (the PCA of the whole-range
@@ -92,10 +105,12 @@
 #' nc <- niche_coverage(sim$presence, sim$env, west)
 #' nc
 #' plot_niche_coverage(nc)
-niche_coverage <- function(points, env, region, probs = c(0.01, 0.99),
-                           n_bins = 20, limits = c(0.1, 0.5), n = 1e5,
-                           coords = NULL, points_crs = "EPSG:4326",
-                           seed = 1) {
+#' # plot_niche_coverage(nc, file = c("coverage.png", "coverage.pdf"))
+niche_coverage <- function(points, env, region, region_points = NULL,
+                           probs = c(0.01, 0.99), n_bins = 20,
+                           limits = c(0.1, 0.5), n = 1e5, coords = NULL,
+                           points_crs = "EPSG:4326", seed = 1, file = NULL,
+                           width = 7.5, height = 5.5) {
   r <- as_grid(env)
   vars <- names(r)
   if (length(limits) != 2 || any(limits < 0 | limits > 1) ||
@@ -103,22 +118,57 @@ niche_coverage <- function(points, env, region, probs = c(0.01, 0.99),
     stop("`limits` must be two increasing shares between 0 and 1.",
          call. = FALSE)
   }
-  # records of the whole range and their values
-  xy <- points_xy(points, r, coords, points_crs)
-  cell <- terra::cellFromXY(r, xy)
-  ok <- !is.na(cell)
-  cell <- cell[ok]
-  E <- read_cells(r, cell)
-  colnames(E) <- vars
-  keep <- stats::complete.cases(E)
-  E <- E[keep, , drop = FALSE]
-  cell <- cell[keep]
+  # records and their values; records outside the layers are counted
+  values_at <- function(p) {
+    xy <- points_xy(p, r, coords, points_crs)
+    cell <- terra::cellFromXY(r, xy)
+    n_in <- nrow(xy)
+    cell <- cell[!is.na(cell)]
+    E <- read_cells(r, cell)
+    colnames(E) <- vars
+    keep <- stats::complete.cases(E)
+    list(E = E[keep, , drop = FALSE], cell = cell[keep],
+         dropped = n_in - sum(keep), total = n_in)
+  }
+  w <- values_at(points)
+  E <- w$E
+  cell <- w$cell
   if (nrow(E) < 10) {
-    stop("Fewer than 10 records with values in all layers.", call. = FALSE)
+    stop("Fewer than 10 records with values in all layers (", w$dropped,
+         " of ", w$total, " records lie outside the layers or have missing ",
+         "values). The layers must cover the whole range of the species.",
+         call. = FALSE)
+  }
+  if (w$dropped > 0) {
+    message(w$dropped, " of ", w$total, " records lie outside the layers or ",
+            "have missing values and were left out.")
   }
   inside <- in_mask(r, cell, region)
-  if (sum(inside) < 3) {
-    stop("Fewer than 3 records in `region`.", call. = FALSE)
+  if (is.null(region_points)) {
+    if (sum(inside) < 3) {
+      stop("Fewer than 3 records in `region`.", call. = FALSE)
+    }
+    if (all(inside)) {
+      warning(
+        "All ", nrow(E), " records lie in `region`, so the region trivially ",
+        "contains their niche. Give records of the whole range of the ",
+        "species (e.g. from GBIF) and layers that cover it",
+        if (w$dropped > 0) paste0("; ", w$dropped, " records were left out ",
+                                  "because the layers do not cover them"),
+        ".", call. = FALSE)
+    }
+    Er <- E[inside, , drop = FALSE]
+  } else {
+    wr <- values_at(region_points)
+    Er <- wr$E
+    if (nrow(Er) < 3) {
+      stop("Fewer than 3 `region_points` with values in all layers.",
+           call. = FALSE)
+    }
+    if (wr$dropped > 0) {
+      message(wr$dropped, " of ", wr$total, " regional records lie outside ",
+              "the layers or have missing values and were left out.")
+    }
   }
   # conditions of the region
   valid <- valid_cells(r)
@@ -132,7 +182,6 @@ niche_coverage <- function(points, env, region, probs = c(0.01, 0.99),
   colnames(R) <- vars
 
   # per variable
-  Er <- E[inside, , drop = FALSE]
   per_var <- do.call(rbind, lapply(vars, function(v) {
     g <- stats::quantile(E[, v], probs, names = FALSE)
     rr <- range(Er[, v])
@@ -169,70 +218,106 @@ niche_coverage <- function(points, env, region, probs = c(0.01, 0.99),
     id
   }
   b_all <- bin_of(S)
-  b_reg <- unique(b_all[inside])
+  SRec <- stats::predict(pca, Er)[, seq_len(k), drop = FALSE]
+  b_reg <- unique(stats::na.omit(bin_of(SRec)))
   b_env <- unique(stats::na.omit(bin_of(SR)))
   unfilling <- mean(!b_all %in% b_reg)
   not_available <- mean(!b_all %in% b_env)
-  advice <- if (unfilling < limits[1]) {
+  advice <- if (is.null(region_points) && all(inside)) {
+    "cannot be judged"
+  } else if (unfilling < limits[1]) {
     "regional model sufficient"
   } else if (unfilling < limits[2]) {
     "nested model worth considering"
   } else "nested model strongly advised"
 
-  summary <- data.frame(records = nrow(E), records_region = sum(inside),
-                        share_region = mean(inside), unfilling = unfilling,
+  summary <- data.frame(records = nrow(E), records_dropped = w$dropped,
+                        records_region = sum(inside),
+                        share_region = mean(inside),
+                        region_points = if (is.null(region_points)) NA else
+                          nrow(Er),
+                        unfilling = unfilling,
                         not_available = not_available, advice = advice,
                         stringsAsFactors = FALSE)
-  structure(list(summary = summary, variables = per_var, pca = pca,
-                 scores = data.frame(pc1 = S[, 1],
-                                     pc2 = if (k > 1) S[, 2] else 0,
-                                     region = inside),
-                 region_scores = data.frame(pc1 = SR[, 1],
-                                            pc2 = if (k > 1) SR[, 2] else 0),
-                 settings = list(probs = probs, n_bins = n_bins,
-                                 limits = limits)),
-            class = "niche_coverage")
+  out <- structure(
+    list(summary = summary, variables = per_var, pca = pca,
+         scores = data.frame(pc1 = S[, 1], pc2 = if (k > 1) S[, 2] else 0,
+                             region = inside),
+         region_scores = data.frame(pc1 = SR[, 1],
+                                    pc2 = if (k > 1) SR[, 2] else 0),
+         region_point_scores = if (is.null(region_points)) NULL else
+           data.frame(pc1 = SRec[, 1], pc2 = if (k > 1) SRec[, 2] else 0),
+         settings = list(probs = probs, n_bins = n_bins, limits = limits,
+                         separate_region_points = !is.null(region_points))),
+    class = "niche_coverage")
+  if (!is.null(file)) plot_niche_coverage(out, file = file, width = width,
+                                          height = height)
+  out
 }
 
 #' @export
 print.niche_coverage <- function(x, digits = 3, ...) {
   s <- x$summary
-  cat("Niche coverage of the region: ", s$records_region, " of ", s$records,
-      " records (", round(100 * s$share_region), "%) in the region\n\n",
-      sep = "")
+  sep <- isTRUE(x$settings$separate_region_points)
+  pct <- function(z) paste0(round(100 * z), "%")
+  cat("How much of the species' niche does the region contain?\n\n")
+  cat("Records of the whole range: ", s$records,
+      if (!is.null(s$records_dropped) && s$records_dropped > 0) {
+        paste0(" (", s$records_dropped, " more left out: outside the layers ",
+               "or missing values)")
+      }, "\n", sep = "")
+  cat("  of these inside the region: ", s$records_region, " (",
+      pct(s$share_region), ")\n", sep = "")
+  if (sep) cat("Regional records (`region_points`): ", s$region_points, "\n",
+               sep = "")
+  reg <- if (sep) "the regional records" else "the records inside the region"
+  cat("\nPer variable:\n")
   v <- x$variables[c("variable", "coverage", "outside_records",
                      "outside_region")]
   v[-1] <- lapply(v[-1], round, digits)
   print(v, row.names = FALSE)
-  pct <- function(z) paste0(round(100 * z), "%")
+  cat(strwrap(paste0(
+    "coverage = part of the range of the whole-range records that ", reg,
+    " cover; outside_records = share of whole-range records beyond the range ",
+    "of ", reg, "; outside_region = share beyond the conditions of the ",
+    "region."), width = 78, prefix = "  "), sep = "\n")
   cat("\nIN SHORT\n")
   txt <- c(
-    paste0("Unfilling: ", pct(s$unfilling), " of the species' niche (records ",
-           "of the whole range, first two principal components) has no ",
-           "regional record; ", pct(s$not_available), " lies in conditions ",
-           "that do not occur in the region at all."),
+    paste0(pct(s$unfilling), " of the species' niche has no record in the ",
+           "region (unfilling)."),
+    paste0(pct(s$not_available), " of the niche lies in conditions that do ",
+           "not occur anywhere in the region (not available)."),
     paste0("Advice: ", s$advice, ". ", switch(
       s$advice,
       "regional model sufficient" = paste0(
         "A model calibrated in the region sees nearly the whole niche."),
       "nested model worth considering" = paste0(
         "A regional model misses part of the niche; combine it with a ",
-        "model of the whole range (nested / hierarchical model), above all ",
-        "for projections."),
+        "model of the whole range (nested, or hierarchical, model), above ",
+        "all for projections."),
       "nested model strongly advised" = paste0(
         "A regional model sees less than half of the niche; its response ",
         "curves are truncated and projections extrapolate. Calibrate a ",
-        "model of the whole range and nest the regional model in it."))),
+        "model of the whole range and nest the regional model in it."),
+      "cannot be judged" = paste0(
+        "All records lie in the region, so the comparison says nothing. ",
+        "Give records of the whole range of the species and layers that ",
+        "cover it."))),
     if (s$unfilling - s$not_available > 0.1) {
-      paste0("Part of the unfilled niche (", pct(s$unfilling -
-                                                   s$not_available),
-             ") exists in the region but has no records there: check for ",
-             "undersampling before blaming the extent.")
-    })
+      paste0(pct(s$unfilling - s$not_available), " of the niche exists in ",
+             "the region but has no records there: check for undersampling ",
+             "before blaming the extent.")
+    },
+    NULL)
   for (t in txt) {
     cat(strwrap(t, width = 78, exdent = 2, prefix = "  ", initial = "- "),
         sep = "\n")
   }
+  cat(strwrap(paste0(
+    "Niche: the whole-range records in the space of the first two ",
+    "principal components of the variables, cut into ", x$settings$n_bins,
+    " x ", x$settings$n_bins, " cells."), width = 78, prefix = "  "),
+    sep = "\n")
   invisible(x)
 }
 
@@ -240,44 +325,74 @@ print.niche_coverage <- function(x, digits = 3, ...) {
 #'
 #' The environmental space of the first two principal components of the
 #' records of the whole range: the conditions of the region (shaded), the
-#' records of the whole range (grey) and those in the region (blue). Grey
-#' points outside the shaded area are conditions the region does not have;
-#' grey points inside it without blue points nearby are conditions the
-#' region has but where the species has no regional records.
+#' whole-range records outside the region (grey) and inside it (blue), and
+#' separate regional records if given (`region_points`, red crosses); the
+#' legend gives their numbers. Grey points outside the shaded area are
+#' conditions the region does not have; grey points inside it without blue
+#' points nearby are conditions the region has but where the species has no
+#' regional records.
 #'
 #' @param x Result of [niche_coverage()].
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A ggplot object.
 #' @export
 #' @examples
 #' # see niche_coverage()
-plot_niche_coverage <- function(x, base_size = 11) {
+plot_niche_coverage <- function(x, base_size = 11,
+                                file = NULL, width = 7.5, height = 5.5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (!inherits(x, "niche_coverage")) {
     stop("`x` must come from niche_coverage().", call. = FALSE)
   }
   ink <- "#3a3a38"
   muted <- "#8a8a86"
   s <- x$scores
-  s$group <- factor(ifelse(s$region, "records in the region",
-                           "records elsewhere"),
-                    levels = c("records elsewhere", "records in the region"))
+  n_in <- sum(s$region)
+  n_out <- sum(!s$region)
+  lab_in <- sprintf("whole-range records inside the region (%d)", n_in)
+  lab_out <- sprintf("whole-range records outside the region (%d)", n_out)
+  lab_reg <- sprintf("regional records (%d)",
+                     if (is.null(x$region_point_scores)) 0L else
+                       nrow(x$region_point_scores))
+  s$group <- factor(ifelse(s$region, lab_in, lab_out),
+                    levels = c(lab_out, lab_in, lab_reg))
   s <- s[order(s$region), , drop = FALSE]
+  if (!is.null(x$region_point_scores)) {
+    rp <- x$region_point_scores
+    rp$group <- factor(lab_reg, levels = levels(s$group))
+    rp$region <- NA
+    s <- rbind(s, rp[names(s)])
+  }
+  cols <- stats::setNames(c("#9a9a95", "#1c5cab", "#c8553d"),
+                          c(lab_out, lab_in, lab_reg))
+  shapes <- stats::setNames(c(16, 16, 4), c(lab_out, lab_in, lab_reg))
   ve <- summary(x$pca)$importance[2, ]
   ax <- function(j) sprintf("PC%d (%.0f%% of the variance)", j, 100 * ve[j])
   ggplot2::ggplot(s, ggplot2::aes(.data$pc1, .data$pc2)) +
     ggplot2::geom_bin_2d(data = x$region_scores, bins = 40,
                          fill = "#e9e2cf", colour = NA) +
-    ggplot2::geom_point(ggplot2::aes(colour = .data$group), size = 1.4,
+    ggplot2::geom_point(ggplot2::aes(colour = .data$group,
+                                     shape = .data$group), size = 1.4,
                         alpha = 0.8) +
-    ggplot2::scale_colour_manual(values = c(
-      "records elsewhere" = "#9a9a95", "records in the region" = "#1c5cab"),
-      name = NULL) +
+    ggplot2::scale_colour_manual(values = cols, name = NULL, drop = TRUE) +
+    ggplot2::scale_shape_manual(values = shapes, name = NULL, drop = TRUE) +
+    ggplot2::guides(colour = ggplot2::guide_legend(ncol = 1),
+                    shape = ggplot2::guide_legend(ncol = 1)) +
     ggplot2::labs(
       x = ax(1), y = ax(min(2, length(ve))),
       title = "How much of the niche does the region contain?",
-      subtitle = sprintf(paste0("Shaded: conditions of the region.\n",
-                                "Unfilling %.0f%%, not available in the ",
-                                "region %.0f%%: %s."),
+      subtitle = sprintf(paste0("Shaded: conditions that occur in the ",
+                                "region.\n%.0f%% of the niche has no record ",
+                                "in the region, %.0f%% is not available ",
+                                "there.\nAdvice: %s."),
                          100 * x$summary$unfilling,
                          100 * x$summary$not_available,
                          x$summary$advice)) +

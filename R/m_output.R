@@ -214,13 +214,23 @@ crop_to_m <- function(raster, m, filename = "") {
 #' @param land Optional land polygons for the background.
 #' @param points Show the records (thinned).
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object.
 #' @export
 #' @examples
 #' sim <- simulate_enm_data(seed = 1, n_presence = 150)
 #' m <- delimit_m(sim$presence, link_km = 120, thin_km = 5)
 #' plot_m_area(m)
-plot_m_area <- function(x, land = NULL, points = TRUE, base_size = 11) {
+plot_m_area <- function(x, land = NULL, points = TRUE, base_size = 11,
+                        file = NULL, width = 8, height = 7) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (inherits(x, "m_scenarios")) {
     areas <- x$areas
   } else {
@@ -351,6 +361,11 @@ basemap <- function(land, xl, yl, crs) {
 #' @param type `"links"` or `"clusters"`.
 #' @param n_links Number of longest links shown.
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object.
 #' @export
 #' @examples
@@ -359,7 +374,12 @@ basemap <- function(land, xl, yl, crs) {
 #' plot_linking(lk)
 #' plot_linking(lk, "clusters")
 plot_linking <- function(x, type = c("links", "clusters"), n_links = 40,
-                         base_size = 11) {
+                         base_size = 11,
+                         file = NULL, width = 8, height = 6) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   type <- match.arg(type)
   if (inherits(x, "m_area")) x <- x$linking
   if (!inherits(x, "m_linking")) {

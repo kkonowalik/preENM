@@ -40,8 +40,11 @@
 #'   `"min"` or `"zero"`). Known: the criteria of `object`, AUC, MAE,
 #'   MAEbal, bias, TSS, Boyce and any column ending in `_AUC*`, `_sens`,
 #'   `_lift` (higher is better) or `_area` (lower is better).
-#' @param file Optional `.html` file to save an interactive plot to (for a
-#'   static plot use [ggplot2::ggsave()]).
+#' @param file Optional file(s) to save the plot to. Interactive plots:
+#'   an `.html` file. Static plots: e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; a name without extension is saved as PNG
+#'   and PDF.
+#' @param width,height Size of a saved static plot in inches.
 #' @param browse Open the saved file in the web browser.
 #' @param base_size Base font size of static plots.
 #' @return A `ggplot` (static) or `plotly` object (interactive). Printing an
@@ -65,7 +68,7 @@ plot_models <- function(object, x = NULL, y = NULL, z = NULL,
                         labels = TRUE, error_bars = TRUE,
                         bar_colour = "#c8553d", directions = NULL,
                         file = NULL, browse = interactive(),
-                        base_size = 12) {
+                        width = 7, height = 5, base_size = 12) {
   if (!is.data.frame(object) || !"model" %in% names(object)) {
     stop("`object` must be a data.frame with a `model` column, e.g. from ",
          "select_models() or evaluate_models().", call. = FALSE)
@@ -100,15 +103,17 @@ plot_models <- function(object, x = NULL, y = NULL, z = NULL,
                             plot = FALSE)
   }
   if (is.null(z) && !interactive) {
-    if (inherits(object, "enm_evaluation")) {
-      return(plot_pareto(object, mets[["x"]], mets[["y"]],
-                         labels = if (labels) "all" else "none",
-                         error_bars = error_bars, zoom = zoom,
-                         bar_colour = bar_colour, base_size = base_size))
+    p <- if (inherits(object, "enm_evaluation")) {
+      plot_pareto(object, mets[["x"]], mets[["y"]],
+                  labels = if (labels) "all" else "none",
+                  error_bars = error_bars, zoom = zoom,
+                  bar_colour = bar_colour, base_size = base_size)
+    } else {
+      plot_selection(object, mets[["x"]], mets[["y"]], labels = labels,
+                     zoom = zoom, error_bars = error_bars,
+                     bar_colour = bar_colour, base_size = base_size)
     }
-    return(plot_selection(object, mets[["x"]], mets[["y"]], labels = labels,
-                          zoom = zoom, error_bars = error_bars,
-                          bar_colour = bar_colour, base_size = base_size))
+    return(save_figure(p, file, width, height))
   }
   if (!requireNamespace("plotly", quietly = TRUE)) {
     stop("Interactive and 3-D plots need the plotly package: ",

@@ -212,6 +212,11 @@ print.niche_truncation <- function(x, digits = 3, ...) {
 #'
 #' @param x A `niche_truncation` object from [niche_truncation()].
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object.
 #' @export
 #' @examples
@@ -220,7 +225,12 @@ print.niche_truncation <- function(x, digits = 3, ...) {
 #' tr <- niche_truncation(sim$presence, m,
 #'                        projections = list(whole_area = sim$env))
 #' plot_niche_truncation(tr)
-plot_niche_truncation <- function(x, base_size = 12) {
+plot_niche_truncation <- function(x, base_size = 12,
+                                  file = NULL, width = 9, height = 6) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (!inherits(x, "niche_truncation")) {
     stop("`x` must come from niche_truncation().", call. = FALSE)
   }

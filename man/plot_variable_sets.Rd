@@ -38,9 +38,10 @@ scatter.}
 \item{sizes}{Optional set sizes to show, e.g. \code{2:3}; default all sizes
 that were searched.}
 
-\item{file}{Optional file to save the plot to; the format follows the
-extension (\code{.pdf}, \code{.png}, \code{.svg}, ...). The height grows with the
-number of rows. The plot is also returned.}
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"sets.pdf"} or
+\code{c("sets.png", "sets.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The height grows with
+the number of rows. The plot is also returned.}
 
 \item{width, height}{Size of the saved plot in inches (\code{height}
 default: from the number of rows).}

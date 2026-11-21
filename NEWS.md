@@ -1,3 +1,27 @@
+# preENM 2.19.0
+
+* **Every plotting function can save its figure**: `file = "fig.pdf"`
+  (PNG, JPEG, TIFF, SVG by extension), several files at once
+  (`c("fig.png", "fig.pdf")`), or a name without extension for PNG and
+  PDF; `width` and `height` in inches. Added to `plot_pareto()`,
+  `plot_selection()`, the `plot()` methods of selections and evaluations
+  (both panels), `plot_models()` (static plots too), `plot_env_thinning()`,
+  `plot_m_area()`, `plot_linking()`, `plot_niche_truncation()`,
+  `plot_variable_tree()`, `plot_correlation()`, `plot_transfer_bias()`,
+  `plot_niche_coverage()`; `plot_variable_sets()` accepts several files.
+* `niche_coverage()`:
+  * reports records that lie outside the layers (they were left out
+    silently) and warns when all remaining records lie in the region: the
+    region then trivially contains their niche, and the advice is now
+    "cannot be judged" instead of "regional model sufficient";
+  * `region_points`: a separate regional data set (e.g. a national
+    survey), compared with the records of the whole range and drawn as
+    crosses;
+  * `file` saves the plot directly;
+  * clearer printout (plain sentences, definitions at the end) and plot
+    (legend with the numbers of records, "whole-range records inside /
+    outside the region").
+
 # preENM 2.18.0
 
 * `niche_coverage()` and `plot_niche_coverage()`: for a widespread species

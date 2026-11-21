@@ -4,12 +4,19 @@
 \alias{plot_niche_coverage}
 \title{Plot the niche coverage of a region}
 \usage{
-plot_niche_coverage(x, base_size = 11)
+plot_niche_coverage(x, base_size = 11, file = NULL, width = 7.5, height = 5.5)
 }
 \arguments{
 \item{x}{Result of \code{\link[=niche_coverage]{niche_coverage()}}.}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A ggplot object.
@@ -17,10 +24,12 @@ A ggplot object.
 \description{
 The environmental space of the first two principal components of the
 records of the whole range: the conditions of the region (shaded), the
-records of the whole range (grey) and those in the region (blue). Grey
-points outside the shaded area are conditions the region does not have;
-grey points inside it without blue points nearby are conditions the
-region has but where the species has no regional records.
+whole-range records outside the region (grey) and inside it (blue), and
+separate regional records if given (\code{region_points}, red crosses); the
+legend gives their numbers. Grey points outside the shaded area are
+conditions the region does not have; grey points inside it without blue
+points nearby are conditions the region has but where the species has no
+regional records.
 }
 \examples{
 # see niche_coverage()

@@ -4,7 +4,15 @@
 \alias{plot_transfer_bias}
 \title{Plot the design bias of a projected change}
 \usage{
-plot_transfer_bias(x, metric = "mean_change", scope = "area", base_size = 11)
+plot_transfer_bias(
+  x,
+  metric = "mean_change",
+  scope = "area",
+  base_size = 11,
+  file = NULL,
+  width = 8.5,
+  height = 4.8
+)
 }
 \arguments{
 \item{x}{Result of \code{\link[=transfer_bias_test]{transfer_bias_test()}}.}
@@ -14,6 +22,13 @@ plot_transfer_bias(x, metric = "mean_change", scope = "area", base_size = 11)
 \item{scope}{\code{"area"} or \code{"region"}.}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A ggplot object.

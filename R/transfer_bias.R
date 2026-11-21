@@ -728,6 +728,11 @@ transfer_text <- function(r, digits = 3) {
 #' @param metric `"mean_change"`, `"share_declining"` or `"area_change"`.
 #' @param scope `"area"` or `"region"`.
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A ggplot object.
 #' @export
 #' @examples
@@ -736,7 +741,12 @@ transfer_text <- function(r, digits = 3) {
 #' plot_transfer_bias(tb)
 #' }
 plot_transfer_bias <- function(x, metric = "mean_change", scope = "area",
-                               base_size = 11) {
+                               base_size = 11,
+                               file = NULL, width = 8.5, height = 4.8) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (!inherits(x, "transfer_bias")) {
     stop("`x` must come from transfer_bias_test().", call. = FALSE)
   }

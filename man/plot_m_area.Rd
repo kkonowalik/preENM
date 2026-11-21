@@ -4,7 +4,15 @@
 \alias{plot_m_area}
 \title{Preview of an accessible area (M) or of M scenarios}
 \usage{
-plot_m_area(x, land = NULL, points = TRUE, base_size = 11)
+plot_m_area(
+  x,
+  land = NULL,
+  points = TRUE,
+  base_size = 11,
+  file = NULL,
+  width = 8,
+  height = 7
+)
 }
 \arguments{
 \item{x}{An \code{m_area} or \code{m_scenarios} object.}
@@ -14,6 +22,13 @@ plot_m_area(x, land = NULL, points = TRUE, base_size = 11)
 \item{points}{Show the records (thinned).}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{ggplot} object.

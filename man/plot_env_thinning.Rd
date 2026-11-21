@@ -4,12 +4,19 @@
 \alias{plot_env_thinning}
 \title{Plot an environmental thinning}
 \usage{
-plot_env_thinning(x, base_size = 10)
+plot_env_thinning(x, base_size = 10, file = NULL, width = 11, height = 8)
 }
 \arguments{
 \item{x}{An \code{env_thinning} from \code{\link[=thin_environment]{thin_environment()}}.}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{ggplot} object.

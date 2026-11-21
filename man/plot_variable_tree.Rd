@@ -4,7 +4,15 @@
 \alias{plot_variable_tree}
 \title{Dendrogram of the variables, with the best sets below it}
 \usage{
-plot_variable_tree(x, set = NULL, n_sets = 2, base_size = 11)
+plot_variable_tree(
+  x,
+  set = NULL,
+  n_sets = 2,
+  base_size = 11,
+  file = NULL,
+  width = 8.5,
+  height = 6.5
+)
 }
 \arguments{
 \item{x}{A \code{var_selection}.}
@@ -18,6 +26,13 @@ by spaces (as in \code{\link[=best_sets]{best_sets()}}), optionally named to lab
 (at most 10 rows in total).}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{ggplot} object.

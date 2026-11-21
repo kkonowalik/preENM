@@ -13,10 +13,23 @@ plot_selection(
   zoom = FALSE,
   error_bars = TRUE,
   bar_colour = "#c8553d",
-  base_size = 12
+  base_size = 12,
+  file = NULL,
+  width = 7,
+  height = 5
 )
 
-\method{plot}{enm_selection}(x, y, x_metric = NULL, y_metric = NULL, zoom = "auto", ...)
+\method{plot}{enm_selection}(
+  x,
+  y,
+  x_metric = NULL,
+  y_metric = NULL,
+  zoom = "auto",
+  ...,
+  file = NULL,
+  width = 14,
+  height = 5.5
+)
 }
 \arguments{
 \item{x}{An \code{enm_selection} object from \code{\link[=select_models]{select_models()}}.}
@@ -35,6 +48,13 @@ plot when it leaves out at least one model.}
 \item{bar_colour}{Colour of the error bars.}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 
 \item{y}{Ignored.}
 

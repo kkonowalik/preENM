@@ -4,7 +4,15 @@
 \alias{plot_linking}
 \title{Plot the linking-distance diagnostics}
 \usage{
-plot_linking(x, type = c("links", "clusters"), n_links = 40, base_size = 11)
+plot_linking(
+  x,
+  type = c("links", "clusters"),
+  n_links = 40,
+  base_size = 11,
+  file = NULL,
+  width = 8,
+  height = 6
+)
 }
 \arguments{
 \item{x}{An \code{m_linking} object from \code{\link[=linking_distance]{linking_distance()}} or an \code{m_area}.}
@@ -14,6 +22,13 @@ plot_linking(x, type = c("links", "clusters"), n_links = 40, base_size = 11)
 \item{n_links}{Number of longest links shown.}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{ggplot} object.

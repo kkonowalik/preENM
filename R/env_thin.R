@@ -505,11 +505,21 @@ protect_flag <- function(protect, df) {
 #'
 #' @param x An `env_thinning` from [thin_environment()].
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object.
 #' @export
 #' @examples
 #' # see ?thin_environment
-plot_env_thinning <- function(x, base_size = 10) {
+plot_env_thinning <- function(x, base_size = 10,
+                              file = NULL, width = 11, height = 8) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (!inherits(x, "env_thinning")) {
     stop("`x` must come from thin_environment().", call. = FALSE)
   }

@@ -234,6 +234,11 @@ recommend_sets <- function(x, print = TRUE) {
 #' @param n_sets Number of best sets per size shown when `set` is `NULL`
 #'   (at most 10 rows in total).
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object.
 #' @export
 #' @examples
@@ -241,7 +246,12 @@ recommend_sets <- function(x, print = TRUE) {
 #' # choice next to the best set:
 #' # plot_variable_tree(vs, c(best = best_sets(vs)$set[1],
 #' #                          mine = "bio05 bio15 bio17"))
-plot_variable_tree <- function(x, set = NULL, n_sets = 2, base_size = 11) {
+plot_variable_tree <- function(x, set = NULL, n_sets = 2, base_size = 11,
+                               file = NULL, width = 8.5, height = 6.5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   check_vs(x)
   hc <- x$tree
   thr <- x$settings$thr_r
@@ -377,11 +387,21 @@ dendro_segments <- function(hc) {
 #' @param x A `var_selection`.
 #' @param which `"union"` or a data-set name (see `names(x$rho)`).
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object.
 #' @export
 #' @examples
 #' # see ?select_variables; e.g. plot_correlation(vs)
-plot_correlation <- function(x, which = "union", base_size = 10) {
+plot_correlation <- function(x, which = "union", base_size = 10,
+                             file = NULL, width = 7.5, height = 7) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   check_vs(x)
   M <- if (which == "union") x$union else {
     if (!which %in% names(x$rho)) {
@@ -468,9 +488,10 @@ plot_correlation <- function(x, which = "union", base_size = 10) {
 #'   `"all"` (also `Inf`) for every passing set.
 #' @param sizes Optional set sizes to show, e.g. `2:3`; default all sizes
 #'   that were searched.
-#' @param file Optional file to save the plot to; the format follows the
-#'   extension (`.pdf`, `.png`, `.svg`, ...). The height grows with the
-#'   number of rows. The plot is also returned.
+#' @param file Optional file(s) to save the plot to, e.g. `"sets.pdf"` or
+#'   `c("sets.png", "sets.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The height grows with
+#'   the number of rows. The plot is also returned.
 #' @param width,height Size of the saved plot in inches (`height`
 #'   default: from the number of rows).
 #' @return A `ggplot` object (invisibly when `file` is given).
@@ -510,9 +531,7 @@ plot_variable_sets <- function(x, x_metric = NULL, y_metric = NULL,
   save_plot <- function(p, rows) {
     if (is.null(file)) return(p)
     h <- if (is.null(height)) min(max(3.5, 1.6 + 0.24 * rows), 49) else height
-    ggplot2::ggsave(file, p, width = width, height = h, limitsize = FALSE)
-    message("Saved: ", file)
-    invisible(p)
+    save_figure(p, file, width, h)
   }
   crit <- x$settings$criteria
   ax <- c(names(crit), "worst_vif", "worst_maxr")

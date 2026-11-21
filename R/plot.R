@@ -30,6 +30,11 @@
 #'   `list(x = c(0.19, 0.24), y = c(0.89, 0.93))`. Models outside are named
 #'   in the subtitle.
 #' @param base_size Base font size passed to [ggplot2::theme_minimal()].
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object that can be customised further or saved with
 #'   [ggplot2::ggsave()].
 #' @export
@@ -43,7 +48,12 @@
 #' #                 dpi = 300)
 plot_pareto <- function(x, x_metric = NULL, y_metric = NULL, labels = NULL,
                         error_bars = TRUE, zoom = FALSE,
-                        bar_colour = "#c8553d", base_size = 12) {
+                        bar_colour = "#c8553d", base_size = 12,
+                        file = NULL, width = 7, height = 5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (!inherits(x, "enm_evaluation")) {
     stop("`x` must be the output of evaluate_models().", call. = FALSE)
   }
@@ -238,6 +248,11 @@ NULL
 #' @param error_bars Draw the error bars (`TRUE`/`FALSE`).
 #' @param bar_colour Colour of the error bars.
 #' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
 #' @return A `ggplot` object; `plot()` returns a list with `all` and `zoom`
 #'   invisibly.
 #' @export
@@ -253,7 +268,12 @@ NULL
 #' plot(sel)                               # full view and zoom side by side
 plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
                            labels = TRUE, zoom = FALSE, error_bars = TRUE,
-                           bar_colour = "#c8553d", base_size = 12) {
+                           bar_colour = "#c8553d", base_size = 12,
+                           file = NULL, width = 7, height = 5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
   if (!inherits(x, "enm_selection")) {
     stop("`x` must be the output of select_models().", call. = FALSE)
   }
@@ -363,7 +383,8 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
 #' @param ... Passed to [plot_selection()].
 #' @export
 plot.enm_selection <- function(x, y, x_metric = NULL, y_metric = NULL,
-                               zoom = "auto", ...) {
+                               zoom = "auto", ...,
+                               file = NULL, width = 14, height = 5.5) {
   p_all <- plot_selection(x, x_metric, y_metric, ...)
   out <- list(all = p_all)
   if (!isFALSE(zoom) && !is.null(zoom)) {
@@ -375,6 +396,10 @@ plot.enm_selection <- function(x, y, x_metric = NULL, y_metric = NULL,
     }
   }
   print_side_by_side(out)
+  if (!is.null(file)) {
+    save_figure(if (length(out) == 1) out[[1]] else out, file,
+                if (length(out) == 1) width / 2 else width, height)
+  }
   invisible(out)
 }
 
@@ -383,7 +408,8 @@ plot.enm_selection <- function(x, y, x_metric = NULL, y_metric = NULL,
 #' @param ... Passed to [plot_pareto()].
 #' @export
 plot.enm_evaluation <- function(x, y, x_metric = NULL, y_metric = NULL,
-                                zoom = "auto", ...) {
+                                zoom = "auto", ...,
+                                file = NULL, width = 14, height = 5.5) {
   out <- list(all = plot_pareto(x, x_metric, y_metric, ...))
   if (!isFALSE(zoom) && !is.null(zoom)) {
     p_zoom <- plot_pareto(x, x_metric, y_metric, zoom = TRUE, ...)
@@ -393,6 +419,10 @@ plot.enm_evaluation <- function(x, y, x_metric = NULL, y_metric = NULL,
     }
   }
   print_side_by_side(out)
+  if (!is.null(file)) {
+    save_figure(if (length(out) == 1) out[[1]] else out, file,
+                if (length(out) == 1) width / 2 else width, height)
+  }
   invisible(out)
 }
 
@@ -550,4 +580,49 @@ bar_layers <- function(df, x_metric, y_metric, colour, zoomed,
     paste0("Bars: ", paste(parts, collapse = "; "), ".")
   }
   list(layers = layers, text = text)
+}
+
+# Save a figure (internal). `file`: one or more paths; the format follows the
+# extension, and a path without extension is written as PNG and PDF. `p` is
+# a ggplot or a list of ggplots drawn side by side. Returns `p` invisibly.
+save_figure <- function(p, file, width = 7, height = 5, dpi = 300) {
+  if (is.null(file)) return(p)
+  file <- unlist(lapply(file, function(f) {
+    if (nzchar(tools::file_ext(f))) f else paste0(f, c(".png", ".pdf"))
+  }))
+  for (f in file) {
+    d <- dirname(f)
+    if (!dir.exists(d)) dir.create(d, recursive = TRUE)
+    if (inherits(p, "ggplot")) {
+      ggplot2::ggsave(f, p, width = width, height = height, dpi = dpi,
+                      limitsize = FALSE)
+    } else {
+      ext <- tolower(tools::file_ext(f))
+      dev <- switch(ext,
+        pdf = function() grDevices::pdf(f, width = width, height = height),
+        svg = function() grDevices::svg(f, width = width, height = height),
+        png = function() grDevices::png(f, width = width, height = height,
+                                        units = "in", res = dpi),
+        jpg = , jpeg = function() grDevices::jpeg(f, width = width,
+                                                 height = height,
+                                                 units = "in", res = dpi),
+        tif = , tiff = function() grDevices::tiff(f, width = width,
+                                                 height = height,
+                                                 units = "in", res = dpi),
+        stop("Unsupported file type: ", f, call. = FALSE))
+      dev()
+      tryCatch(print_side_by_side(p), finally = grDevices::dev.off())
+    }
+    message("Saved: ", f)
+  }
+  invisible(p)
+}
+
+# Re-run a plotting call without `file`, `width` and `height` and save the
+# result (internal; used at the top of every plotting function)
+save_call <- function(call, env, file, width, height) {
+  call$file <- NULL
+  call$width <- NULL
+  call$height <- NULL
+  save_figure(eval(call, env), file, width, height)
 }

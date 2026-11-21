@@ -4,7 +4,14 @@
 \alias{plot_correlation}
 \title{Heatmap of the correlations between variables}
 \usage{
-plot_correlation(x, which = "union", base_size = 10)
+plot_correlation(
+  x,
+  which = "union",
+  base_size = 10,
+  file = NULL,
+  width = 7.5,
+  height = 7
+)
 }
 \arguments{
 \item{x}{A \code{var_selection}.}
@@ -12,6 +19,13 @@ plot_correlation(x, which = "union", base_size = 10)
 \item{which}{\code{"union"} or a data-set name (see \code{names(x$rho)}).}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{ggplot} object.

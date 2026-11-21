@@ -4,12 +4,19 @@
 \alias{plot_niche_truncation}
 \title{Plot of a niche truncation report}
 \usage{
-plot_niche_truncation(x, base_size = 12)
+plot_niche_truncation(x, base_size = 12, file = NULL, width = 9, height = 6)
 }
 \arguments{
 \item{x}{A \code{niche_truncation} object from \code{\link[=niche_truncation]{niche_truncation()}}.}
 
 \item{base_size}{Base font size.}
+
+\item{file}{Optional file(s) to save the plot to, e.g. \code{"fig.pdf"} or
+\code{c("fig.png", "fig.pdf")}; the format follows the extension, and a
+name without extension is saved as PNG and PDF. The plot is also
+returned.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{ggplot} object.

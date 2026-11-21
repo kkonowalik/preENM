@@ -8,13 +8,17 @@ niche_coverage(
   points,
   env,
   region,
+  region_points = NULL,
   probs = c(0.01, 0.99),
   n_bins = 20,
   limits = c(0.1, 0.5),
   n = 1e+05,
   coords = NULL,
   points_crs = "EPSG:4326",
-  seed = 1
+  seed = 1,
+  file = NULL,
+  width = 7.5,
+  height = 5.5
 )
 }
 \arguments{
@@ -25,7 +29,14 @@ niche_coverage(
 files).}
 
 \item{region}{The region of interest: polygons (\code{sf}, \code{SpatVector},
-file) or a raster (cells with values).}
+file) or a raster (cells with values), e.g. a country or the M of a
+regional model.}
+
+\item{region_points}{Optional regional records from another source, e.g.
+a national survey (the usual case for nested models, where the
+regional model uses more precise regional data). Then \code{unfilling} and
+the per-variable values compare these with \code{points}; by default the
+records of \code{points} that fall in \code{region} are the regional records.}
 
 \item{probs}{Quantiles of the whole-range records that define their range
 per variable (default the central 98\%, so that a few outliers do not
@@ -42,6 +53,11 @@ strongly advised".}
 \item{coords, points_crs}{Coordinate columns and CRS of \code{points}.}
 
 \item{seed}{Seed for the cell sample.}
+
+\item{file}{Optional file(s) to save the plot to (see
+\code{\link[=plot_niche_coverage]{plot_niche_coverage()}}), e.g. \code{c("coverage.png", "coverage.pdf")}.}
+
+\item{width, height}{Size of the saved plot in inches.}
 }
 \value{
 A \code{niche_coverage} object: a list with \code{summary} (records in
@@ -89,9 +105,13 @@ exist in the region but the species has no records there (absent,
 undersampled, or excluded by other factors), which a nested model does
 not solve by itself.
 
-Use thinned records of the whole range (e.g. GBIF, filtered with
-\code{\link[=filter_occurrences]{filter_occurrences()}} and \code{\link[=thin_by_cell]{thin_by_cell()}}) and the same climate
-variables as for the regional model; the layers may be coarser.
+\strong{The records and layers must cover the whole range.} Records outside
+the layers have no values and are left out (their number is reported);
+if only the regional records remain, the region trivially contains
+their niche, and the function warns. Use thinned records of the whole
+range (e.g. GBIF, filtered with \code{\link[=filter_occurrences]{filter_occurrences()}} and
+\code{\link[=thin_by_cell]{thin_by_cell()}}) and the same climate variables as for the regional
+model, for the whole range; the layers may be coarser.
 \code{\link[=niche_truncation]{niche_truncation()}} then checks, for the chosen calibration area,
 along which predictors and at which end the response is cut.
 }
@@ -102,6 +122,7 @@ west <- terra::as.polygons(terra::ext(14, 17, 49, 55), crs = "EPSG:4326")
 nc <- niche_coverage(sim$presence, sim$env, west)
 nc
 plot_niche_coverage(nc)
+# plot_niche_coverage(nc, file = c("coverage.png", "coverage.pdf"))
 }
 \references{
 Goicolea, T., Adde, A., Broennimann, O., Garcia-Vinas, J.I.,

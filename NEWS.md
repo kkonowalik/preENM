@@ -1,3 +1,29 @@
+# preENM 2.22.0
+
+`niche_coverage()`:
+
+* **Much less memory and time** with large rasters: values are read only at
+  the records and at random locations in the region, and whether a record
+  lies in the region is a point-in-polygon test. Before, the region was
+  rasterized onto the whole grid and every valid cell was listed, which
+  could fail with `std::bad_alloc` on global 30 arc-second layers. In a
+  test with 200 million cells: peak memory 9.3 GB -> 0.6 GB, 67 s -> 2 s,
+  identical result.
+* **Graded advice**: small, moderate, large and very large gap
+  (`limits = c(0.1, 0.25, 0.5)`; two limits as before are still accepted).
+  Only the last limit is from Goicolea et al. (2025); the printout says
+  so.
+* **Automatic grid**: `n_bins = "auto"` (20 x 20, coarser with fewer than
+  about 1,200 records). The unfilling is also given for a coarser and a
+  finer grid, and the printout sums up the range over grids and
+  `min_records` ("19% to 36%: from a moderate to a large gap").
+* The note on what a nested model adds now explains its main use, regional
+  projections (future conditions of the region that the species occupies
+  elsewhere), and its assumption (no strong local adaptation).
+* Figure for papers: no advice in the subtitle; legends with counts and
+  percentages; the region in ColorBrewer green on grey land, its outline
+  drawn above the records.
+
 # preENM 2.21.0
 
 `niche_coverage()` extended after its first use on a real circumpolar

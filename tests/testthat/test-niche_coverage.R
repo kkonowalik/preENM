@@ -37,7 +37,7 @@ test_that("a region with part of the range misses part of the niche", {
                mean(f$pts$lat < 45 | f$pts$lat > 55), tolerance = 0.05)
   expect_equal(half$summary$records_region,
                sum(f$pts$lat > 45 & f$pts$lat < 55))
-  expect_output(print(half), "nested model worth considering")
+  expect_output(print(half), "nested model advised")
   expect_s3_class(plot_niche_coverage(half, type = "pca"), "ggplot")
   # stricter limits change the advice, not the numbers
   h2 <- niche_coverage(f$pts, f$env, f$box(45, 55), limits = c(0.6, 0.9))
@@ -197,4 +197,34 @@ test_that("classify_points places new points and counts misses", {
   expect_warning(expect_warning(classify_points(nc, values = vk), "units"),
                  "units")
   expect_error(classify_points(nc, values = data.frame(temp = 1)), "wet")
+})
+
+
+test_that("graded advice, automatic grid, sensitivity and raster regions", {
+  expect_equal(coverage_advice(0.05, c(0.1, 0.25, 0.5)),
+               "regional model sufficient")
+  expect_equal(coverage_advice(0.2, c(0.1, 0.25, 0.5)),
+               "nested model worth considering")
+  expect_equal(coverage_advice(0.36, c(0.1, 0.25, 0.5)),
+               "nested model advised")
+  expect_equal(coverage_advice(0.6, c(0.1, 0.25, 0.5)),
+               "nested model strongly advised")
+  expect_equal(check_limits(c(0.1, 0.5)), c(0.1, 0.3, 0.5))
+  expect_error(check_limits(c(0.5, 0.2, 0.9)), "limits")
+  f <- cov_fixture()
+  region <- f$box(45, 55)
+  nc <- niche_coverage(f$pts, f$env, region, n_boot = 0, n_null = 0)
+  # 500 records: a 13 x 13 grid; a coarser and a finer one are reported
+  expect_equal(nc$settings$n_bins, 13)
+  expect_equal(nc$resolution$n_bins, c(9, 13, 20))
+  expect_equal(nc$resolution$unfilling[2], nc$summary$unfilling)
+  few <- niche_coverage(f$pts[1:60, ], f$env, region, n_boot = 0,
+                        n_null = 0)
+  expect_equal(few$settings$n_bins, 8)
+  expect_output(print(nc), "Depending on how many records a cell needs")
+  # a raster region gives the same records inside and similar conditions
+  rr <- terra::rasterize(region, f$env[[1]])
+  nr <- niche_coverage(f$pts, f$env, rr, n_boot = 0, n_null = 0)
+  expect_equal(nr$summary$records_region, nc$summary$records_region)
+  expect_equal(nr$summary$unfilling, nc$summary$unfilling, tolerance = 0.05)
 })

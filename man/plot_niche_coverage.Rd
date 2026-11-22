@@ -36,10 +36,11 @@ list (invisibly), after drawing them.
 \description{
 Two panels. \strong{Niche space}: the space of the first two principal
 components of the records of the whole range, with the conditions of the
-region (beige), the niche cells without regional records (red frames;
+region (green), the niche cells without regional records (red frames;
 their share is \code{unfilling}), the whole-range records outside the region
 (grey) and inside it (blue), and separate regional records if given
-(\code{region_points}, red crosses); the legend gives their numbers. \strong{Map}:
+(\code{region_points}, red crosses); the legends give numbers and shares.
+\strong{Map}:
 the whole-range records coloured by the category of their niche cell
 (filled by regional records; known only from elsewhere, with conditions
 available in the region or absent from it), with the region outlined.

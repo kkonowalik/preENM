@@ -56,13 +56,21 @@ coverage_levels <- c("filled", "elsewhere, available", "elsewhere, absent",
 #' 1, 2, 3 and 5 and says when the advice changes; check the records in
 #' unfilled cells with [unfilled_records()] (e.g. their taxonomy).
 #'
-#' **Advice** (from `unfilling` and `limits`): below 10% a regional model
-#' sees nearly the whole niche; 10-50% a nested model is worth considering,
-#' above 50% ("very poorly filled" in Goicolea et al. 2025) it is strongly
-#' advised. A nested model helps only where the conditions you predict for
-#' (the region now, in the future or the past, evaluation sites) fall into
-#' cells occupied elsewhere: check that with [classify_points()]. Where they
-#' fall into filled cells, problems of the model are not due to the extent.
+#' **Advice** (from `unfilling` and `limits`), graded: below 10% a small
+#' gap (a regional model sees nearly the whole niche); 10-25% a moderate gap
+#' (a nested model worth considering for projections); 25-50% a large gap
+#' (nested model advised); above 50%, "very poorly filled" in Goicolea et
+#' al. (2025), a very large gap (strongly advised). Only the last limit is
+#' from the paper. A nested model matters most for projections: future (or
+#' past) conditions of the region that lie outside the regional niche but
+#' inside the conditions the species occupies elsewhere; a regional model
+#' predicts losses there that the whole-range model does not.
+#' [classify_points()] shows how much of the region is in that situation.
+#' This assumes no strong local adaptation of the regional populations.
+#'
+#' **Memory.** Values are read only at the records and at `n` random
+#' locations in the region, so large (e.g. global 30 arc-second) layers can
+#' be used.
 #'
 #' **The records and layers must cover the whole range.** Records outside
 #' the layers have no values and are left out (their number is reported);
@@ -93,12 +101,17 @@ coverage_levels <- c("filled", "elsewhere, available", "elsewhere, absent",
 #' @param probs Quantiles of the whole-range records that define their range
 #'   per variable (default the central 98%, so that a few outliers do not
 #'   decide it).
-#' @param n_bins Number of bins per principal component.
+#' @param n_bins Number of bins per principal component, or `"auto"`
+#'   (default): 20, coarser with fewer than about 1,200 records (at least
+#'   8), so that occupied cells hold several records on average. The
+#'   printout also gives the unfilling for a coarser and a finer grid.
 #' @param min_records Records a cell needs to count as part of the niche;
 #'   e.g. 2 ignores cells with a single, possibly erroneous record.
-#' @param limits Two `unfilling` values separating "regional model
-#'   sufficient", "nested model worth considering" and "nested model
-#'   strongly advised".
+#' @param limits Three `unfilling` values separating a small gap
+#'   ("regional model sufficient"), a moderate one ("nested model worth
+#'   considering"), a large one ("nested model advised") and a very large
+#'   one ("nested model strongly advised"). Rules of thumb, except 50%,
+#'   "very poorly filled" in Goicolea et al. (2025).
 #' @param n_boot,n_null Bootstrap resamples and random samples for the
 #'   statistics (0 to skip).
 #' @param n Number of cells sampled from the region.
@@ -150,17 +163,13 @@ coverage_levels <- c("filled", "elsewhere, available", "elsewhere, absent",
 #' # plot_niche_coverage(nc, file = c("coverage.png", "coverage.pdf"))
 niche_coverage <- function(points, env, region, region_points = NULL,
                            log_vars = NULL, probs = c(0.01, 0.99),
-                           n_bins = 20, min_records = 1,
-                           limits = c(0.1, 0.5), n_boot = 199, n_null = 199,
+                           n_bins = "auto", min_records = 1,
+                           limits = c(0.1, 0.25, 0.5), n_boot = 199, n_null = 199,
                            n = 1e5, coords = NULL, points_crs = "EPSG:4326",
                            seed = 1, file = NULL, width = 14, height = 6) {
   r <- as_grid(env)
   vars <- names(r)
-  if (length(limits) != 2 || any(limits < 0 | limits > 1) ||
-      limits[1] >= limits[2]) {
-    stop("`limits` must be two increasing shares between 0 and 1.",
-         call. = FALSE)
-  }
+  limits <- check_limits(limits)
   lv <- if (identical(log_vars, "auto")) default_log_vars(vars) else
     intersect(log_vars, vars)
   miss_lv <- setdiff(log_vars, c(vars, "auto"))
@@ -176,7 +185,9 @@ niche_coverage <- function(points, env, region, region_points = NULL,
     ok <- !is.na(cell)
     xy <- xy[ok, , drop = FALSE]
     cell <- cell[ok]
-    E <- read_cells(r, cell)
+    # values at the points only (not block by block over the raster)
+    E <- if (length(cell)) as.matrix(terra::extract(r, xy)) else
+      matrix(numeric(0), 0, length(vars))
     colnames(E) <- vars
     keep <- stats::complete.cases(E)
     list(E = E[keep, , drop = FALSE], cell = cell[keep],
@@ -196,7 +207,8 @@ niche_coverage <- function(points, env, region, region_points = NULL,
     message(w$dropped, " of ", w$total, " records lie outside the layers or ",
             "have missing values and were left out.")
   }
-  inside <- in_mask(r, cell, region)
+  reg_obj <- coverage_region(region, r)
+  inside <- inside_region(w$xy, reg_obj, r)
   if (is.null(region_points)) {
     if (sum(inside) < 3) {
       stop("Fewer than 3 records in `region`.", call. = FALSE)
@@ -223,17 +235,11 @@ niche_coverage <- function(points, env, region, region_points = NULL,
               "the layers or have missing values and were left out.")
     }
   }
-  # conditions of the region
-  valid <- valid_cells(r)
-  in_reg <- valid[in_mask(r, valid, region)]
-  if (!length(in_reg)) stop("`region` covers no cell with values.",
-                            call. = FALSE)
-  smp <- with_seed(seed, if (length(in_reg) > n) {
-    sort(in_reg[sample.int(length(in_reg), n)])
-  } else in_reg)
-  R <- read_cells(r, smp)
+  # conditions of the region: random locations inside it (memory grows
+  # with `n`, not with the size of the rasters)
+  R <- with_seed(seed, sample_region(r, reg_obj, n))
+  if (!nrow(R)) stop("`region` covers no cell with values.", call. = FALSE)
   colnames(R) <- vars
-  R <- R[stats::complete.cases(R), , drop = FALSE]
 
   # per variable (original units)
   per_var <- do.call(rbind, lapply(vars, function(v) {
@@ -271,6 +277,15 @@ niche_coverage <- function(points, env, region, region_points = NULL,
     s
   }
   S <- score(E)
+  if (identical(n_bins, "auto")) {
+    # 20 x 20, coarser with few records, so that occupied cells hold
+    # several records on average
+    n_bins <- as.integer(min(20, max(8, round(sqrt(nrow(E) / 3)))))
+  }
+  if (!is.numeric(n_bins) || n_bins < 3) {
+    stop("`n_bins` must be \"auto\" or a number of at least 3.",
+         call. = FALSE)
+  }
   lim <- apply(S, 2, range)
   grid <- list(lim = lim, n_bins = n_bins,
                width = pmax((lim[2, ] - lim[1, ]) / n_bins, 1e-12))
@@ -306,6 +321,23 @@ niche_coverage <- function(points, env, region, region_points = NULL,
   }, numeric(1))
   robustness$advice <- vapply(robustness$unfilling, coverage_advice,
                               character(1), limits = limits)
+  # the same at coarser and finer grids
+  SRg <- score(Er)
+  SEg <- score(R)
+  resolution <- data.frame(n_bins = sort(unique(c(
+    max(3, round(n_bins * 0.66)), n_bins, round(n_bins * 1.5)))))
+  resolution$niche_cells <- NA_real_
+  resolution$unfilling <- NA_real_
+  for (i in seq_len(nrow(resolution))) {
+    g <- list(lim = lim, n_bins = resolution$n_bins[i],
+              width = pmax((lim[2, ] - lim[1, ]) / resolution$n_bins[i],
+                           1e-12))
+    na <- tabulate(grid_cells(S, g), g$n_bins^2)
+    nr <- tabulate(stats::na.omit(grid_cells(SRg, g)), g$n_bins^2)
+    niche <- na >= min_records
+    resolution$niche_cells[i] <- sum(niche)
+    resolution$unfilling[i] <- mean(nr[niche] == 0)
+  }
 
   # how serious: bootstrap of the records, and random samples of the same
   # size as the regional records
@@ -383,10 +415,11 @@ niche_coverage <- function(points, env, region, region_points = NULL,
     not_available_records = not_available_records,
     advice = advice, stringsAsFactors = FALSE)
   # the region as polygons in longitude/latitude, for the map
-  region_ll <- tryCatch(coverage_region_outline(region, r),
+  region_ll <- tryCatch(coverage_region_outline(reg_obj),
                         error = function(e) NULL)
   out <- structure(
-    list(summary = summary, robustness = robustness, variables = per_var,
+    list(summary = summary, robustness = robustness,
+         resolution = resolution, variables = per_var,
          bins = bins, records = records, pca = pca,
          scores = data.frame(pc1 = S[, 1], pc2 = S[, 2], region = inside),
          region_scores = data.frame(pc1 = score(R)[, 1],
@@ -450,25 +483,114 @@ coverage_density <- function(n_reg) {
   out
 }
 
+advice_levels <- c("regional model sufficient",
+                   "nested model worth considering",
+                   "nested model advised", "nested model strongly advised")
+gap_levels <- c("small gap", "moderate gap", "large gap", "very large gap")
+
 coverage_advice <- function(u, limits) {
   if (is.na(u)) return(NA_character_)
-  if (u < limits[1]) "regional model sufficient" else if (u < limits[2])
-    "nested model worth considering" else "nested model strongly advised"
+  advice_levels[findInterval(u, limits) + 1]
 }
 
-# The region as an sf polygon in longitude/latitude (internal)
-coverage_region_outline <- function(region, r) {
+# Three limits; two (as before version 2.22.0) get a middle one (internal)
+check_limits <- function(limits) {
+  if (length(limits) == 2) limits <- c(limits[1], mean(limits), limits[2])
+  if (length(limits) != 3 || any(limits < 0 | limits > 1) ||
+      any(diff(limits) <= 0)) {
+    stop("`limits` must be three increasing shares between 0 and 1.",
+         call. = FALSE)
+  }
+  limits
+}
+
+# The region as polygons in the CRS of `r`, or as a raster (internal)
+coverage_region <- function(region, r) {
   if (is.character(region)) {
     region <- if (grepl("\\.(tif|tiff|asc|nc|vrt|img)$", region[1],
                         ignore.case = TRUE)) terra::rast(region) else
       terra::vect(region)
   }
   if (inherits(region, c("sf", "sfc"))) region <- terra::vect(region)
-  if (inherits(region, "SpatRaster")) {
-    region <- terra::as.polygons(!is.na(region[[1]]))
-    region <- region[region[[1]][, 1] == 1]
+  if (inherits(region, "SpatVector")) {
+    if (!terra::same.crs(region, r)) region <- terra::project(region,
+                                                              terra::crs(r))
+    return(region)
   }
-  v <- terra::project(region, "EPSG:4326")
+  if (inherits(region, "SpatRaster")) return(region[[1]])
+  stop("`region` must be polygons or a raster (object or file).",
+       call. = FALSE)
+}
+
+# Which points (x/y in the CRS of `r`) lie in the region (internal)
+inside_region <- function(xy, reg, r) {
+  if (!nrow(xy)) return(logical(0))
+  if (inherits(reg, "SpatVector")) {
+    p <- terra::vect(xy, crs = terra::crs(r))
+    return(as.vector(terra::is.related(p, reg, "intersects")))
+  }
+  if (!terra::same.crs(reg, r)) {
+    xy <- terra::crds(terra::project(terra::vect(xy, crs = terra::crs(r)),
+                                     terra::crs(reg)))
+  }
+  v <- terra::extract(reg, xy)[[1]]
+  !is.na(v) & v != 0
+}
+
+# Values of `r` at up to `n` random cells inside the region (internal)
+sample_region <- function(r, reg, n) {
+  e <- terra::intersect(terra::ext(r), terra::ext(
+    if (inherits(reg, "SpatVector")) reg else
+      terra::project(terra::as.polygons(terra::ext(reg),
+                                        crs = terra::crs(reg)),
+                     terra::crs(r))))
+  if (is.null(e)) return(matrix(numeric(0), 0, terra::nlyr(r)))
+  rows <- range(terra::rowFromY(r, c(e$ymin, e$ymax) +
+                                  c(0.5, -0.5) * terra::res(r)[2]),
+                na.rm = TRUE)
+  cols <- range(terra::colFromX(r, c(e$xmin, e$xmax) +
+                                  c(0.5, -0.5) * terra::res(r)[1]),
+                na.rm = TRUE)
+  n_win <- (diff(rows) + 1) * (diff(cols) + 1)
+  out <- list()
+  got <- 0
+  for (try in 1:6) {
+    k <- min(n_win, ceiling(3 * (n - got)) + 100)
+    cell <- if (n_win <= 3 * n) {
+      terra::cellFromRowColCombine(r, rows[1]:rows[2], cols[1]:cols[2])
+    } else {
+      unique(terra::cellFromRowCol(
+        r, sample.int(diff(rows) + 1, k, replace = TRUE) + rows[1] - 1,
+        sample.int(diff(cols) + 1, k, replace = TRUE) + cols[1] - 1))
+    }
+    xy <- terra::xyFromCell(r, cell)
+    xy <- xy[inside_region(xy, reg, r), , drop = FALSE]
+    if (nrow(xy)) {
+      v <- as.matrix(terra::extract(r, xy))
+      v <- v[stats::complete.cases(v), , drop = FALSE]
+      out[[length(out) + 1]] <- v
+      got <- got + nrow(v)
+    }
+    if (got >= n || n_win <= 3 * n) break
+  }
+  v <- do.call(rbind, out)
+  if (is.null(v)) return(matrix(numeric(0), 0, terra::nlyr(r)))
+  v <- unique(v)
+  if (nrow(v) > n) v <- v[sample.int(nrow(v), n), , drop = FALSE]
+  v
+}
+
+# The region as an sf polygon in longitude/latitude (internal)
+coverage_region_outline <- function(reg) {
+  if (inherits(reg, "SpatRaster")) {
+    a <- if (terra::ncell(reg) > 4e6) {
+      terra::aggregate(reg, ceiling(sqrt(terra::ncell(reg) / 4e6)),
+                       fun = "max", na.rm = TRUE)
+    } else reg
+    reg <- terra::as.polygons(!is.na(a) & a != 0)
+    reg <- reg[reg[[1]][, 1] == 1]
+  }
+  v <- terra::project(reg, "EPSG:4326")
   sf::st_as_sf(terra::aggregate(v))
 }
 
@@ -477,6 +599,7 @@ print.niche_coverage <- function(x, digits = 3, ...) {
   s <- x$summary
   sep <- isTRUE(x$settings$separate_region_points)
   pct <- function(z) paste0(round(100 * z), "%")
+  wrap <- function(t, ...) cat(strwrap(t, width = 78, ...), sep = "\n")
   cat("How much of the species' niche does the region contain?\n\n")
   cat("Records of the whole range: ", s$records,
       if (!is.null(s$records_dropped) && s$records_dropped > 0) {
@@ -493,20 +616,29 @@ print.niche_coverage <- function(x, digits = 3, ...) {
                      "outside_region")]
   v[-1] <- lapply(v[-1], round, digits)
   print(v, row.names = FALSE)
-  cat(strwrap(paste0(
+  wrap(paste0(
     "coverage = part of the range of the whole-range records that ", reg,
     " cover; outside_records = share of whole-range records beyond the range ",
     "of ", reg, "; outside_region = share beyond the conditions of the ",
     "region. Each variable is judged alone, so these shares are smaller ",
     "than those of the niche below, which counts combinations of ",
-    "conditions."), width = 78, prefix = "  "), sep = "\n")
+    "conditions."), prefix = "  ")
   rb <- x$robustness
+  rs <- x$resolution
   if (!is.null(rb)) {
-    cat("\nUnfilling when cells need more records to count as niche:\n")
+    cat("\nUnfilling when a cell needs more records to count as niche:\n")
     show <- rb
     show$unfilling <- pct(show$unfilling)
     print(show, row.names = FALSE)
   }
+  if (!is.null(rs)) {
+    cat("\nUnfilling with a coarser or finer grid (cells per axis):\n")
+    show <- rs
+    show$unfilling <- pct(show$unfilling)
+    print(show, row.names = FALSE)
+  }
+  lim <- x$settings$limits
+  if (length(lim) == 2) lim <- c(lim[1], mean(lim), lim[2])
   n_un <- round(s$unfilling * s$niche_cells)
   out_share <- if (sep) NA else 1 - s$share_region
   ci <- if (!is.null(s$unfilling_lo) && !is.na(s$unfilling_lo)) {
@@ -527,18 +659,43 @@ print.niche_coverage <- function(x, digits = 3, ...) {
         "The gap is about what the number of regional records alone would leave; more regional records may close it."
       })
   }
-  rb_txt <- NULL
-  if (!is.null(rb) && length(unique(rb$advice)) > 1) {
-    alt <- rb[rb$advice != s$advice & rb$min_records != x$settings$min_records,
-              , drop = FALSE]
-    if (nrow(alt)) {
-      rb_txt <- paste0(
-        "The advice depends on sparse records: with min_records = ",
-        alt$min_records[1], " the unfilling is ", pct(alt$unfilling[1]),
-        " (", alt$advice[1], "). Check the records in unfilled cells with ",
-        "unfilled_records() before deciding.")
-    }
+  # how robust: the range over min_records and grid sizes
+  range_txt <- NULL
+  us <- c(s$unfilling, rb$unfilling, rs$unfilling)
+  us <- us[!is.na(us)]
+  if (length(us) > 1 && diff(range(us)) >= 0.02) {
+    g <- gap_levels[findInterval(range(us), lim) + 1]
+    range_txt <- paste0(
+      "Depending on how many records a cell needs (",
+      paste(range(rb$min_records), collapse = " to "), ") and on the grid (",
+      paste(range(rs$n_bins), collapse = " to "), " cells per axis), the ",
+      "unfilling is ", pct(min(us)), " to ", pct(max(us)), ": ",
+      if (g[1] == g[2]) paste0("a ", g[1], " in every case.") else
+        paste0("from a ", g[1], " to a ", g[2], ". Sparse records in remote ",
+               "cells decide the upper value; check them with ",
+               "unfilled_records() before deciding."))
   }
+  advice_txt <- switch(
+    s$advice,
+    "regional model sufficient" = paste0(
+      "Small gap: a regional model sees nearly the whole niche; a nested ",
+      "model is not needed."),
+    "nested model worth considering" = paste0(
+      "Moderate gap: a regional model misses some of the niche. It is ",
+      "usually acceptable for present-day maps; for projections a nested ",
+      "model is worth considering."),
+    "nested model advised" = paste0(
+      "Large gap: a regional model misses a large part of the niche. A ",
+      "nested model is advised, above all for projections."),
+    "nested model strongly advised" = paste0(
+      "Very large gap: a regional model sees less than half of the niche ",
+      "(\"very poorly filled\" in Goicolea et al. 2025); its response ",
+      "curves are truncated and projections extrapolate. A nested model is ",
+      "strongly advised."),
+    "cannot be judged" = paste0(
+      "All records lie in the region, so the comparison says nothing. Give ",
+      "records of the whole range of the species and layers that cover it."),
+    "")
   txt <- c(
     paste0(pct(s$unfilling), ci, " of the species' niche has no record in ",
            "the region: ", n_un, " of the ", s$niche_cells, " cells of ",
@@ -553,45 +710,37 @@ print.niche_coverage <- function(x, digits = 3, ...) {
              "region (", pct(out_share), ")"),
            ". It understates the gap when most records come from the ",
            "region, so the advice uses the niche cells."),
-    paste0("Advice: ", s$advice, ". ", switch(
-      s$advice,
-      "regional model sufficient" = paste0(
-        "A model calibrated in the region sees nearly the whole niche."),
-      "nested model worth considering" = paste0(
-        "A regional model misses part of the niche; combine it with a ",
-        "model of the whole range (nested, or hierarchical, model), above ",
-        "all for projections."),
-      "nested model strongly advised" = paste0(
-        "A regional model sees less than half of the niche; its response ",
-        "curves are truncated and projections extrapolate. Calibrate a ",
-        "model of the whole range and nest the regional model in it."),
-      "cannot be judged" = paste0(
-        "All records lie in the region, so the comparison says nothing. ",
-        "Give records of the whole range of the species and layers that ",
-        "cover it."), "")),
-    rb_txt,
+    paste0("Advice: ", s$advice, ". ", advice_txt),
+    range_txt,
     if (s$unfilling - s$not_available > 0.1) {
       paste0(pct(s$unfilling - s$not_available), " of the niche exists in ",
              "the region but has no records there: check for undersampling ",
              "before blaming the extent.")
     },
-    paste0("A nested model helps only where the conditions you predict for ",
-           "(the region in another period, evaluation or fossil sites) fall ",
-           "into cells occupied elsewhere; classify_points() tells you."))
+    paste0("What a nested model adds: a model of the whole range knows ",
+           "conditions that the regional records lack. When the region ",
+           "becomes warmer or drier, its future conditions may lie outside ",
+           "the regional niche but inside the conditions the species ",
+           "occupies elsewhere; a regional model then predicts losses that ",
+           "the whole-range model does not. To see how much of the region ",
+           "is in that situation, place its projected conditions with ",
+           "classify_points(). This assumes that the regional populations ",
+           "can live in the conditions of the populations elsewhere, or be ",
+           "replaced by them; local adaptation would make the nested model ",
+           "too optimistic."))
   cat("\nIN SHORT\n")
-  for (t in txt) {
-    cat(strwrap(t, width = 78, exdent = 2, prefix = "  ", initial = "- "),
-        sep = "\n")
-  }
-  cat(strwrap(paste0(
+  for (t in txt) wrap(t, exdent = 2, prefix = "  ", initial = "- ")
+  wrap(paste0(
     "Niche: the cells of the space of the first two principal components ",
     "of the variables",
     if (length(x$settings$log_vars)) paste0(" (",
       paste(x$settings$log_vars, collapse = ", "), " log-transformed)"),
     ", cut into ", x$settings$n_bins, " x ", x$settings$n_bins, ", that ",
     "hold at least ", x$settings$min_records, " whole-range record(s); each ",
-    "counts once. Records in unfilled cells: unfilled_records()."),
-    width = 78, prefix = "  "), sep = "\n")
+    "counts once. Gaps: small below ", pct(lim[1]), ", moderate to ",
+    pct(lim[2]), ", large to ", pct(lim[3]), ", very large above (rules of ",
+    "thumb; only the last is from Goicolea et al. 2025). Records in ",
+    "unfilled cells: unfilled_records()."), prefix = "  ")
   invisible(x)
 }
 
@@ -825,10 +974,11 @@ print.niche_classes <- function(x, ...) {
 #'
 #' Two panels. **Niche space**: the space of the first two principal
 #' components of the records of the whole range, with the conditions of the
-#' region (beige), the niche cells without regional records (red frames;
+#' region (green), the niche cells without regional records (red frames;
 #' their share is `unfilling`), the whole-range records outside the region
 #' (grey) and inside it (blue), and separate regional records if given
-#' (`region_points`, red crosses); the legend gives their numbers. **Map**:
+#' (`region_points`, red crosses); the legends give numbers and shares.
+#' **Map**:
 #' the whole-range records coloured by the category of their niche cell
 #' (filled by regional records; known only from elsewhere, with conditions
 #' available in the region or absent from it), with the region outlined.
@@ -875,8 +1025,11 @@ coverage_pca_plot <- function(x, base_size) {
   s <- x$scores
   n_in <- sum(s$region)
   n_out <- sum(!s$region)
-  lab_in <- sprintf("whole-range records inside the region (%d)", n_in)
-  lab_out <- sprintf("whole-range records outside the region (%d)", n_out)
+  n_tot <- n_in + n_out
+  lab_in <- sprintf("whole-range records inside the region (%d, %.0f%%)",
+                    n_in, 100 * n_in / n_tot)
+  lab_out <- sprintf("whole-range records outside the region (%d, %.0f%%)",
+                     n_out, 100 * n_out / n_tot)
   lab_reg <- sprintf("regional records (%d)",
                      if (is.null(x$region_point_scores)) 0L else
                        nrow(x$region_point_scores))
@@ -909,8 +1062,10 @@ coverage_pca_plot <- function(x, base_size) {
     }
     b <- b[b$category %in% c("elsewhere, available", "elsewhere, absent"), ,
            drop = FALSE]
-    lab_gap <- sprintf("niche cells without regional records (%d of %d)",
-                       nrow(b), x$summary$niche_cells)
+    lab_gap <- sprintf(paste0("niche cells without regional records ",
+                              "(%d of %d, %.0f%%)"), nrow(b),
+                       x$summary$niche_cells,
+                       100 * nrow(b) / x$summary$niche_cells)
     b$what <- factor(rep(lab_gap, nrow(b)), levels = lab_gap)
   }
   ve <- summary(x$pca)$importance[2, ]
@@ -918,7 +1073,7 @@ coverage_pca_plot <- function(x, base_size) {
   ggplot2::ggplot(s, ggplot2::aes(.data$pc1, .data$pc2)) +
     ggplot2::geom_tile(data = rt, inherit.aes = FALSE,
                        ggplot2::aes(.data$pc1, .data$pc2), width = rt_w[1],
-                       height = rt_w[2], fill = "#e9e2cf", colour = NA) +
+                       height = rt_w[2], fill = "#c7e9c0", colour = NA) +
     (if (!is.null(b) && nrow(b)) {
       ggplot2::geom_tile(data = b, inherit.aes = FALSE,
                          ggplot2::aes(.data$pc1, .data$pc2, fill = .data$what),
@@ -945,15 +1100,14 @@ coverage_pca_plot <- function(x, base_size) {
                     fill = ggplot2::guide_legend(order = 2)) +
     ggplot2::labs(
       x = ax(1), y = ax(min(2, length(ve))),
-      title = "How much of the niche does the region contain?",
-      subtitle = sprintf(paste0("Beige: conditions that occur in the ",
+      title = "The niche of the whole range and the region",
+      subtitle = sprintf(paste0("Green: conditions that occur in the ",
                                 "region; red frames: niche cells without ",
                                 "regional records.\n%.0f%% of the niche has ",
-                                "no record in the region, %.0f%% is not ",
-                                "available there.\nAdvice: %s."),
+                                "no record in the region; %.0f%% lies in ",
+                                "conditions absent from the region."),
                          100 * x$summary$unfilling,
-                         100 * x$summary$not_available,
-                         x$summary$advice)) +
+                         100 * x$summary$not_available)) +
     theme_enm(base_size, ink, muted) +
     ggplot2::theme(legend.position = "bottom",
                    legend.box = "vertical")
@@ -973,7 +1127,8 @@ coverage_map_plot <- function(x, base_size) {
     `elsewhere, available` = "known only from elsewhere; conditions in the region",
     `elsewhere, absent` = "known only from elsewhere; conditions not in the region",
     `not in the niche` = "cell with too few records")
-  labs <- sprintf("%s (%d)", labs, as.vector(n))
+  labs <- sprintf("%s (%d, %.0f%%)", labs, as.vector(n),
+                  100 * as.vector(n) / max(sum(n), 1))
   names(labs) <- lev
   d$cat <- factor(cat4, lev, labels = labs)
   d <- d[order(d$cat), , drop = FALSE]
@@ -987,12 +1142,12 @@ coverage_map_plot <- function(x, base_size) {
                      error = function(e) NULL)
   }
   if (!is.null(land)) {
-    p <- p + ggplot2::geom_sf(data = land, fill = "#f3f2ee", colour = "white",
+    p <- p + ggplot2::geom_sf(data = land, fill = "#e3e3e3", colour = "white",
                               linewidth = 0.2)
   }
   if (!is.null(x$region_outline)) {
-    p <- p + ggplot2::geom_sf(data = x$region_outline, fill = "#e9e2cf",
-                              colour = "#a89f86", linewidth = 0.3,
+    p <- p + ggplot2::geom_sf(data = x$region_outline, fill = "#c7e9c0",
+                              colour = "#41ab5d", linewidth = 0.4,
                               alpha = 0.8)
   }
   xr <- range(d$lon)
@@ -1001,6 +1156,10 @@ coverage_map_plot <- function(x, base_size) {
   p + ggplot2::geom_point(data = d, ggplot2::aes(.data$lon, .data$lat,
                                                  colour = .data$cat),
                           size = 0.9, alpha = 0.85) +
+    (if (!is.null(x$region_outline)) {
+      ggplot2::geom_sf(data = x$region_outline, fill = NA,
+                       colour = "#238b45", linewidth = 0.5)
+    }) +
     ggplot2::scale_colour_manual(values = cols, name = NULL, drop = TRUE) +
     ggplot2::guides(colour = ggplot2::guide_legend(
       ncol = 1, override.aes = list(size = 2.5))) +
@@ -1008,9 +1167,9 @@ coverage_map_plot <- function(x, base_size) {
                       crs = "EPSG:4326", default_crs = "EPSG:4326") +
     ggplot2::labs(x = NULL, y = NULL,
                   title = "Whole-range records by niche cell",
-                  subtitle = paste0("Beige: the region. Orange and red: ",
-                                    "the part of the niche that the ",
-                                    "regional records do not fill.")) +
+                  subtitle = paste0("Green: the region. Orange and red: ",
+                                    "records in the part of the niche that ",
+                                    "the regional records do not fill.")) +
     theme_enm(base_size, ink, muted) +
     ggplot2::theme(legend.position = "bottom")
 }

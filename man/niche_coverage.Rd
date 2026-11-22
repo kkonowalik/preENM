@@ -11,9 +11,9 @@ niche_coverage(
   region_points = NULL,
   log_vars = NULL,
   probs = c(0.01, 0.99),
-  n_bins = 20,
+  n_bins = "auto",
   min_records = 1,
-  limits = c(0.1, 0.5),
+  limits = c(0.1, 0.25, 0.5),
   n_boot = 199,
   n_null = 199,
   n = 1e+05,
@@ -51,14 +51,19 @@ precipitation amounts recognised by name (bio12-14, bio16-19), or
 per variable (default the central 98\%, so that a few outliers do not
 decide it).}
 
-\item{n_bins}{Number of bins per principal component.}
+\item{n_bins}{Number of bins per principal component, or \code{"auto"}
+(default): 20, coarser with fewer than about 1,200 records (at least
+8), so that occupied cells hold several records on average. The
+printout also gives the unfilling for a coarser and a finer grid.}
 
 \item{min_records}{Records a cell needs to count as part of the niche;
 e.g. 2 ignores cells with a single, possibly erroneous record.}
 
-\item{limits}{Two \code{unfilling} values separating "regional model
-sufficient", "nested model worth considering" and "nested model
-strongly advised".}
+\item{limits}{Three \code{unfilling} values separating a small gap
+("regional model sufficient"), a moderate one ("nested model worth
+considering"), a large one ("nested model advised") and a very large
+one ("nested model strongly advised"). Rules of thumb, except 50\%,
+"very poorly filled" in Goicolea et al. (2025).}
 
 \item{n_boot, n_null}{Bootstrap resamples and random samples for the
 statistics (0 to skip).}
@@ -138,13 +143,21 @@ errors) can drive \code{unfilling}. The printout gives it for \code{min_records}
 1, 2, 3 and 5 and says when the advice changes; check the records in
 unfilled cells with \code{\link[=unfilled_records]{unfilled_records()}} (e.g. their taxonomy).
 
-\strong{Advice} (from \code{unfilling} and \code{limits}): below 10\% a regional model
-sees nearly the whole niche; 10-50\% a nested model is worth considering,
-above 50\% ("very poorly filled" in Goicolea et al. 2025) it is strongly
-advised. A nested model helps only where the conditions you predict for
-(the region now, in the future or the past, evaluation sites) fall into
-cells occupied elsewhere: check that with \code{\link[=classify_points]{classify_points()}}. Where they
-fall into filled cells, problems of the model are not due to the extent.
+\strong{Advice} (from \code{unfilling} and \code{limits}), graded: below 10\% a small
+gap (a regional model sees nearly the whole niche); 10-25\% a moderate gap
+(a nested model worth considering for projections); 25-50\% a large gap
+(nested model advised); above 50\%, "very poorly filled" in Goicolea et
+al. (2025), a very large gap (strongly advised). Only the last limit is
+from the paper. A nested model matters most for projections: future (or
+past) conditions of the region that lie outside the regional niche but
+inside the conditions the species occupies elsewhere; a regional model
+predicts losses there that the whole-range model does not.
+\code{\link[=classify_points]{classify_points()}} shows how much of the region is in that situation.
+This assumes no strong local adaptation of the regional populations.
+
+\strong{Memory.} Values are read only at the records and at \code{n} random
+locations in the region, so large (e.g. global 30 arc-second) layers can
+be used.
 
 \strong{The records and layers must cover the whole range.} Records outside
 the layers have no values and are left out (their number is reported);

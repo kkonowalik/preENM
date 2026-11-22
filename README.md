@@ -617,6 +617,11 @@ nc <- niche_coverage(occ_whole_range, env_whole_range, region = country,
                      region_points = occ_national)
 ```
 
+Large global layers (e.g. 30 arc-second CHELSA) are fine: the function
+reads values only at the records and at random locations in the region
+(`n`, default 100,000), so memory does not grow with the size of the
+rasters.
+
 **The records and the layers must cover the whole range of the species.**
 Records outside the layers have no values and are left out; the function
 says how many. If only the records of the region remain (e.g. the layers
@@ -635,8 +640,8 @@ the regional model.
 | per variable: `coverage`, `outside_records`, `outside_region` | part of the variable's range covered by the regional records, and the share of whole-range records beyond the regional records and beyond the region's conditions |
 | `unfilling_lo`, `unfilling_hi` | bootstrap 95% interval of `unfilling` (resampled records) |
 | `unfilling_null`, `unfilling_ses`, `unfilling_p` | the unfilling a random sample of the whole-range records of the size of the regional records would leave, and how far the region's value is beyond it |
-| robustness table | `unfilling` when a niche cell needs 1, 2, 3 or 5 records; the printout says when the advice changes |
-| `advice` | unfilling below 10%: a regional model is sufficient; 10–50%: a nested model is worth considering, above all for projections; above 50% ("very poorly filled"): strongly advised (`limits` to change); "cannot be judged" if all records lie in the region |
+| robustness tables | `unfilling` when a niche cell needs 1, 2, 3 or 5 records, and with a coarser and a finer grid; the printout gives the resulting range |
+| `advice` | graded by `unfilling` (`limits = c(0.1, 0.25, 0.5)`): small gap, regional model sufficient; moderate gap, a nested model worth considering for projections; large gap, nested model advised; very large gap (above 50%, "very poorly filled" in Goicolea et al. 2025, the only limit taken from the paper), strongly advised; "cannot be judged" if all records lie in the region |
 
 **How serious is the gap?** The bootstrap interval says how much the
 unfilling depends on the particular records. The null comparison separates
@@ -646,12 +651,16 @@ small p), the region lacks conditions of the niche; if not, the gap is
 about what its number of records alone would leave, and more regional
 records may close it.
 
-**Sparse records.** One record in a remote cell counts as much as a
-thousand in another, so a handful of outliers, records of a related taxon or
-wrong coordinates can decide the advice. The robustness table shows the
-unfilling when cells need 2, 3 or 5 records, and the printout warns when
-the advice changes; `unfilled_records()` lists those records with their
-coordinates so you can map and check them.
+**Sparse records and the grid.** One record in a remote cell counts as
+much as a thousand in another, so a handful of outliers, records of a
+related taxon or wrong coordinates can decide the advice. The printout
+gives the unfilling when cells need 2, 3 or 5 records and with a coarser
+and a finer grid, and sums it up as a range, e.g. "19% to 36%: from a
+moderate to a large gap"; `unfilled_records()` lists the records in
+unfilled cells with their coordinates so you can map and check them. The
+grid is 20 x 20 cells by default and coarser with fewer than about 1,200
+records, so that occupied cells hold several records on average
+(`n_bins` to set it).
 
 **Why niche cells and not records.** Regions of interest are usually the
 best-sampled part of a range. If 93% of the records come from the region,
@@ -671,12 +680,21 @@ undersampled or limited by other factors), which a nested model does not
 solve by itself. Then run `niche_truncation()` on the regional calibration
 area to see along which predictors and at which end the response is cut.
 
-**Will a nested model help my projections?** Only where the conditions you
-predict for fall into the part of the niche known from elsewhere.
-`classify_points()` places any points in the same niche space: the region
-under a future (or past) climate, evaluation sites, fossil sites. With
-`predicted` (whether your regional model predicted each point as suitable),
-it counts the misses per category:
+**What a nested model adds to projections.** A model of the whole range
+knows conditions that the regional records lack. A species common across
+Europe and modelled only in Poland, for example: as Poland becomes warmer,
+its future conditions leave the Polish niche, and a regional model predicts
+losses, although the species lives in such conditions further south. The
+whole-range model does not predict those losses. This assumes that the
+regional populations can live in the conditions of the populations
+elsewhere (or be replaced by them); strong local adaptation would make the
+nested model too optimistic. `classify_points()` shows how much of the
+region is in that situation: it places any points in the same niche space,
+e.g. the region under a future (or past) climate, evaluation sites or
+fossil sites. Projected conditions in cells known only from elsewhere are
+where the nested model changes the prediction. With `predicted` (whether
+your regional model predicted each point as suitable), it counts the misses
+per category:
 
 ```r
 fut <- terra::spatSample(env_2070_region, 5000, na.rm = TRUE)  # or values at sites

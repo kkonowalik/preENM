@@ -228,3 +228,8 @@ test_that("graded advice, automatic grid, sensitivity and raster regions", {
   expect_equal(nr$summary$records_region, nc$summary$records_region)
   expect_equal(nr$summary$unfilling, nc$summary$unfilling, tolerance = 0.05)
 })
+
+test_that("share labels keep small shares visible", {
+  expect_equal(share_label(c(0, 0.0049, 0.07, 0.93)),
+               c("0%", "0.5%", "7%", "93%"))
+})

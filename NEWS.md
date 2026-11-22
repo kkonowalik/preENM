@@ -1,3 +1,9 @@
+# preENM 2.22.1
+
+* `plot_niche_coverage()`: the subtitle of the map is shorter and wrapped,
+  so it fits in the panel; shares below 1% in the legends get one decimal
+  (e.g. 245 of 49501 records: 0.5%, not 0%).
+
 # preENM 2.22.0
 
 `niche_coverage()`:

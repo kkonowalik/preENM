@@ -1026,10 +1026,10 @@ coverage_pca_plot <- function(x, base_size) {
   n_in <- sum(s$region)
   n_out <- sum(!s$region)
   n_tot <- n_in + n_out
-  lab_in <- sprintf("whole-range records inside the region (%d, %.0f%%)",
-                    n_in, 100 * n_in / n_tot)
-  lab_out <- sprintf("whole-range records outside the region (%d, %.0f%%)",
-                     n_out, 100 * n_out / n_tot)
+  lab_in <- sprintf("whole-range records inside the region (%d, %s)",
+                    n_in, share_label(n_in / n_tot))
+  lab_out <- sprintf("whole-range records outside the region (%d, %s)",
+                     n_out, share_label(n_out / n_tot))
   lab_reg <- sprintf("regional records (%d)",
                      if (is.null(x$region_point_scores)) 0L else
                        nrow(x$region_point_scores))
@@ -1063,9 +1063,9 @@ coverage_pca_plot <- function(x, base_size) {
     b <- b[b$category %in% c("elsewhere, available", "elsewhere, absent"), ,
            drop = FALSE]
     lab_gap <- sprintf(paste0("niche cells without regional records ",
-                              "(%d of %d, %.0f%%)"), nrow(b),
+                              "(%d of %d, %s)"), nrow(b),
                        x$summary$niche_cells,
-                       100 * nrow(b) / x$summary$niche_cells)
+                       share_label(nrow(b) / x$summary$niche_cells))
     b$what <- factor(rep(lab_gap, nrow(b)), levels = lab_gap)
   }
   ve <- summary(x$pca)$importance[2, ]
@@ -1127,8 +1127,8 @@ coverage_map_plot <- function(x, base_size) {
     `elsewhere, available` = "known only from elsewhere; conditions in the region",
     `elsewhere, absent` = "known only from elsewhere; conditions not in the region",
     `not in the niche` = "cell with too few records")
-  labs <- sprintf("%s (%d, %.0f%%)", labs, as.vector(n),
-                  100 * as.vector(n) / max(sum(n), 1))
+  labs <- sprintf("%s (%d, %s)", labs, as.vector(n),
+                  share_label(as.vector(n) / max(sum(n), 1)))
   names(labs) <- lev
   d$cat <- factor(cat4, lev, labels = labs)
   d <- d[order(d$cat), , drop = FALSE]
@@ -1167,9 +1167,16 @@ coverage_map_plot <- function(x, base_size) {
                       crs = "EPSG:4326", default_crs = "EPSG:4326") +
     ggplot2::labs(x = NULL, y = NULL,
                   title = "Whole-range records by niche cell",
-                  subtitle = paste0("Green: the region. Orange and red: ",
-                                    "records in the part of the niche that ",
-                                    "the regional records do not fill.")) +
+                  subtitle = paste0("Green: the region.\nOrange, red: ",
+                                    "records in niche cells without ",
+                                    "regional records.")) +
     theme_enm(base_size, ink, muted) +
     ggplot2::theme(legend.position = "bottom")
+}
+
+# A share as a percentage label: one decimal below 1% (so that a few
+# records do not show as 0%), none above (internal)
+share_label <- function(p) {
+  ifelse(p > 0 & p < 0.01, sprintf("%.1f%%", 100 * p),
+         sprintf("%.0f%%", 100 * p))
 }

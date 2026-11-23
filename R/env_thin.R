@@ -153,41 +153,14 @@ thin_environment <- function(points, env, axes = c("pca", "raw"),
     axes <- template$settings$axes
     n_ax <- template$settings$n_axes
   } else {
-    lv <- if (is.null(log_vars)) default_log_vars(vars) else
-      intersect(log_vars, vars)
-    valid <- valid_cells(r)
-    smp <- with_seed(seed, sort(valid[sample.int(length(valid),
-                                                 min(length(valid), pca_n))]))
-    M <- read_cells(r, smp)
-    colnames(M) <- vars
-    M <- M[stats::complete.cases(M), , drop = FALSE]
-    if (length(lv) && any(M[, lv] < 0)) {
-      stop("Negative values in a layer chosen for the log transformation: ",
-           paste(lv, collapse = ", "), call. = FALSE)
-    }
-    pca <- stats::prcomp(log_tf(M, lv), center = TRUE, scale. = TRUE)
-    ve <- pca$sdev^2 / sum(pca$sdev^2)
-    n_ax <- if (axes == "pca") {
-      min(length(vars), max(pc_min, which(cumsum(ve) >= pc_cumvar - 1e-9)[1]))
-    } else length(vars)
-    say("Environmental space: ", if (axes == "pca") paste0(
-      "PC1-PC", n_ax, " (", round(100 * sum(ve[seq_len(n_ax)]), 1),
-      "% of the variance of ", nrow(M), " cells)") else
-        "the standardised layers",
-      if (length(lv)) paste0("; log-transformed: ", paste(lv, collapse = ", ")))
+    es <- env_pca(r, log_vars, pca_n, pc_cumvar, pc_min, axes, seed)
+    pca <- es$pca
+    lv <- es$log_vars
+    n_ax <- es$n_axes
+    say(es$message)
   }
   ax_names <- if (axes == "pca") paste0("PC", seq_len(n_ax)) else vars
-  to_axes <- function(X) {
-    X <- log_tf(X[, vars, drop = FALSE], lv)
-    A <- if (axes == "pca") {
-      stats::predict(pca, newdata = X)[, seq_len(n_ax), drop = FALSE]
-    } else {
-      sweep(sweep(X, 2, pca$center, "-"), 2, pca$scale, "/")
-    }
-    A <- unname(as.matrix(A))
-    colnames(A) <- ax_names
-    A
-  }
+  to_axes <- env_axes_fun(pca, vars, lv, axes, n_ax)
   Z <- to_axes(E)
 
   # bin widths: environmental uncertainty of one record
@@ -400,6 +373,56 @@ removed.env_thinning <- function(x) {
 }
 
 # --- helpers -------------------------------------------------------------------------
+
+# Environmental space shared by thin_environment() and environmental_folds()
+# (internal): a PCA of the standardised layers (precipitation amounts
+# log-transformed) on a sample of `pca_n` cells, read cell by cell rather
+# than as a whole raster; the axes explaining `pc_cumvar` of the variance
+# (at least `pc_min`) are kept.
+env_pca <- function(r, log_vars = NULL, pca_n = 2e5, pc_cumvar = 0.95,
+                    pc_min = 2, axes = "pca", seed = NULL) {
+  vars <- names(r)
+  lv <- if (is.null(log_vars)) default_log_vars(vars) else
+    intersect(log_vars, vars)
+  valid <- valid_cells(r)
+  smp <- with_seed(seed, sort(valid[sample.int(length(valid),
+                                               min(length(valid), pca_n))]))
+  M <- read_cells(r, smp)
+  colnames(M) <- vars
+  M <- M[stats::complete.cases(M), , drop = FALSE]
+  if (length(lv) && any(M[, lv] < 0)) {
+    stop("Negative values in a layer chosen for the log transformation: ",
+         paste(lv, collapse = ", "), call. = FALSE)
+  }
+  pca <- stats::prcomp(log_tf(M, lv), center = TRUE, scale. = TRUE)
+  ve <- pca$sdev^2 / sum(pca$sdev^2)
+  n_ax <- if (axes == "pca") {
+    min(length(vars), max(pc_min, which(cumsum(ve) >= pc_cumvar - 1e-9)[1]))
+  } else length(vars)
+  msg <- paste0("Environmental space: ", if (axes == "pca") paste0(
+    "PC1-PC", n_ax, " (", round(100 * sum(ve[seq_len(n_ax)]), 1),
+    "% of the variance of ", nrow(M), " cells)") else
+      "the standardised layers",
+    if (length(lv)) paste0("; log-transformed: ", paste(lv, collapse = ", ")))
+  list(pca = pca, log_vars = lv, n_axes = n_ax, variance = ve,
+       message = msg)
+}
+
+# Function mapping layer values to the axes of env_pca() (internal)
+env_axes_fun <- function(pca, vars, lv, axes, n_ax) {
+  ax_names <- if (axes == "pca") paste0("PC", seq_len(n_ax)) else vars
+  function(X) {
+    X <- log_tf(X[, vars, drop = FALSE], lv)
+    A <- if (axes == "pca") {
+      stats::predict(pca, newdata = X)[, seq_len(n_ax), drop = FALSE]
+    } else {
+      sweep(sweep(X, 2, pca$center, "-"), 2, pca$scale, "/")
+    }
+    A <- unname(as.matrix(A))
+    colnames(A) <- ax_names
+    A
+  }
+}
 
 # Bioclim precipitation amounts, recognised by name (internal)
 default_log_vars <- function(vars) {

@@ -1342,7 +1342,8 @@ A typical workflow for choosing the algorithms of an ensemble:
    folds with balanced numbers of presences and background points.
    `environmental_folds()` clusters the records in environmental space
    instead, to test transfer to new conditions. **Audit the folds** with
-   `fold_report()` (see below).
+   `fold_report()` (see [Auditing the folds](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias)
+   at the end of this section).
 2. **Fit models** on all folds but one, for each algorithm, fold and,
    optionally, several background sets. Predict on the held-out fold.
 3. **Hold-out metrics.** `evaluate_cv()` computes AUC, MAE, bias, TSS and the
@@ -1399,83 +1400,6 @@ point and run, with columns `model`, `fold`, `obs` (1/0), `pred` and,
 optionally, `set`. Any modelling software's output can be put in this form.
 With biomod2, for example, project the cross-validation models on the
 evaluation points and keep, for each run, the points of its held-out fold.
-
-#### Auditing the folds: leakage, separation and spatial sorting bias
-
-Cross-validation tests a model on data it has not seen, but data leakage,
-information about the test data reaching the model during training,
-inflates the reported performance and is widespread in ecological machine
-learning (Stock et al. 2023, *Nature Ecology & Evolution* 7, 1743-1745).
-`fold_report()` checks a fold assignment, each fold against the rest:
-
-```r
-a <- fold_report(pts, pts$fold, occ = pts$occ, env = sim$env,
-                 block_size = 100)
-a                                        # leakage? which folds?
-plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
-```
-
-![Folds with three duplicated records split between folds](man/figures/folds.png)
-
-- **Leakage**: records with the same coordinates, or in the same raster
-  cell, in more than one fold. The model has seen the same place and
-  predictor values in training, so the metrics of those folds are inflated;
-  keep one record per cell (`thin_by_cell()`) before making folds.
-- **Spatial separation**: the distance from each test record to the nearest
-  training record, against the block size and against the distance between
-  neighbouring records. Folds whose test records are as close to training
-  records as records are to each other behave like random cross-validation,
-  and spatial autocorrelation makes their metrics optimistic (Yoo and Koo
-  2025, *Cartography and Geographic Information Science* 52, 596-609;
-  Koldasbayeva and Zaytsev 2025, *Ecological Informatics* 92, 103521).
-- **Environmental separation** (with `env`): the overlap of each predictor's
-  distribution between training and testing records, and the share of test
-  records outside the training range (extrapolation).
-- **Spatial sorting bias** (with `occ`): see below.
-- **Time** (with `time`, e.g. the year of each record): the share of
-  training records later than the test records. A model to be projected
-  forward in time should be tested on records later than those it was
-  trained on (folds ordered in time; Koldasbayeva and Zaytsev 2025). For a
-  model of one period this does not matter, so it is reported, not called
-  leakage.
-- **Suspect predictors** (with `env`): layers named like coordinates or
-  time (`lon`, `lat`, `x`, `y`, `year`, `doy`, ...), which let a model learn
-  where and when records were made rather than the response to the
-  environment (Stock et al. 2023, Table 1). Only the names are checked.
-
-Give `evaluate_cv()` the coordinate columns and it audits the folds itself,
-prints the audit with the metrics and **warns when leakage is found**:
-
-```r
-cv <- evaluate_cv(holdout_with_coordinates, set = "set",
-                  coords = c("lon", "lat"), env = sim$env, block_size = 100)
-```
-
-**Environmental folds.** `environmental_folds(pts, env, k = 4)` places the
-records in the environmental space of `thin_environment()` (a PCA of the
-standardised predictors) and clusters them by k-means; each cluster is a
-fold. Folds differ in size, and a fold may have no presences (a warning says
-so).
-
-**Spatial sorting bias.** Test presences usually lie closer to the training
-presences than test background points do, so a model scores well by
-predicting high values near known records (Hijmans 2012, *Ecology* 93,
-679-688). `spatial_sorting_bias()` gives SSB = Dp / Da, the mean distance
-from test presences to the nearest training presence divided by that from
-test background points: 1 = no bias, near 0 = extreme. It also returns a
-distance-matched sample (pairwise distance sampling): each test presence is
-paired with the background point at the most similar distance from the
-training presences, and evaluating on that sample removes the bias.
-
-```r
-test <- pts[pts$fold == 1, ]
-train <- pts[pts$fold != 1 & pts$occ == 1, ]
-s <- spatial_sorting_bias(test[test$occ == 1, ], test[test$occ == 0, ],
-                          train, seed = 1)
-s                                         # SSB, matched sample
-p <- test[test$occ == 1, ][s$presence_index, ]
-b <- test[test$occ == 0, ][s$background_index, ]   # evaluate on p and b
-```
 
 #### Plotting any metrics, zoom and 3-D
 
@@ -1635,6 +1559,83 @@ Helpers for preparing the climate of each record:
 - `age_to_period()`: Holocene / Lateglacial / Glacial from ages in cal BP.
 - `threshold_p10()`: the 10th-percentile training presence threshold, for
   sensitivity.
+
+#### Auditing the folds: leakage, separation and spatial sorting bias
+
+Cross-validation tests a model on data it has not seen, but data leakage,
+information about the test data reaching the model during training,
+inflates the reported performance and is widespread in ecological machine
+learning (Stock et al. 2023, *Nature Ecology & Evolution* 7, 1743-1745).
+`fold_report()` checks a fold assignment, each fold against the rest:
+
+```r
+a <- fold_report(pts, pts$fold, occ = pts$occ, env = sim$env,
+                 block_size = 100)
+a                                        # leakage? which folds?
+plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
+```
+
+![Folds with three duplicated records split between folds](man/figures/folds.png)
+
+- **Leakage**: records with the same coordinates, or in the same raster
+  cell, in more than one fold. The model has seen the same place and
+  predictor values in training, so the metrics of those folds are inflated;
+  keep one record per cell (`thin_by_cell()`) before making folds.
+- **Spatial separation**: the distance from each test record to the nearest
+  training record, against the block size and against the distance between
+  neighbouring records. Folds whose test records are as close to training
+  records as records are to each other behave like random cross-validation,
+  and spatial autocorrelation makes their metrics optimistic (Yoo and Koo
+  2025, *Cartography and Geographic Information Science* 52, 596-609;
+  Koldasbayeva and Zaytsev 2025, *Ecological Informatics* 92, 103521).
+- **Environmental separation** (with `env`): the overlap of each predictor's
+  distribution between training and testing records, and the share of test
+  records outside the training range (extrapolation).
+- **Spatial sorting bias** (with `occ`): see below.
+- **Time** (with `time`, e.g. the year of each record): the share of
+  training records later than the test records. A model to be projected
+  forward in time should be tested on records later than those it was
+  trained on (folds ordered in time; Koldasbayeva and Zaytsev 2025). For a
+  model of one period this does not matter, so it is reported, not called
+  leakage.
+- **Suspect predictors** (with `env`): layers named like coordinates or
+  time (`lon`, `lat`, `x`, `y`, `year`, `doy`, ...), which let a model learn
+  where and when records were made rather than the response to the
+  environment (Stock et al. 2023, Table 1). Only the names are checked.
+
+Give `evaluate_cv()` the coordinate columns and it audits the folds itself,
+prints the audit with the metrics and **warns when leakage is found**:
+
+```r
+cv <- evaluate_cv(holdout_with_coordinates, set = "set",
+                  coords = c("lon", "lat"), env = sim$env, block_size = 100)
+```
+
+**Environmental folds.** `environmental_folds(pts, env, k = 4)` places the
+records in the environmental space of `thin_environment()` (a PCA of the
+standardised predictors) and clusters them by k-means; each cluster is a
+fold. Folds differ in size, and a fold may have no presences (a warning says
+so).
+
+**Spatial sorting bias.** Test presences usually lie closer to the training
+presences than test background points do, so a model scores well by
+predicting high values near known records (Hijmans 2012, *Ecology* 93,
+679-688). `spatial_sorting_bias()` gives SSB = Dp / Da, the mean distance
+from test presences to the nearest training presence divided by that from
+test background points: 1 = no bias, near 0 = extreme. It also returns a
+distance-matched sample (pairwise distance sampling): each test presence is
+paired with the background point at the most similar distance from the
+training presences, and evaluating on that sample removes the bias.
+
+```r
+test <- pts[pts$fold == 1, ]
+train <- pts[pts$fold != 1 & pts$occ == 1, ]
+s <- spatial_sorting_bias(test[test$occ == 1, ], test[test$occ == 0, ],
+                          train, seed = 1)
+s                                         # SSB, matched sample
+p <- test[test$occ == 1, ][s$presence_index, ]
+b <- test[test$occ == 0, ][s$background_index, ]   # evaluate on p and b
+```
 
 ### 19. How the selection works
 

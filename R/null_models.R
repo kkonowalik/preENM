@@ -39,13 +39,16 @@
 #' @param criteria Metrics to test and their direction, as in
 #'   [evaluate_models()].
 #' @param metrics Optional named list of your own metric functions
-#'   `function(obs, pred)`.
+#'   `function(obs, pred)`; the optional metrics `calibration_slope`,
+#'   `calibration_intercept` and `brier` are added when named in
+#'   `criteria`.
 #' @param n_null Number of null replicates.
 #' @param n_pool Number of cells sampled when `pool` is a raster.
 #' @param seed Seed.
 #' @return A data.frame with one row per model and metric: `observed`,
 #'   `null_mean`, `null_95` (the value reached or bettered by 5% of the
-#'   null replicates) and `p_value`.
+#'   null replicates; for `"zero"` and `"one"` criteria, the distance from
+#'   0 or 1) and `p_value`.
 #' @references Raes, N., ter Steege, H. (2007) A null-model for
 #'   significance testing of presence-only species distribution models.
 #'   *Ecography* 30, 727-736. Bohl, C.L., Kass, J.M., Anderson, R.P. (2019)
@@ -66,7 +69,7 @@ null_model_test <- function(data, pool, weight = NULL,
   validate_table(data)
   obs <- data$obs
   models <- setdiff(names(data), "obs")
-  extra <- check_extra_metrics(metrics)
+  extra <- check_extra_metrics(metrics, names(criteria))
   funs <- metric_funs(extra)
   criteria <- check_criteria(criteria, names(funs))
   funs <- funs[names(criteria)]
@@ -145,12 +148,12 @@ null_model_test <- function(data, pool, weight = NULL,
       v <- null[i, j, ]
       # larger = better, whatever the direction of the metric
       good <- function(z) switch(criteria[[k]], max = z, min = -z,
-                                 zero = -abs(z))
+                                 zero = -abs(z), one = -abs(z - 1))
       q <- stats::quantile(good(v), 0.95, na.rm = TRUE, names = FALSE)
       data.frame(model = models[j], metric = k, observed = o,
                  null_mean = mean(v, na.rm = TRUE),
                  null_95 = switch(criteria[[k]], max = q, min = -q,
-                                  zero = -q),
+                                  zero = -q, one = -q),
                  p_value = (1 + sum(good(v) >= good(o), na.rm = TRUE)) /
                    (1 + sum(!is.na(v))))
     }))

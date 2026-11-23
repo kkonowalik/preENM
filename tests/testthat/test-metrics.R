@@ -209,3 +209,112 @@ test_that("threshold_agreement counts the rules per cell", {
   expect_s3_class(plot_thresholds(ag), "ggplot")
   expect_error(threshold_agreement(r, data.frame()), "thresholds")
 })
+
+# Calibration ----------------------------------------------------------------
+
+test_that("a calibrated predictor has slope ~1 and intercept ~0", {
+  set.seed(42)
+  p <- runif(20000)
+  y <- rbinom(20000, 1, p)
+  cc <- calibration_curve(y, p)
+  s <- cc$summary
+  expect_equal(s$slope, 1, tolerance = 0.05)
+  expect_equal(s$intercept, 0, tolerance = 0.05)
+  expect_true(s$slope_lo <= 1 && s$slope_hi >= 1)
+  # observed frequencies follow the mean predictions of the bins
+  expect_lt(max(abs(cc$bins$observed - cc$bins$mean_pred)), 0.04)
+  expect_equal(sum(cc$bins$n), 20000)
+  expect_output(print(cc), "Consistent with calibration")
+})
+
+test_that("over- and under-confident predictors are recognised", {
+  set.seed(42)
+  p <- runif(20000)
+  y <- rbinom(20000, 1, p)
+  # logit doubled: same ranking, too extreme -> slope 1/2
+  over <- calibration_curve(y, plogis(2 * qlogis(p)))
+  expect_equal(over$summary$slope, 0.5, tolerance = 0.05)
+  expect_output(print(over), "Over-confident")
+  # logit halved: too moderate -> slope 2
+  under <- calibration_curve(y, plogis(0.5 * qlogis(p)))
+  expect_equal(under$summary$slope, 2, tolerance = 0.05)
+  expect_output(print(under), "Under-confident")
+  # predictions too low on average -> positive intercept
+  low <- calibration_curve(y, plogis(qlogis(p) - 1))
+  expect_equal(low$summary$intercept, 1, tolerance = 0.05)
+  expect_output(print(low), "too low")
+  # no information -> no verdict
+  rnd <- calibration_curve(y, runif(20000))
+  expect_output(print(rnd), "cannot be judged")
+})
+
+test_that("binning by count gives equal bins; bins of known data", {
+  set.seed(1)
+  p <- runif(1000)
+  y <- rbinom(1000, 1, p)
+  cc <- calibration_curve(y, p, bins = 4, binning = "count")
+  expect_equal(cc$bins$n, rep(250, 4))
+  # two bins by hand
+  obs <- c(0, 0, 1, 0, 1, 1)
+  pred <- c(0.1, 0.2, 0.3, 0.7, 0.8, 0.9)
+  b <- calibration_curve(obs, pred, bins = 2)$bins
+  expect_equal(b$mean_pred, c(0.2, 0.8))
+  expect_equal(b$observed, c(1 / 3, 2 / 3))
+  ci <- stats::binom.test(1, 3)$conf.int
+  expect_equal(c(b$lower[1], b$upper[1]), ci[1:2])
+})
+
+test_that("Brier decomposition sums to the Brier score", {
+  set.seed(3)
+  p <- runif(5000)
+  y <- rbinom(5000, 1, plogis(1.7 * qlogis(p) + 0.3))
+  for (bn in c("width", "count")) {
+    bd <- brier_decompose(y, p, bins = 7, binning = bn)
+    expect_equal(unname(bd["brier"]), mean((p - y)^2))
+    expect_equal(unname(bd["reliability"] - bd["resolution"] +
+                          bd["uncertainty"] + bd["within_bin_variance"] -
+                          bd["within_bin_covariance"]),
+                 unname(bd["brier"]))
+    expect_equal(unname(bd["uncertainty"]), mean(y) * (1 - mean(y)))
+  }
+  # predictions constant within bins: Murphy's three terms are exact
+  q <- rep(c(0.2, 0.5, 0.8), each = 100)
+  o <- c(rep(1:0, c(20, 80)), rep(1:0, c(50, 50)), rep(1:0, c(80, 20)))
+  bd <- brier_decompose(o, q, bins = 3)
+  expect_equal(unname(bd["reliability"]), 0)
+  expect_equal(unname(bd["within_bin_variance"]), 0)
+  expect_equal(unname(bd["brier"]),
+               unname(bd["uncertainty"] - bd["resolution"]))
+  expect_equal(brier_score(c(1, 0), c(0.8, 0.4)), (0.04 + 0.16) / 2)
+})
+
+test_that("calibration works on tables, as criteria and in plots", {
+  sim <- simulate_enm_data(seed = 1)
+  tab <- extract_predictions(sim$models, sim$presence, sim$absence)
+  cc <- calibration_curve(tab)
+  expect_equal(cc$summary$model, setdiff(names(tab), "obs"))
+  expect_s3_class(plot_calibration(cc), "ggplot")
+  expect_s3_class(plot_calibration(calibration_curve(tab$obs, tab[[2]])),
+                  "ggplot")
+  f <- tempfile(fileext = ".png")
+  plot_calibration(cc, file = f)
+  expect_true(file.exists(f))
+  ev <- evaluate_models(data = tab, criteria = c(AUC = "max",
+                                                 calibration_slope = "one",
+                                                 brier = "min"))
+  expect_true(all(c("calibration_slope", "brier") %in% names(ev)))
+  expect_equal(ev$brier[match("GLM", ev$model)],
+               brier_score(tab$obs, tab$GLM))
+  expect_equal(ev$calibration_slope[match("GLM", ev$model)],
+               cc$summary$slope[cc$summary$model == "GLM"])
+  # metrics by name, without using them as criteria
+  ev2 <- evaluate_models(data = tab, metrics = c("calibration_intercept"))
+  expect_true("calibration_intercept" %in% names(ev2))
+  expect_false("brier" %in% names(ev2))
+  expect_error(evaluate_models(data = tab, metrics = "nope"), "Unknown")
+  # "one": the model closest to 1 wins
+  df <- data.frame(model = c("a", "b", "c"), s = c(0.5, 1.1, 2))
+  expect_equal(pareto_rank(df, maximize = NULL, minimize = NULL,
+                           one = "s")$model[1], "b")
+  expect_error(calibration_curve(c(0, 1), c(0.5, 2)), "not probabilities")
+})

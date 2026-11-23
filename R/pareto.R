@@ -29,6 +29,8 @@
 #' @param minimize Character vector of columns where smaller is better.
 #' @param zero Character vector of columns where values closer to 0 are
 #'   better (e.g. `bias`).
+#' @param one Character vector of columns where values closer to 1 are
+#'   better (e.g. `calibration_slope`).
 #' @param weights Optional named numeric vector of criterion weights (names
 #'   must match `maximize`/`minimize`); missing names get weight 1.
 #' @param tol Differences smaller than this count as ties: one number for all
@@ -43,16 +45,17 @@
 #'                  MAE = c(0.30, 0.20, 0.25, 0.32))
 #' pareto_rank(df, maximize = "AUC", minimize = "MAE")
 pareto_rank <- function(x, maximize = "AUC", minimize = "MAE", zero = NULL,
-                        weights = NULL, tol = 0) {
-  crit <- c(maximize, minimize, zero)
+                        weights = NULL, tol = 0, one = NULL) {
+  crit <- c(maximize, minimize, zero, one)
   if (length(crit) < 1) stop("Specify at least one criterion.", call. = FALSE)
   miss <- setdiff(crit, names(x))
   if (length(miss)) {
     stop("Columns not found: ", paste(miss, collapse = ", "), call. = FALSE)
   }
   criteria <- stats::setNames(
-    rep(c("max", "min", "zero"),
-        c(length(maximize), length(minimize), length(zero))), crit)
+    rep(c("max", "min", "zero", "one"),
+        c(length(maximize), length(minimize), length(zero), length(one))),
+    crit)
   pc <- pareto_core(to_minimise(x, criteria), weights = weights, tol = tol)
   x$pareto_front <- pc$front
   x$distance <- pc$distance

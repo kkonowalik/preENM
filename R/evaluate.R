@@ -10,9 +10,24 @@
 #'
 #' **Choosing the metrics to compare.** `criteria` can be any of the computed
 #' metrics, each with a direction: `"max"` (higher is better), `"min"`
-#' (lower is better) or `"zero"` (closer to 0 is better). For example
+#' (lower is better), `"zero"` (closer to 0 is better) or `"one"` (closer
+#' to 1 is better). For example
 #' `c(AUC = "max", TSS = "max")`, `c(Boyce = "max", MAE = "min")` or three
-#' criteria `c(AUC = "max", MAE = "min", bias = "zero")`. Your own metrics are
+#' criteria `c(AUC = "max", MAE = "min", bias = "zero")`.
+#'
+#' **Calibration as a criterion.** Three optional metrics are computed when
+#' they are named in `criteria` or in `metrics`: `calibration_slope`
+#' (closer to 1 is better), `calibration_intercept` (closer to 0 is better)
+#' and `brier` (the Brier score, lower is better); see
+#' [calibration_curve()] and [brier_score()]. Together with AUC and MAE they
+#' give the three sides of an evaluation: discrimination, calibration and
+#' ranking, e.g. `criteria = c(AUC = "max", calibration_slope = "one")`.
+#' With background points instead of absences they compare models evaluated
+#' on the same background only, not absolute calibration
+#' (Jimenez-Valverde 2025, 2026; see [calibration_curve()]). They need
+#' predictions on the 0-1 scale (otherwise `NA`).
+#'
+#' Your own metrics are
 #' added with `metrics`, e.g.
 #' `metrics = list(Brier = function(obs, pred) mean((obs - pred)^2))`, and can
 #' then be used in `criteria` (`c(AUC = "max", Brier = "min")`).
@@ -31,11 +46,13 @@
 #'   is a good choice for final results.
 #' @param conf Confidence level for bootstrap intervals (default 0.95).
 #' @param criteria Named vector of the metrics to compare and their
-#'   direction (`"max"`, `"min"` or `"zero"`); see Details. Default
+#'   direction (`"max"`, `"min"`, `"zero"` or `"one"`); see Details. Default
 #'   `c(AUC = "max", MAE = "min")`.
-#' @param metrics Optional named list of extra metric functions
-#'   `function(obs, pred)` returning a single number; `obs` is 0/1, `pred`
-#'   the predicted suitability.
+#' @param metrics Optional extra metrics: a named list of functions
+#'   `function(obs, pred)` returning a single number (`obs` is 0/1, `pred`
+#'   the predicted suitability), and/or names of optional metrics
+#'   (`"calibration_slope"`, `"calibration_intercept"`, `"brier"`), e.g.
+#'   `metrics = "brier"` to add the Brier score to the table.
 #' @param weights Optional named vector of the relative importance of the
 #'   criteria in the compromise score (default: equal); see [pareto_rank()].
 #' @param tol Tolerance for Pareto ties; see [pareto_rank()].
@@ -67,6 +84,15 @@
 #'   validation of presence-only species distribution models based on
 #'   distributional maps with varying coverage. *Scientific Reports* 11, 1482.
 #'   \doi{10.1038/s41598-020-80062-1}
+#'
+#'   Silva Filho, T., Song, H., Perello-Nieto, M., Santos-Rodriguez, R.,
+#'   Kull, M., Flach, P. (2023) Classifier calibration: a survey on how to
+#'   assess and improve predicted class probabilities. *Machine Learning*
+#'   112, 3211-3260. \doi{10.1007/s10994-023-06336-7}
+#'
+#'   Jimenez-Valverde, A. (2026) The environmental representativeness effect
+#'   in species distribution model evaluation without absence data.
+#'   *Biodiversity Informatics* 20, 74-80. \doi{10.17161/bi.v20i1.24860}
 #' @examples
 #' sim <- simulate_enm_data(seed = 1)
 #' res <- evaluate_models(sim$models, sim$presence, sim$absence,
@@ -107,7 +133,7 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
   obs <- data$obs
   preds <- data[setdiff(names(data), "obs")]
 
-  extra <- check_extra_metrics(metrics)
+  extra <- check_extra_metrics(metrics, names(criteria))
   res <- do.call(rbind, lapply(preds, function(p) metric_row(obs, p, extra)))
   res <- data.frame(model = names(preds), res, row.names = NULL,
                     check.names = FALSE)

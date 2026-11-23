@@ -37,8 +37,9 @@
 #' @param bar_colour Colour of the error bars.
 #' @param directions Optional named vector of directions for metrics the
 #'   package does not know, e.g. `c(fossil_AUC_deep = "max")` (`"max"`,
-#'   `"min"` or `"zero"`). Known: the criteria of `object`, AUC, MAE,
-#'   MAEbal, bias, TSS, Boyce and any column ending in `_AUC*`, `_sens`,
+#'   `"min"`, `"zero"` or `"one"`). Known: the criteria of `object`, AUC,
+#'   MAE, MAEbal, bias, TSS, Boyce, calibration_slope,
+#'   calibration_intercept, brier and any column ending in `_AUC*`, `_sens`,
 #'   `_lift` (higher is better) or `_area` (lower is better).
 #' @param file Optional file(s) to save the plot to. Interactive plots:
 #'   an `.html` file. Static plots: e.g. `"fig.pdf"` or

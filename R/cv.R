@@ -132,9 +132,11 @@ spatial_folds <- function(points, k = 5, block_size, occ = NULL,
 #'   *calibration* data, as biomod2 does for its validation TSS). Without it,
 #'   TSS uses the best threshold on the held-out data, which is slightly
 #'   optimistic.
-#' @param metrics Optional named list of extra metric functions
-#'   `function(obs, pred)`, computed per run and summarised like the
-#'   built-in ones (see [evaluate_models()]).
+#' @param metrics Optional extra metrics: a named list of functions
+#'   `function(obs, pred)` and/or names of optional metrics
+#'   (`"calibration_slope"`, `"calibration_intercept"`, `"brier"`),
+#'   computed per run and summarised like the built-in ones (see
+#'   [evaluate_models()]).
 #' @return An object of class `enm_cv`: a data.frame with one row per model,
 #'   the mean of each metric over runs, their SDs (`AUC_sd`, ...), `n_runs`
 #'   and, when available, `AUC_sd_folds` and `AUC_sd_sets`. Per-run metrics

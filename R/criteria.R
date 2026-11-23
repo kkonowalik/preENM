@@ -12,18 +12,51 @@ builtin_metrics <- function() {
   )
 }
 
-# Which direction is "better" for the built-in metrics
+# Optional metrics: computed only when named in `criteria` or `metrics`
+# (they are slower, or not wanted in every table)
+optional_metrics <- function() {
+  list(
+    calibration_slope = calibration_slope_score,
+    calibration_intercept = calibration_intercept_score,
+    brier = brier_score
+  )
+}
+
+# Which direction is "better" for the built-in and optional metrics
 default_directions <- c(AUC = "max", MAE = "min", MAEbal = "min",
-                        bias = "zero", TSS = "max", Boyce = "max")
+                        bias = "zero", TSS = "max", Boyce = "max",
+                        calibration_slope = "one",
+                        calibration_intercept = "zero", brier = "min")
 
 # Built-in metrics plus the user's (a user metric with a built-in name
 # replaces it) (internal)
 metric_funs <- function(extra = list()) utils::modifyList(builtin_metrics(),
                                                           extra)
 
-# Validate user-supplied metric functions
-check_extra_metrics <- function(metrics) {
-  if (is.null(metrics)) return(list())
+# Validate user-supplied metric functions. `metrics` may also name optional
+# metrics ("brier", "calibration_slope", ...), as a character vector or as
+# character elements of the list; optional metrics named in `criteria` are
+# added too.
+check_extra_metrics <- function(metrics, criteria = NULL) {
+  opt <- optional_metrics()
+  if (is.character(metrics)) metrics <- as.list(metrics)
+  if (is.list(metrics) && length(metrics)) {
+    chr <- vapply(metrics, is.character, logical(1))
+    if (any(chr)) {
+      nm <- unlist(metrics[chr])
+      bad <- setdiff(nm, names(opt))
+      if (length(bad)) {
+        stop("Unknown metric name(s) in `metrics`: ",
+             paste(bad, collapse = ", "), ". Optional metrics: ",
+             paste(names(opt), collapse = ", "),
+             "; give your own as functions(obs, pred).", call. = FALSE)
+      }
+      metrics <- c(metrics[!chr], opt[setdiff(nm, names(metrics[!chr]))])
+    }
+  }
+  auto <- setdiff(intersect(criteria, names(opt)), names(metrics))
+  if (length(auto)) metrics <- c(metrics, opt[auto])
+  if (!length(metrics)) return(list())
   if (is.function(metrics)) {
     stop("`metrics` must be a *named list* of functions, e.g. ",
          "list(Brier = function(obs, pred) mean((obs - pred)^2)).",
@@ -42,7 +75,8 @@ check_extra_metrics <- function(metrics) {
          paste(clash, collapse = ", "), ". Please rename them.",
          call. = FALSE)
   }
-  same <- intersect(names(metrics), names(builtin_metrics()))
+  same <- setdiff(intersect(names(metrics), names(builtin_metrics())),
+                  names(opt))
   if (length(same)) {
     message("Your metric(s) replace the built-in ",
             paste(same, collapse = ", "), ".")
@@ -69,10 +103,11 @@ compute_metrics <- function(obs, pred, funs) {
 # Validate selection criteria against the available columns
 check_criteria <- function(criteria, available) {
   if (is.null(names(criteria)) || any(names(criteria) == "") ||
-      !all(criteria %in% c("max", "min", "zero"))) {
+      !all(criteria %in% c("max", "min", "zero", "one"))) {
     stop("`criteria` must be a named vector with values \"max\" (higher is ",
-         "better), \"min\" (lower is better) or \"zero\" (closer to 0 is ",
-         "better), e.g. c(AUC = \"max\", MAE = \"min\").", call. = FALSE)
+         "better), \"min\" (lower is better), \"zero\" (closer to 0 is ",
+         "better) or \"one\" (closer to 1 is better), e.g. c(AUC = \"max\", ",
+         "MAE = \"min\").", call. = FALSE)
   }
   miss <- setdiff(names(criteria), available)
   if (length(miss)) {
@@ -89,7 +124,8 @@ check_criteria <- function(criteria, available) {
 to_minimise <- function(x, criteria) {
   m <- vapply(names(criteria), function(k) {
     v <- as.numeric(x[[k]])
-    v <- switch(criteria[[k]], max = -v, min = v, zero = abs(v))
+    v <- switch(criteria[[k]], max = -v, min = v, zero = abs(v),
+                one = abs(v - 1))
     v[is.na(v)] <- Inf
     v
   }, numeric(nrow(x)))
@@ -121,5 +157,5 @@ pareto_core <- function(m, weights = NULL, tol = 0) {
 # Human-readable direction of a criterion
 direction_label <- function(dir) {
   switch(dir, max = "higher is better", min = "lower is better",
-         zero = "closer to 0 is better", "")
+         zero = "closer to 0 is better", one = "closer to 1 is better", "")
 }

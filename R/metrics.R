@@ -706,3 +706,437 @@ plot_thresholds <- function(x, base_size = 11, file = NULL, width = 7,
   if (length(unique(d$model)) > 1) p <- p + ggplot2::facet_wrap(~model)
   p
 }
+
+# Calibration ----------------------------------------------------------------------
+
+#' Brier score
+#'
+#' Mean squared difference between the predicted probability and the
+#' observation (1 = presence, 0 = absence): `mean((pred - obs)^2)`, from 0
+#' (perfect) to 1. This is the common binary form, half of Brier's original
+#' definition summed over both classes (Silva Filho et al. 2023).
+#'
+#' @inheritParams auc_score
+#' @return A single number.
+#' @references Silva Filho, T., Song, H., Perello-Nieto, M.,
+#'   Santos-Rodriguez, R., Kull, M., Flach, P. (2023) Classifier calibration:
+#'   a survey on how to assess and improve predicted class probabilities.
+#'   *Machine Learning* 112, 3211-3260. \doi{10.1007/s10994-023-06336-7}
+#' @export
+#' @examples
+#' brier_score(c(1, 1, 0, 0), c(0.9, 0.6, 0.7, 0.1))
+brier_score <- function(obs, pred) {
+  ok <- !is.na(obs) & !is.na(pred)
+  mean((pred[ok] - obs[ok])^2)
+}
+
+# Logistic calibration (internal): slope of logit P(obs) on logit(pred), and
+# the calibration intercept with the slope fixed at 1 (offset), each with its
+# standard error. Predictions are clamped to [eps, 1 - eps].
+calibration_fit <- function(obs, pred, eps = 1e-6) {
+  ok <- !is.na(obs) & !is.na(pred)
+  obs <- obs[ok]
+  pred <- pred[ok]
+  na <- c(slope = NA_real_, slope_se = NA_real_, intercept = NA_real_,
+          intercept_se = NA_real_)
+  if (length(obs) < 3 || length(unique(obs)) < 2) return(na)
+  if (any(pred < 0 | pred > 1)) return(na)
+  p <- pmin(pmax(pred, eps), 1 - eps)
+  lp <- stats::qlogis(p)
+  fit1 <- tryCatch(suppressWarnings(stats::glm.fit(
+    cbind(1, lp), obs, family = stats::binomial())), error = function(e) NULL)
+  fit0 <- tryCatch(suppressWarnings(stats::glm.fit(
+    matrix(1, length(obs)), obs, offset = lp, family = stats::binomial())),
+    error = function(e) NULL)
+  se <- function(f, i) {
+    if (is.null(f)) return(NA_real_)
+    v <- tryCatch(chol2inv(f$qr$qr[seq_len(f$rank), seq_len(f$rank),
+                                    drop = FALSE]), error = function(e) NULL)
+    if (is.null(v)) NA_real_ else sqrt(v[i, i])
+  }
+  c(slope = if (is.null(fit1)) NA_real_ else unname(fit1$coefficients[2]),
+    slope_se = se(fit1, 2),
+    intercept = if (is.null(fit0)) NA_real_ else
+      unname(fit0$coefficients[1]),
+    intercept_se = se(fit0, 1))
+}
+
+calibration_slope_score <- function(obs, pred) {
+  unname(calibration_fit(obs, pred)["slope"])
+}
+calibration_intercept_score <- function(obs, pred) {
+  unname(calibration_fit(obs, pred)["intercept"])
+}
+
+# Bins of predictions (internal): equal width over the range, or equal count
+calibration_bins <- function(pred, bins, binning) {
+  if (binning == "width") {
+    rg <- range(pred)
+    if (diff(rg) == 0) return(rep(1L, length(pred)))
+    br <- seq(rg[1], rg[2], length.out = bins + 1)
+    findInterval(pred, br, rightmost.closed = TRUE, all.inside = TRUE)
+  } else {
+    r <- rank(pred, ties.method = "first")
+    pmin(bins, as.integer(ceiling(r / length(pred) * bins)))
+  }
+}
+
+#' Calibration curve (reliability diagram) of a prediction
+#'
+#' Calibration asks whether predicted probabilities can be read as
+#' probabilities: among places predicted at 0.3, is the species found at
+#' about 30%? Discrimination (AUC, TSS, Boyce) cannot tell, because it only
+#' ranks the predictions; this is why MAE and balanced MAE are used next to
+#' AUC (Konowalik and Nosol 2021). The machine-learning literature has
+#' formalised the same idea into a standard toolkit (Silva Filho et al.
+#' 2023), which this function implements:
+#'
+#' * **Reliability diagram.** The predictions are cut into `bins`, of equal
+#'   width over their range or with equal numbers of points
+#'   (`binning = "count"`). For each bin, the observed frequency of
+#'   presences is plotted against the **mean prediction** of the bin (not
+#'   the bin centre, which can make a well calibrated model look
+#'   miscalibrated by up to half a bin), with a binomial (Clopper-Pearson)
+#'   confidence interval. Points on the 1:1 line mean good calibration.
+#' * **Calibration slope**: the slope of a logistic regression of the
+#'   observations on the logit of the predictions. 1 = calibrated; below 1
+#'   the predictions are too extreme (over-confident: high ones too high,
+#'   low ones too low); above 1 too moderate (under-confident).
+#' * **Calibration intercept** (calibration-in-the-large): the intercept of
+#'   the same regression with the slope fixed at 1. 0 = calibrated; above 0
+#'   the predictions are too low on average, below 0 too high.
+#'
+#' **Presence-background data.** With background points instead of true
+#' absences, the "observed frequency" is the share of presences among the
+#' presences and background points of a bin. It depends on how many
+#' background points there are and on how well they represent the
+#' environment of the study area (the environmental representativeness
+#' effect; Jimenez-Valverde 2025, 2026). Then these quantities compare
+#' models evaluated on the same presences and background; they do not
+#' measure calibration in absolute terms. Predictions that are not
+#' probabilities (e.g. raw Maxent output) cannot be calibrated.
+#'
+#' @param obs Observations (1 = presence, 0 = absence/background), or a
+#'   table from [extract_predictions()] (a data.frame with `obs` and one
+#'   column per model): then `pred` is not needed and every model gets its
+#'   curve.
+#' @param pred Predicted probabilities (between 0 and 1).
+#' @param bins Number of bins.
+#' @param binning `"width"` (equal-width bins over the range of the
+#'   predictions) or `"count"` (equal numbers of points).
+#' @param conf Confidence level of the intervals.
+#' @return A list of class `calibration_curve` with `bins` (one row per
+#'   model and bin: `n`, `mean_pred`, `observed`, `lower`, `upper`) and
+#'   `summary` (one row per model: `n`, `slope`, `slope_lo`, `slope_hi`,
+#'   `intercept`, `intercept_lo`, `intercept_hi`, `brier`, and the Brier
+#'   decomposition of [brier_decompose()]).
+#' @references Silva Filho, T., Song, H., Perello-Nieto, M.,
+#'   Santos-Rodriguez, R., Kull, M., Flach, P. (2023) Classifier calibration:
+#'   a survey on how to assess and improve predicted class probabilities.
+#'   *Machine Learning* 112, 3211-3260. \doi{10.1007/s10994-023-06336-7}
+#'
+#'   Konowalik, K., Nosol, A. (2021) Evaluation metrics and validation of
+#'   presence-only species distribution models based on distributional maps
+#'   with varying coverage. *Scientific Reports* 11, 1482.
+#'   \doi{10.1038/s41598-020-80062-1}
+#'
+#'   Jimenez-Valverde, A. (2025) Refining uniform discrimination metrics:
+#'   towards a case-by-case weighting evaluation in species distribution
+#'   models with presence-absence data. *Ecology and Evolution* 15, e72573.
+#'   \doi{10.1002/ece3.72573}
+#'
+#'   Jimenez-Valverde, A. (2026) The environmental representativeness effect
+#'   in species distribution model evaluation without absence data.
+#'   *Biodiversity Informatics* 20, 74-80. \doi{10.17161/bi.v20i1.24860}
+#' @seealso [plot_calibration()], [brier_decompose()], [evaluate_models()]
+#' @export
+#' @examples
+#' set.seed(1)
+#' p <- runif(2000)
+#' y <- rbinom(2000, 1, p)                  # calibrated
+#' calibration_curve(y, p)
+#' # over-confident: the same ranking, more extreme probabilities
+#' p_over <- plogis(2 * qlogis(p))
+#' cc <- calibration_curve(y, p_over)
+#' cc
+#' plot_calibration(cc)
+calibration_curve <- function(obs, pred = NULL, bins = 10,
+                              binning = c("width", "count"), conf = 0.95) {
+  binning <- match.arg(binning)
+  if (!is.numeric(bins) || bins < 2) {
+    stop("`bins` must be a number of at least 2.", call. = FALSE)
+  }
+  if (is.data.frame(obs)) {
+    validate_table(obs)
+    tab <- obs
+    mods <- setdiff(names(tab), "obs")
+    parts <- lapply(mods, function(m) {
+      calibration_one(tab$obs, tab[[m]], bins, binning, conf, m)
+    })
+  } else {
+    if (is.null(pred)) stop("Give `pred`.", call. = FALSE)
+    parts <- list(calibration_one(obs, pred, bins, binning, conf, NULL))
+  }
+  structure(list(bins = do.call(rbind, lapply(parts, `[[`, "bins")),
+                 summary = do.call(rbind, lapply(parts, `[[`, "summary")),
+                 settings = list(bins = bins, binning = binning,
+                                 conf = conf)),
+            class = "calibration_curve")
+}
+
+# One model (internal)
+calibration_one <- function(obs, pred, bins, binning, conf, model) {
+  ok <- !is.na(obs) & !is.na(pred)
+  obs <- obs[ok]
+  pred <- pred[ok]
+  if (!all(obs %in% c(0, 1))) stop("`obs` must be 0 or 1.", call. = FALSE)
+  if (any(pred < 0 | pred > 1)) {
+    stop("Predictions", if (!is.null(model)) paste0(" of ", model),
+         " are not probabilities (outside 0-1): they cannot be calibrated.",
+         call. = FALSE)
+  }
+  b <- calibration_bins(pred, bins, binning)
+  ci <- function(k, n) {
+    if (n == 0) return(c(NA_real_, NA_real_))
+    stats::binom.test(k, n, conf.level = conf)$conf.int[1:2]
+  }
+  tb <- do.call(rbind, lapply(sort(unique(b)), function(i) {
+    s <- b == i
+    k <- sum(obs[s])
+    n <- sum(s)
+    iv <- ci(k, n)
+    data.frame(bin = i, n = n, mean_pred = mean(pred[s]),
+               observed = k / n, lower = iv[1], upper = iv[2])
+  }))
+  if (!is.null(model)) tb <- cbind(model = model, tb,
+                                   stringsAsFactors = FALSE)
+  cf <- calibration_fit(obs, pred)
+  z <- stats::qnorm(1 - (1 - conf) / 2)
+  bd <- brier_decompose(obs, pred, bins = bins, binning = binning)
+  sm <- data.frame(n = length(obs), slope = cf[["slope"]],
+                   slope_lo = cf[["slope"]] - z * cf[["slope_se"]],
+                   slope_hi = cf[["slope"]] + z * cf[["slope_se"]],
+                   intercept = cf[["intercept"]],
+                   intercept_lo = cf[["intercept"]] - z * cf[["intercept_se"]],
+                   intercept_hi = cf[["intercept"]] + z * cf[["intercept_se"]],
+                   as.list(bd[c("brier", "reliability", "resolution",
+                                "uncertainty")]))
+  if (!is.null(model)) sm <- cbind(model = model, sm,
+                                   stringsAsFactors = FALSE)
+  list(bins = tb, summary = sm)
+}
+
+# Plain words for one model (internal). Verdict first, numbers at the end.
+calibration_words <- function(s, conf, name = NULL) {
+  f <- function(v) sprintf("%.2f", v)
+  pc <- paste0(round(100 * conf), "%")
+  iv <- function(lo, hi) paste0(" (", pc, " interval ", f(lo), " to ",
+                                f(hi), ")")
+  numbers <- if (is.na(s$slope)) "" else paste0(
+    " Slope ", f(s$slope), iv(s$slope_lo, s$slope_hi), ", intercept ",
+    f(s$intercept), iv(s$intercept_lo, s$intercept_hi), ".")
+  who <- if (is.null(name)) "The model" else name
+  if (is.na(s$slope)) {
+    return(paste0(who, ": calibration cannot be estimated (too few points ",
+                  "or only one class)."))
+  }
+  if (s$slope_hi <= 0 || (s$slope_lo <= 0 && s$slope_hi >= 0)) {
+    verdict <- if (s$slope_hi < 0) {
+      "the predictions run against the observations (negative slope), so calibration cannot be judged"
+    } else {
+      "the predictions do not separate presences from absences (slope not different from 0), so calibration cannot be judged"
+    }
+    return(paste0(who, ": ", verdict, ".", numbers))
+  }
+  slope_ok <- s$slope_lo <= 1 && s$slope_hi >= 1
+  int_ok <- s$intercept_lo <= 0 && s$intercept_hi >= 0
+  slight <- s$slope >= 0.8 && s$slope <= 1.25
+  spread <- if (slope_ok) {
+    if (int_ok) "consistent with calibration: the spread" else "the spread"
+  } else if (s$slope < 1) {
+    paste0(if (slight) "slightly " else "", "over-confident: the ",
+           "predictions are too extreme, high ones too high and low ones ",
+           "too low")
+  } else {
+    paste0(if (slight) "slightly " else "", "under-confident: the ",
+           "predictions are too moderate, too close to the middle")
+  }
+  if (slope_ok) spread <- paste(spread, "of the predictions fits the",
+                                "observations")
+  level <- if (int_ok) "on average they fit" else if (s$intercept > 0) {
+    "on average they are too low"
+  } else "on average they are too high"
+  txt <- paste0(spread, if (slope_ok && int_ok) " and " else "; ", level,
+                ".", numbers)
+  if (!is.null(name)) return(paste0(name, ": ", txt))
+  paste0(toupper(substr(txt, 1, 1)), substr(txt, 2, nchar(txt)))
+}
+
+#' @export
+print.calibration_curve <- function(x, digits = 3, ...) {
+  s <- x$summary
+  multi <- "model" %in% names(s)
+  cat("Calibration of the predictions (", x$settings$bins, " bins of equal ",
+      if (x$settings$binning == "width") "width" else "count", ")\n\n",
+      sep = "")
+  show <- s[intersect(c("model", "n", "slope", "slope_lo", "slope_hi",
+                        "intercept", "brier", "reliability", "resolution"),
+                      names(s))]
+  num <- vapply(show, is.double, logical(1))
+  show[num] <- lapply(show[num], round, digits)
+  print(show, row.names = FALSE)
+  cat("\nIN SHORT\n")
+  for (i in seq_len(nrow(s))) {
+    txt <- calibration_words(s[i, ], x$settings$conf,
+                             if (multi) s$model[i] else NULL)
+    cat(strwrap(txt, width = 76, exdent = 2, initial = "- "), sep = "\n")
+  }
+  if (nrow(s) && any(s$n < 100)) {
+    cat(strwrap(paste0(
+      "Fewer than 100 points", if (multi) paste0(" for ", paste(
+        s$model[s$n < 100], collapse = ", ")), ": the bins are small ",
+      "and the verdict is uncertain (wide intervals)."), width = 76,
+      initial = "- ", exdent = 2), sep = "\n")
+  }
+  cat("", strwrap(paste0(
+    "With background points instead of absences, compare only models ",
+    "evaluated on the same presences and background: the values depend ",
+    "on the number and environmental representativeness of the background ",
+    "points (Jimenez-Valverde 2025, 2026)."), width = 78), sep = "\n")
+  cat("", strwrap(paste0(
+    "Definitions: the calibration slope is the slope of a logistic ",
+    "regression of the observations on the logit of the predictions (1 = ",
+    "calibrated, below 1 over-confident, above 1 under-confident); the ",
+    "intercept is that of the same regression with the slope fixed at 1 ",
+    "(0 = calibrated, above 0 predictions too low on average). ",
+    "\"Slightly\" marks slopes between 0.8 and 1.25, a rule of thumb. ",
+    "Brier = reliability - resolution + uncertainty (+ two small ",
+    "within-bin terms, see brier_decompose())."), width = 78), sep = "\n")
+  invisible(x)
+}
+
+#' Brier score decomposition
+#'
+#' Splits the Brier score into reliability (calibration loss: how far the
+#' predictions are from the observed frequencies), resolution (how much the
+#' observed frequencies of the bins differ from the overall frequency: the
+#' information in the predictions) and uncertainty (the variance of the
+#' observations, the same for every model):
+#' `Brier = reliability - resolution + uncertainty` (Murphy 1973). With
+#' predictions grouped into bins this holds only approximately, so two
+#' within-bin terms are added (Stephenson et al. 2008), and
+#' `Brier = reliability - resolution + uncertainty + within_bin_variance -
+#' within_bin_covariance` exactly. Lower reliability and higher resolution
+#' are better. See [calibration_curve()] for the presence-background caveat.
+#'
+#' @inheritParams calibration_curve
+#' @return A named numeric vector: `brier`, `reliability`, `resolution`,
+#'   `uncertainty`, `within_bin_variance`, `within_bin_covariance`.
+#' @references Murphy, A.H. (1973) A new vector partition of the probability
+#'   score. *Journal of Applied Meteorology* 12, 595-600.
+#'
+#'   Stephenson, D.B., Coelho, C.A.S., Jolliffe, I.T. (2008) Two extra
+#'   components in the Brier score decomposition. *Weather and Forecasting*
+#'   23, 752-757.
+#'
+#'   Silva Filho, T., Song, H., Perello-Nieto, M., Santos-Rodriguez, R.,
+#'   Kull, M., Flach, P. (2023) Classifier calibration: a survey on how to
+#'   assess and improve predicted class probabilities. *Machine Learning*
+#'   112, 3211-3260. \doi{10.1007/s10994-023-06336-7}
+#' @export
+#' @examples
+#' set.seed(1)
+#' p <- runif(1000)
+#' y <- rbinom(1000, 1, p)
+#' bd <- brier_decompose(y, p)
+#' bd
+#' sum(bd[c("reliability", "uncertainty", "within_bin_variance")]) -
+#'   sum(bd[c("resolution", "within_bin_covariance")])   # = Brier
+brier_decompose <- function(obs, pred, bins = 10,
+                            binning = c("width", "count")) {
+  binning <- match.arg(binning)
+  ok <- !is.na(obs) & !is.na(pred)
+  o <- obs[ok]
+  f <- pred[ok]
+  n <- length(o)
+  b <- calibration_bins(f, bins, binning)
+  ob <- mean(o)
+  fk <- stats::ave(f, b)
+  ok_bin <- stats::ave(o, b)
+  rel <- sum((fk - ok_bin)^2) / n
+  res <- sum((ok_bin - ob)^2) / n
+  unc <- ob * (1 - ob)
+  wbv <- sum((f - fk)^2) / n
+  wbc <- 2 * sum((o - ok_bin) * (f - fk)) / n
+  c(brier = mean((f - o)^2), reliability = rel, resolution = res,
+    uncertainty = unc, within_bin_variance = wbv,
+    within_bin_covariance = wbc)
+}
+
+#' Reliability diagram
+#'
+#' The observed frequency of presences in each bin against the mean
+#' prediction of the bin, with binomial confidence intervals (red bars) and
+#' the 1:1 line of perfect calibration (dashed); point size shows the
+#' number of points in the bin. One panel per model, labelled with the
+#' calibration slope and intercept.
+#'
+#' @param x A result of [calibration_curve()].
+#' @param base_size Base font size.
+#' @param bar_colour Colour of the confidence intervals.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
+#' @return A ggplot object.
+#' @references Silva Filho, T., Song, H., Perello-Nieto, M.,
+#'   Santos-Rodriguez, R., Kull, M., Flach, P. (2023) Classifier calibration:
+#'   a survey on how to assess and improve predicted class probabilities.
+#'   *Machine Learning* 112, 3211-3260. \doi{10.1007/s10994-023-06336-7}
+#' @export
+#' @examples
+#' set.seed(1)
+#' p <- runif(2000)
+#' plot_calibration(calibration_curve(rbinom(2000, 1, p), p))
+plot_calibration <- function(x, base_size = 11, bar_colour = "#c8553d",
+                             file = NULL, width = 7, height = 5.5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width,
+                     height))
+  }
+  if (!inherits(x, "calibration_curve")) {
+    stop("`x` must come from calibration_curve().", call. = FALSE)
+  }
+  ink <- "#3a3a38"
+  muted <- "#8a8a86"
+  d <- x$bins
+  s <- x$summary
+  multi <- "model" %in% names(d)
+  lab <- sprintf("slope %.2f, intercept %.2f", s$slope, s$intercept)
+  if (multi) {
+    d$panel <- factor(paste0(d$model, "\n",
+                             lab[match(d$model, s$model)]),
+                      paste0(s$model, "\n", lab))
+  }
+  p <- ggplot2::ggplot(d, ggplot2::aes(.data$mean_pred, .data$observed)) +
+    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+                         colour = muted) +
+    ggplot2::geom_errorbar(ggplot2::aes(ymin = .data$lower,
+                                        ymax = .data$upper),
+                           width = 0, colour = bar_colour, linewidth = 0.5) +
+    ggplot2::geom_line(colour = "#08519c", linewidth = 0.4) +
+    ggplot2::geom_point(ggplot2::aes(size = .data$n), colour = "#08519c") +
+    ggplot2::scale_size_area(max_size = 4, name = "Points\nin the bin") +
+    ggplot2::coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+    ggplot2::labs(x = "Mean prediction in the bin",
+                  y = "Observed frequency of presences",
+                  title = "Reliability diagram",
+                  subtitle = paste0(
+                    "Dashed: perfect calibration; bars: ",
+                    round(100 * x$settings$conf), "% binomial intervals.",
+                    if (!multi) paste0("\nCalibration ", lab[1], "."))) +
+    theme_enm(base_size, ink, muted)
+  if (multi) p <- p + ggplot2::facet_wrap(~panel)
+  p
+}

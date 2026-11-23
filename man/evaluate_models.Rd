@@ -33,12 +33,14 @@ model), file path(s) to rasters, or a named list of these.}
 pseudo-absence points (same formats as \code{presence}).}
 
 \item{criteria}{Named vector of the metrics to compare and their
-direction (\code{"max"}, \code{"min"} or \code{"zero"}); see Details. Default
+direction (\code{"max"}, \code{"min"}, \code{"zero"} or \code{"one"}); see Details. Default
 \code{c(AUC = "max", MAE = "min")}.}
 
-\item{metrics}{Optional named list of extra metric functions
-\verb{function(obs, pred)} returning a single number; \code{obs} is 0/1, \code{pred}
-the predicted suitability.}
+\item{metrics}{Optional extra metrics: a named list of functions
+\verb{function(obs, pred)} returning a single number (\code{obs} is 0/1, \code{pred}
+the predicted suitability), and/or names of optional metrics
+(\code{"calibration_slope"}, \code{"calibration_intercept"}, \code{"brier"}), e.g.
+\code{metrics = "brier"} to add the Brier score to the table.}
 
 \item{n_boot}{Number of bootstrap resamples (0 = no bootstrap). 500 to 1000
 is a good choice for final results.}
@@ -98,9 +100,24 @@ the combination recommended by Konowalik & Nosol (2021).
 \details{
 \strong{Choosing the metrics to compare.} \code{criteria} can be any of the computed
 metrics, each with a direction: \code{"max"} (higher is better), \code{"min"}
-(lower is better) or \code{"zero"} (closer to 0 is better). For example
+(lower is better), \code{"zero"} (closer to 0 is better) or \code{"one"} (closer
+to 1 is better). For example
 \code{c(AUC = "max", TSS = "max")}, \code{c(Boyce = "max", MAE = "min")} or three
-criteria \code{c(AUC = "max", MAE = "min", bias = "zero")}. Your own metrics are
+criteria \code{c(AUC = "max", MAE = "min", bias = "zero")}.
+
+\strong{Calibration as a criterion.} Three optional metrics are computed when
+they are named in \code{criteria} or in \code{metrics}: \code{calibration_slope}
+(closer to 1 is better), \code{calibration_intercept} (closer to 0 is better)
+and \code{brier} (the Brier score, lower is better); see
+\code{\link[=calibration_curve]{calibration_curve()}} and \code{\link[=brier_score]{brier_score()}}. Together with AUC and MAE they
+give the three sides of an evaluation: discrimination, calibration and
+ranking, e.g. \code{criteria = c(AUC = "max", calibration_slope = "one")}.
+With background points instead of absences they compare models evaluated
+on the same background only, not absolute calibration
+(Jimenez-Valverde 2025, 2026; see \code{\link[=calibration_curve]{calibration_curve()}}). They need
+predictions on the 0-1 scale (otherwise \code{NA}).
+
+Your own metrics are
 added with \code{metrics}, e.g.
 \code{metrics = list(Brier = function(obs, pred) mean((obs - pred)^2))}, and can
 then be used in \code{criteria} (\code{c(AUC = "max", Brier = "min")}).
@@ -139,4 +156,13 @@ Konowalik, K., Nosol, A. (2021) Evaluation metrics and
 validation of presence-only species distribution models based on
 distributional maps with varying coverage. \emph{Scientific Reports} 11, 1482.
 \doi{10.1038/s41598-020-80062-1}
+
+Silva Filho, T., Song, H., Perello-Nieto, M., Santos-Rodriguez, R.,
+Kull, M., Flach, P. (2023) Classifier calibration: a survey on how to
+assess and improve predicted class probabilities. \emph{Machine Learning}
+112, 3211-3260. \doi{10.1007/s10994-023-06336-7}
+
+Jimenez-Valverde, A. (2026) The environmental representativeness effect
+in species distribution model evaluation without absence data.
+\emph{Biodiversity Informatics} 20, 74-80. \doi{10.17161/bi.v20i1.24860}
 }

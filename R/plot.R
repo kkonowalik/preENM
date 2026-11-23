@@ -123,15 +123,7 @@ plot_pareto <- function(x, x_metric = NULL, y_metric = NULL, labels = NULL,
       ggplot2::guide_legend(order = 1, override.aes = list(
         fill = "#5c5c58", colour = "#5c5c58"))
     } else "legend")
-  zero_ref <- c(x = "x", y = "y")[dirs == "zero"]
-  if ("x" %in% zero_ref) {
-    p <- p + ggplot2::geom_vline(xintercept = 0, colour = muted,
-                                 linewidth = 0.4, linetype = "dotted")
-  }
-  if ("y" %in% zero_ref) {
-    p <- p + ggplot2::geom_hline(yintercept = 0, colour = muted,
-                                 linewidth = 0.4, linetype = "dotted")
-  }
+  p <- p + target_lines(dirs, muted)
 
   hidden <- character(0)
   zoomed <- !isFALSE(zoom) && !is.null(zoom)
@@ -172,6 +164,23 @@ plot_pareto <- function(x, x_metric = NULL, y_metric = NULL, labels = NULL,
 }
 
 # Direction of a metric: from the criteria, else the package default
+# Dotted reference lines at the target of "zero" (0) and "one" (1) axes
+target_lines <- function(dirs, colour) {
+  tg <- c(zero = 0, one = 1)
+  out <- list()
+  if (dirs[["x"]] %in% names(tg)) {
+    out <- c(out, list(ggplot2::geom_vline(xintercept = tg[[dirs[["x"]]]],
+                                           colour = colour, linewidth = 0.4,
+                                           linetype = "dotted")))
+  }
+  if (dirs[["y"]] %in% names(tg)) {
+    out <- c(out, list(ggplot2::geom_hline(yintercept = tg[[dirs[["y"]]]],
+                                           colour = colour, linewidth = 0.4,
+                                           linetype = "dotted")))
+  }
+  out
+}
+
 dir_of <- function(m, crit) {
   if (m %in% names(crit)) return(crit[[m]])
   if (m %in% names(default_directions)) return(default_directions[[m]])
@@ -188,7 +197,8 @@ better_text <- function(dirs, x_metric, y_metric) {
   }
   part <- function(m, d) switch(d, max = paste("higher", m),
                                 min = paste("lower", m),
-                                zero = paste(m, "closer to 0"), NULL)
+                                zero = paste(m, "closer to 0"),
+                                one = paste(m, "closer to 1"), NULL)
   bits <- c(part(y_metric, dirs[["y"]]), part(x_metric, dirs[["x"]]))
   if (length(bits)) paste0("Better: ", paste(bits, collapse = ", "), ".")
 }
@@ -302,14 +312,7 @@ plot_selection <- function(x, x_metric = NULL, y_metric = NULL,
   zoomed <- !isFALSE(zoom) && !is.null(zoom)
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$.x, y = .data$.y))
-  if (dirs[["x"]] == "zero") {
-    p <- p + ggplot2::geom_vline(xintercept = 0, colour = muted,
-                                 linewidth = 0.4, linetype = "dotted")
-  }
-  if (dirs[["y"]] == "zero") {
-    p <- p + ggplot2::geom_hline(yintercept = 0, colour = muted,
-                                 linewidth = 0.4, linetype = "dotted")
-  }
+  p <- p + target_lines(dirs, muted)
   limits <- c(mins, attr(x, "max_metrics"))
   if (x_metric %in% names(limits)) {
     p <- p + ggplot2::geom_vline(xintercept = limits[names(limits) ==
@@ -483,7 +486,7 @@ zoom_limits <- function(df, dirs, zoom) {
     ok <- !is.na(df$.x) & !is.na(df$.y)
     d <- df[ok, , drop = FALSE]
     cr <- c(x = dirs[["x"]], y = dirs[["y"]])
-    cr <- cr[cr %in% c("max", "min", "zero")]
+    cr <- cr[cr %in% c("max", "min", "zero", "one")]
     inside <- rep(TRUE, nrow(d))
     if (length(cr) && nrow(d) > 3) {
       m <- to_minimise(data.frame(x = d$.x, y = d$.y), cr)

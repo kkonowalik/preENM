@@ -34,7 +34,9 @@ effort, see \code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}. \code{NUL
 \code{\link[=evaluate_models]{evaluate_models()}}.}
 
 \item{metrics}{Optional named list of your own metric functions
-\verb{function(obs, pred)}.}
+\verb{function(obs, pred)}; the optional metrics \code{calibration_slope},
+\code{calibration_intercept} and \code{brier} are added when named in
+\code{criteria}.}
 
 \item{n_null}{Number of null replicates.}
 
@@ -45,7 +47,8 @@ effort, see \code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}. \code{NUL
 \value{
 A data.frame with one row per model and metric: \code{observed},
 \code{null_mean}, \code{null_95} (the value reached or bettered by 5\% of the
-null replicates) and \code{p_value}.
+null replicates; for \code{"zero"} and \code{"one"} criteria, the distance from
+0 or 1) and \code{p_value}.
 }
 \description{
 A model can reach a high AUC by predicting where people record, not

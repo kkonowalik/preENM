@@ -29,8 +29,9 @@ exceed them. Together with \code{min_metrics} this lets the rule require
 both discrimination (AUC, TSS) and calibration (MAE, MAEbal).}
 
 \item{criteria}{Named character vector giving, for each Pareto criterion,
-\code{"max"} (larger is better), \code{"min"} (smaller is better) or \code{"zero"}
-(closer to 0 is better, e.g. \code{bias}).}
+\code{"max"} (larger is better), \code{"min"} (smaller is better), \code{"zero"}
+(closer to 0 is better, e.g. \code{bias}) or \code{"one"} (closer to 1 is
+better, e.g. \code{calibration_slope}).}
 
 \item{tol}{Tolerance for Pareto ties; see \code{\link[=pareto_rank]{pareto_rank()}}.}
 

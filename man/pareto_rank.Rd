@@ -10,7 +10,8 @@ pareto_rank(
   minimize = "MAE",
   zero = NULL,
   weights = NULL,
-  tol = 0
+  tol = 0,
+  one = NULL
 )
 }
 \arguments{
@@ -29,6 +30,9 @@ must match \code{maximize}/\code{minimize}); missing names get weight 1.}
 \item{tol}{Differences smaller than this count as ties: one number for all
 criteria or a named vector, e.g. \code{c(AUC = 0.01, MAE = 0.005)}.
 Default 0 (strict Pareto dominance).}
+
+\item{one}{Character vector of columns where values closer to 1 are
+better (e.g. \code{calibration_slope}).}
 }
 \value{
 \code{x} with added columns \code{pareto_front} (1 = non-dominated) and

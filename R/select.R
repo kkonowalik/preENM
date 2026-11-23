@@ -45,8 +45,9 @@
 #'   exceed them. Together with `min_metrics` this lets the rule require
 #'   both discrimination (AUC, TSS) and calibration (MAE, MAEbal).
 #' @param criteria Named character vector giving, for each Pareto criterion,
-#'   `"max"` (larger is better), `"min"` (smaller is better) or `"zero"`
-#'   (closer to 0 is better, e.g. `bias`).
+#'   `"max"` (larger is better), `"min"` (smaller is better), `"zero"`
+#'   (closer to 0 is better, e.g. `bias`) or `"one"` (closer to 1 is
+#'   better, e.g. `calibration_slope`).
 #' @param tol Tolerance for Pareto ties; see [pareto_rank()].
 #' @param override Optional character vector of model names to select by
 #'   hand. The rules are still computed and reported.
@@ -205,7 +206,8 @@ selection_outliers <- function(x, crit, required) {
   if (nrow(s) < 4) return(empty)
   out <- lapply(setdiff(names(crit), required), function(k) {
     v <- s[[k]]
-    worse <- switch(crit[[k]], max = -v, min = v, zero = abs(v))
+    worse <- switch(crit[[k]], max = -v, min = v, zero = abs(v),
+                    one = abs(v - 1))
     q <- stats::quantile(worse, c(0.25, 0.75), na.rm = TRUE, names = FALSE)
     hit <- !is.na(worse) & worse > q[2] + 1.5 * diff(q) &
       worse - stats::median(worse, na.rm = TRUE) > 1e-9
@@ -213,7 +215,8 @@ selection_outliers <- function(x, crit, required) {
     rg <- signif(range(v[!hit], na.rm = TRUE), 3)
     data.frame(model = s$model[hit], metric = k, value = v[hit],
                side = switch(crit[[k]], max = "lower", min = "higher",
-                             zero = "further from 0"),
+                             zero = "further from 0",
+                             one = "further from 1"),
                others = paste(rg, collapse = "-"), stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, out)

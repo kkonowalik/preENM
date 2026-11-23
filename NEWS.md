@@ -1,3 +1,34 @@
+# preENM 2.26.0
+
+Auditing cross-validation folds (Stock et al. 2023, *Nature Ecology &
+Evolution* 7, 1743-1745; Yoo and Koo 2024; Koldasbayeva and Zaytsev 2025;
+Hijmans 2012, *Ecology* 93, 679-688):
+
+* `fold_report()`: checks a fold assignment for leakage (records with the
+  same coordinates, or in the same raster cell, in more than one fold) and
+  reports per fold the numbers of training and testing records, the
+  distance from test to nearest training records against the block size
+  and the spacing of the records, the overlap of the predictor
+  distributions between training and testing, the share of test records
+  outside the training range, and the spatial sorting bias. The printout
+  says plainly whether leakage was found and in which folds.
+* `evaluate_cv()` gains `coords` (and `env`, `block_size`, `audit`): the
+  folds are audited alongside the metrics, the audit is printed with them,
+  and a warning is given when leakage is found. The metrics themselves do
+  not change.
+* `environmental_folds()`: folds by k-means clustering in the environmental
+  space of `thin_environment()`, as a complement to `spatial_folds()`.
+* `spatial_sorting_bias()`: Hijmans' SSB (mean distance from test presences
+  to the nearest training presence divided by that from test background)
+  and a background sample matched by pairwise distance, so that a corrected
+  evaluation can be run.
+* `plot_folds()`: map of the folds with the leaking records marked; `file`
+  saves it.
+* Distances are great-circle distances for longitude/latitude, computed by
+  nearest-neighbour search (fast for tens of thousands of records).
+* Internal: the PCA of `thin_environment()` is now a shared helper; its
+  results do not change.
+
 # preENM 2.25.0
 
 Smoothed Boyce index (Liu et al. 2024, *Ecography* 2025, e07218):

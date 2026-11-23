@@ -50,6 +50,7 @@ step can be used on its own.
 | After | [14](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
 | After | [14](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
 | After | [14](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
+| After | [18](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
 | After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
@@ -1331,6 +1332,9 @@ A typical workflow for choosing the algorithms of an ensemble:
    predictors: `suggest_block_size(env)$block_size_km` gives the median
    range of the layers from their semivariograms) and assigns them to
    folds with balanced numbers of presences and background points.
+   `environmental_folds()` clusters the records in environmental space
+   instead, to test transfer to new conditions. **Audit the folds** with
+   `fold_report()` (see below).
 2. **Fit models** on all folds but one, for each algorithm, fold and,
    optionally, several background sets. Predict on the held-out fold.
 3. **Hold-out metrics.** `evaluate_cv()` computes AUC, MAE, bias, TSS and the
@@ -1387,6 +1391,73 @@ point and run, with columns `model`, `fold`, `obs` (1/0), `pred` and,
 optionally, `set`. Any modelling software's output can be put in this form.
 With biomod2, for example, project the cross-validation models on the
 evaluation points and keep, for each run, the points of its held-out fold.
+
+#### Auditing the folds: leakage, separation and spatial sorting bias
+
+Cross-validation tests a model on data it has not seen, but data leakage,
+information about the test data reaching the model during training,
+inflates the reported performance and is widespread in ecological machine
+learning (Stock et al. 2023, *Nature Ecology & Evolution* 7, 1743-1745).
+`fold_report()` checks a fold assignment, each fold against the rest:
+
+```r
+a <- fold_report(pts, pts$fold, occ = pts$occ, env = sim$env,
+                 block_size = 100)
+a                                        # leakage? which folds?
+plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
+```
+
+![Folds with three duplicated records split between folds](man/figures/folds.png)
+
+- **Leakage**: records with the same coordinates, or in the same raster
+  cell, in more than one fold. The model has seen the same place and
+  predictor values in training, so the metrics of those folds are inflated;
+  keep one record per cell (`thin_by_cell()`) before making folds.
+- **Spatial separation**: the distance from each test record to the nearest
+  training record, against the block size and against the distance between
+  neighbouring records. Folds whose test records are as close to training
+  records as records are to each other behave like random cross-validation,
+  and spatial autocorrelation makes their metrics optimistic (Yoo and Koo
+  2024, *Cartography and Geographic Information Science* 52, 596-609;
+  Koldasbayeva and Zaytsev 2025, *Ecological Informatics* 92, 103521).
+- **Environmental separation** (with `env`): the overlap of each predictor's
+  distribution between training and testing records, and the share of test
+  records outside the training range (extrapolation).
+- **Spatial sorting bias** (with `occ`): see below.
+
+Give `evaluate_cv()` the coordinate columns and it audits the folds itself,
+prints the audit with the metrics and **warns when leakage is found**:
+
+```r
+cv <- evaluate_cv(holdout_with_coordinates, set = "set",
+                  coords = c("lon", "lat"), env = sim$env, block_size = 100)
+```
+
+**Environmental folds.** `environmental_folds(pts, env, k = 4)` places the
+records in the environmental space of `thin_environment()` (a PCA of the
+standardised predictors) and clusters them by k-means; each cluster is a
+fold. Folds differ in size, and a fold may have no presences (a warning says
+so).
+
+**Spatial sorting bias.** Test presences usually lie closer to the training
+presences than test background points do, so a model scores well by
+predicting high values near known records (Hijmans 2012, *Ecology* 93,
+679-688). `spatial_sorting_bias()` gives SSB = Dp / Da, the mean distance
+from test presences to the nearest training presence divided by that from
+test background points: 1 = no bias, near 0 = extreme. It also returns a
+distance-matched sample (pairwise distance sampling): each test presence is
+paired with the background point at the most similar distance from the
+training presences, and evaluating on that sample removes the bias.
+
+```r
+test <- pts[pts$fold == 1, ]
+train <- pts[pts$fold != 1 & pts$occ == 1, ]
+s <- spatial_sorting_bias(test[test$occ == 1, ], test[test$occ == 0, ],
+                          train, seed = 1)
+s                                         # SSB, matched sample
+p <- test[test$occ == 1, ][s$presence_index, ]
+b <- test[test$occ == 0, ][s$background_index, ]   # evaluate on p and b
+```
 
 #### Plotting any metrics, zoom and 3-D
 

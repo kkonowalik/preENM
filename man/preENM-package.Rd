@@ -62,6 +62,9 @@ of your workflow.
 \item \code{\link[=evaluate_models]{evaluate_models()}}: AUC, MAE and bias for one or many models, Pareto
 ranking and bootstrap robustness.
 \item \code{\link[=plot_pareto]{plot_pareto()}}: publication-ready AUC-MAE plot with the Pareto front.
+\item \code{\link[=thresholds]{thresholds()}}, \code{\link[=threshold_agreement]{threshold_agreement()}}, \code{\link[=plot_thresholds]{plot_thresholds()}}: the
+threshold of a prediction under several rules, and the cells on which
+they agree.
 \item \code{\link[=select_models]{select_models()}}, \code{\link[=plot_selection]{plot_selection()}}, \code{\link[=plot_models]{plot_models()}}: selection by
 minimum values or Pareto front; any two or three metrics, zoom, static
 or interactive 3-D plots.

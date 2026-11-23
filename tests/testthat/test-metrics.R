@@ -105,3 +105,107 @@ test_that("boyce_index equals the window-by-window definition", {
     expect_identical(boyce_index(pres, bg, 20, 0.25), slow(pres, bg, 20, 0.25))
   }
 })
+
+test_that("thresholds: every rule inside the range of the predictions", {
+  set.seed(1)
+  pres <- stats::rbeta(150, 5, 2)
+  bg <- stats::rbeta(1500, 2, 4)
+  th <- thresholds(pres, bg)
+  expect_s3_class(th, "enm_thresholds")
+  expect_equal(th$rule, c("maxSSS", "maxTSS", "equal_ss", "maxMCC", "maxF",
+                          "prevalence", "fixed_sens", "p10",
+                          "mutation_point"))
+  rg <- range(c(pres, bg))
+  expect_true(all(th$threshold >= rg[1] & th$threshold <= rg[2]))
+  # definitions
+  r <- function(x) th[th$rule == x, ]
+  expect_equal(r("p10")$threshold, threshold_p10(pres))
+  expect_gte(r("fixed_sens")$sensitivity, 0.95)
+  expect_equal(r("maxSSS")$threshold, r("maxTSS")$threshold)
+  expect_equal(r("maxTSS")$TSS, max(vapply(sort(unique(c(pres, bg))),
+    function(t) mean(pres >= t) + mean(bg < t) - 1, numeric(1))))
+  expect_lt(abs(r("equal_ss")$sensitivity - r("equal_ss")$specificity), 0.02)
+  expect_equal(th$suitable_share, 1 - th$specificity)
+  # a given prevalence: that share of the background is predicted suitable
+  tp <- thresholds(pres, bg, rules = "prevalence", prevalence = 0.2)
+  expect_equal(tp$suitable_share, 0.2, tolerance = 0.002)
+  # MCC and F from the confusion matrix, checked by hand
+  mcc <- function(t) {
+    # as doubles: the product of four counts overflows integers
+    tp <- as.numeric(sum(pres >= t)); fn <- as.numeric(sum(pres < t))
+    tn <- as.numeric(sum(bg < t)); fp <- as.numeric(sum(bg >= t))
+    (tp * tn - fp * fn) / sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+  }
+  f1 <- function(t) {
+    tp <- sum(pres >= t)
+    2 * tp / (sum(pres < t) + 2 * tp + sum(bg >= t))
+  }
+  cand <- sort(unique(c(pres, bg)))
+  expect_equal(r("maxMCC")$MCC, max(vapply(cand, mcc, numeric(1)),
+                                    na.rm = TRUE))
+  expect_equal(r("maxF")$F, max(vapply(cand, f1, numeric(1))))
+  expect_equal(r("p10")$MCC, mcc(r("p10")$threshold))
+  # MCC and F penalise overprediction: smaller ranges than TSS (Hellegers
+  # et al. 2025)
+  expect_lt(r("maxMCC")$suitable_share, r("maxTSS")$suitable_share)
+  expect_lt(r("maxF")$suitable_share, r("maxTSS")$suitable_share)
+  expect_output(print(th), "times as much")
+})
+
+test_that("maxSSS and maxTSS agree on separable data", {
+  pres <- c(0.7, 0.8, 0.9, 0.95)
+  bg <- c(0.05, 0.1, 0.2, 0.3, 0.4)
+  th <- thresholds(pres, bg, rules = c("maxSSS", "maxTSS", "equal_ss",
+                                       "maxMCC", "maxF"))
+  expect_equal(th$threshold, rep(0.7, 5))      # lowest perfect threshold
+  expect_equal(th$TSS, rep(1, 5))
+  expect_equal(th$MCC, rep(1, 5))
+  expect_equal(th$F, rep(1, 5))
+})
+
+test_that("the mutation point finds the break of the P/E curve", {
+  set.seed(2)
+  bg <- stats::runif(20000)
+  # presences: as frequent as the background below 0.6, ten times above
+  p <- ifelse(bg < 0.6, 1, 10)
+  pres <- sample(bg, 3000, prob = p, replace = TRUE)
+  mp <- thresholds(pres, bg, rules = "mutation_point")$threshold
+  expect_gt(mp, 0.5)
+  expect_lt(mp, 0.7)
+})
+
+test_that("rules subset; tables of several models; errors", {
+  sim <- simulate_enm_data(seed = 1)
+  tab <- extract_predictions(sim$models, sim$presence, sim$absence)
+  th <- thresholds(tab, rules = c("p10", "maxSSS"))
+  expect_equal(unique(th$rule), c("p10", "maxSSS"))
+  expect_equal(sort(unique(th$model)), sort(names(sim$models)))
+  expect_equal(nrow(th), 2 * terra::nlyr(sim$models))
+  expect_error(thresholds(1:3, 1:3, rules = "nope"), "Unknown rule")
+  expect_error(thresholds(1:3), "background")
+  expect_error(thresholds(1:3, 1:3, sensitivity = 1.2), "sensitivity")
+  expect_s3_class(plot_thresholds(th), "ggplot")
+})
+
+test_that("threshold_agreement counts the rules per cell", {
+  r <- terra::rast(nrows = 2, ncols = 3, xmin = 0, xmax = 3, ymin = 0,
+                   ymax = 2, crs = "EPSG:4326",
+                   vals = c(0.1, 0.35, 0.5, 0.65, 0.9, NA))
+  th <- structure(data.frame(rule = c("a", "b", "c"),
+                             threshold = c(0.3, 0.6, 0.8),
+                             sensitivity = NA, specificity = NA, TSS = NA,
+                             suitable_share = NA),
+                  class = c("enm_thresholds", "data.frame"))
+  ag <- threshold_agreement(r, th)
+  expect_equal(as.vector(terra::values(ag$count)), c(0, 1, 1, 2, 3, NA))
+  s <- ag$summary
+  expect_equal(s$cells, c(1, 2, 4))            # all, most (> 1.5), any
+  expect_true(all(diff(s$area_km2) >= 0))
+  expect_output(print(ag), "Suitable under every rule")
+  # duplicated thresholds count once
+  th2 <- th
+  th2$threshold[2] <- 0.3
+  expect_equal(threshold_agreement(r, th2)$n_rules, 2)
+  expect_s3_class(plot_thresholds(ag), "ggplot")
+  expect_error(threshold_agreement(r, data.frame()), "thresholds")
+})

@@ -52,6 +52,9 @@
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto
 #'   ranking and bootstrap robustness.
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.
+#' * [thresholds()], [threshold_agreement()], [plot_thresholds()]: the
+#'   threshold of a prediction under several rules, and the cells on which
+#'   they agree.
 #' * [select_models()], [plot_selection()], [plot_models()]: selection by
 #'   minimum values or Pareto front; any two or three metrics, zoom, static
 #'   or interactive 3-D plots.

@@ -467,8 +467,7 @@ point per cell, with an independent, reproducible seed for each set.
 
 ### 8. Environmental thinning
 
-One record per cell still leaves densely sampled regions (e.g. the Alps or
-Scandinavia) over-represented in environmental space. `thin_environment()`
+One record per cell still leaves densely sampled regions (e.g. typically Western Europe, North America etc.) over-represented in environmental space. `thin_environment()`
 evens out that density without choosing a target number and without
 truncating the niche:
 
@@ -1627,8 +1626,7 @@ od <- odmap_table(filter = res, m = m, thinning = th, records = occ_final,
 ```
 
 ## Citation
-
-If you use the model-selection method, please cite the paper
+The package is still under development. You can use it but some functions may be upgraded or added in near future. Therefore we do not have a formal publication desribing the package. But if you wisk to use it, especially if you use the model-selection method, please cite the paper
 (`citation("preENM")`):
 
 > Konowalik, K., Nosol, A. (2021). Evaluation metrics and validation of
@@ -1636,5 +1634,7 @@ If you use the model-selection method, please cite the paper
 > varying coverage. *Scientific Reports* 11, 1482.
 > <https://doi.org/10.1038/s41598-020-80062-1>
 > (free to read: <https://rdcu.be/cjB5b>)
+
+Depending on the module that you are using, preENM may also use other packages - for example 'terra', 'CoordinateCleaner', 'ggplot', and others. Please cite the other packages as well.
 
 Thanks and good luck with modelling!

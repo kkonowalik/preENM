@@ -58,6 +58,15 @@
 #' test the layers inside your models, see [random_variables()] and
 #' [compare_to_random()].
 #'
+#' **Cross-validation.** The test uses the records, so choosing predictors
+#' with it is feature selection on the response. If the models are then
+#' cross-validated, run it on the training records of each fold (or on data
+#' kept apart from the evaluation), not on all records: selection before
+#' cross-validation lets the test records influence the model, a common
+#' form of data leakage (Stock et al. 2023, Table 1). Collinearity
+#' screening with [select_variables()] does not use the records and can be
+#' done once.
+#'
 #' @param points Records: a data.frame, CSV path, `sf` or
 #'   [terra::SpatVector].
 #' @param env Predictor layers of the calibration area
@@ -76,7 +85,11 @@
 #'   and two descriptions of the response, `shift_sd` (mean at the records
 #'   minus mean of the area, in standard deviations of the area) and
 #'   `breadth_ratio` (standard deviation at the records / in the area).
-#' @references Harms, K.E., Condit, R., Hubbell, S.P., Foster, R.B. (2001)
+#' @references Stock, A., Gregr, E.J., Chan, K.M.A. (2023) Data leakage
+#'   jeopardizes ecological applications of machine learning. *Nature
+#'   Ecology & Evolution* 7, 1743-1745. \doi{10.1038/s41559-023-02162-1}
+#'
+#'   Harms, K.E., Condit, R., Hubbell, S.P., Foster, R.B. (2001)
 #'   Habitat associations of trees and shrubs in a 50-ha neotropical forest
 #'   plot. *Journal of Ecology* 89, 947-959. Fourcade, Y., Besnard, A.G.,
 #'   Secondi, J. (2018) Paintings predict the distribution of species, or

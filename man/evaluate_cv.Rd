@@ -17,6 +17,7 @@ evaluate_cv(
   crs = "EPSG:4326",
   env = NULL,
   block_size = NULL,
+  time = NULL,
   audit = NULL
 )
 }
@@ -61,6 +62,9 @@ printed with the metrics and a warning is given when leakage is found.}
 
 \item{env, block_size}{Optional predictor rasters and block size (km) for
 the audit; see \code{\link[=fold_report]{fold_report()}}.}
+
+\item{time}{Optional column of \code{data} with the date or year of each
+record, for the time check of the audit.}
 
 \item{audit}{Alternatively, a ready \code{\link[=fold_report]{fold_report()}}.}
 }

@@ -228,3 +228,29 @@ test_that("spatial sorting bias: ~1 for a random background, < 1 far away", {
   expect_equal(s0$Dp, 0)
   expect_equal(s0$ssb, 0)
 })
+
+test_that("fold_report: time order and suspect predictors (Stock et al.)", {
+  pts <- grid_points()
+  # folds ordered in time: fold 1 = 2001-2005, fold 2 = 2006-2010, ...
+  yr <- rep(2001:2020, each = 20)
+  f_time <- (yr - 2001) %/% 5 + 1
+  a <- fold_report(pts, f_time, time = yr)
+  # fold 1 is tested on the earliest records: all training records later
+  expect_equal(a$folds$later_train, c(1, 2 / 3, 1 / 3, 0))
+  expect_output(print(a), "In folds 1, 2, 3, training records are later")
+  # random folds in time: the earliest test record precedes most training
+  set.seed(7)
+  b <- fold_report(pts, sample(rep(1:4, 100)), time = yr)
+  expect_true(all(b$folds$later_train > 0.9))
+  # predictors named like coordinates are reported
+  r <- terra::rast(xmin = 15, xmax = 17, ymin = 50, ymax = 52,
+                   resolution = 0.1, crs = "EPSG:4326")
+  env <- c(terra::init(r, "x"), terra::init(r, "y"), terra::init(r, "cell"))
+  names(env) <- c("Lon", "lat", "bio1")
+  e <- fold_report(pts, f_time, env = env)
+  expect_equal(e$suspect_layers, c("Lon", "lat"))
+  expect_output(print(e), "named like coordinates or time: Lon, lat")
+  expect_equal(suspect_layers(c("bio12", "elevation", "doy", "x")),
+               c("doy", "x"))
+  expect_error(fold_report(pts, f_time, time = 1:3), "one value per point")
+})

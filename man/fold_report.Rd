@@ -12,6 +12,7 @@ fold_report(
   env = NULL,
   set = NULL,
   n_bins = 20,
+  time = NULL,
   coords = NULL,
   crs = "EPSG:4326"
 )
@@ -38,6 +39,10 @@ are made within each set.}
 
 \item{n_bins}{Number of classes per predictor for the overlap.}
 
+\item{time}{Optional date or time of each record (numeric, e.g. year, or
+\code{Date}): the share of training records later than the test records is
+reported per fold.}
+
 \item{coords}{Optional names of the x/longitude and y/latitude columns
 when points are tabular. Detected automatically if \code{NULL}.}
 
@@ -50,7 +55,9 @@ set: \code{n_test}, \code{n_train} and, with \code{occ}, \code{presences_test},
 \code{median_dist_km}, \code{within_block} (share of test records closer than the
 block size to a training record), \code{separation} (median test-to-training
 distance divided by the median distance between neighbouring records),
-\code{env_overlap}, \code{env_overlap_min}, \code{outside_range}, \code{ssb}), \code{leaks} (one
+\code{env_overlap}, \code{env_overlap_min}, \code{outside_range}, \code{ssb},
+\code{later_train}), \code{suspect_layers} (names of predictors that look like
+coordinates or time), \code{leaks} (one
 row per leaking record: \code{index}, \code{fold}, \code{type}, \code{other_folds}),
 \code{leakage} (\code{TRUE}/\code{FALSE}), \code{overall} and \code{points} (coordinates and
 folds, for \code{\link[=plot_folds]{plot_folds()}}).
@@ -83,6 +90,18 @@ the training range of at least one predictor (extrapolation).
 \item \strong{Spatial sorting bias} (with \code{occ}): Hijmans' (2012) ratio of the mean
 distance from test presences to the nearest training presence to that
 from test background points; see \code{\link[=spatial_sorting_bias]{spatial_sorting_bias()}}.
+\item \strong{Time} (with \code{time}): the share of training records dated after the
+earliest test record. If the model will be projected forward in time,
+training on later records than those tested is leakage of the future
+(Stock et al. 2023, Table 1); folds ordered in time (forward chaining)
+avoid it (Koldasbayeva and Zaytsev 2025). For a model of one period
+this does not matter, so it is reported, not called leakage.
+\item \strong{Suspect predictors} (with \code{env}): layers named like coordinates or
+time (\code{lon}, \code{lat}, \code{x}, \code{y}, \code{year}, \code{month}, \code{doy}, ...). Such
+predictors let a model learn where and when records were made rather
+than how the species responds to the environment, and the relation
+will not hold in a projection (Stock et al. 2023, Table 1). The check
+looks only at the layer names.
 }
 
 Duplicate coordinates and shared cells are definite leakage; the

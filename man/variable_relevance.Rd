@@ -104,6 +104,15 @@ background on any such gradient, so the layer cannot be told apart from
 geography. Then keep it on ecological grounds, or enlarge the area. To
 test the layers inside your models, see \code{\link[=random_variables]{random_variables()}} and
 \code{\link[=compare_to_random]{compare_to_random()}}.
+
+\strong{Cross-validation.} The test uses the records, so choosing predictors
+with it is feature selection on the response. If the models are then
+cross-validated, run it on the training records of each fold (or on data
+kept apart from the evaluation), not on all records: selection before
+cross-validation lets the test records influence the model, a common
+form of data leakage (Stock et al. 2023, Table 1). Collinearity
+screening with \code{\link[=select_variables]{select_variables()}} does not use the records and can be
+done once.
 }
 \examples{
 # three patchy layers; the species lives where the first one is high
@@ -118,6 +127,10 @@ names(records) <- c("lon", "lat")
 variable_relevance(records, env, n_null = 199)
 }
 \references{
+Stock, A., Gregr, E.J., Chan, K.M.A. (2023) Data leakage
+jeopardizes ecological applications of machine learning. \emph{Nature
+Ecology & Evolution} 7, 1743-1745. \doi{10.1038/s41559-023-02162-1}
+
 Harms, K.E., Condit, R., Hubbell, S.P., Foster, R.B. (2001)
 Habitat associations of trees and shrubs in a 50-ha neotropical forest
 plot. \emph{Journal of Ecology} 89, 947-959. Fourcade, Y., Besnard, A.G.,

@@ -145,6 +145,8 @@ spatial_folds <- function(points, k = 5, block_size, occ = NULL,
 #' @param crs Coordinate reference system of `coords`.
 #' @param env,block_size Optional predictor rasters and block size (km) for
 #'   the audit; see [fold_report()].
+#' @param time Optional column of `data` with the date or year of each
+#'   record, for the time check of the audit.
 #' @param audit Alternatively, a ready [fold_report()].
 #' @return An object of class `enm_cv`: a data.frame with one row per model,
 #'   the mean of each metric over runs, their SDs (`AUC_sd`, ...), `n_runs`
@@ -165,7 +167,8 @@ spatial_folds <- function(points, k = 5, block_size, occ = NULL,
 evaluate_cv <- function(data, model = "model", fold = "fold", set = NULL,
                         obs = "obs", pred = "pred", threshold = NULL,
                         metrics = NULL, coords = NULL, crs = "EPSG:4326",
-                        env = NULL, block_size = NULL, audit = NULL) {
+                        env = NULL, block_size = NULL, time = NULL,
+                        audit = NULL) {
   extra <- check_extra_metrics(metrics)
   cols <- c(model, fold, set, obs, pred, threshold)
   miss <- setdiff(cols, names(data))
@@ -239,9 +242,9 @@ evaluate_cv <- function(data, model = "model", fold = "fold", set = NULL,
   rownames(by_fold) <- NULL
 
   if (is.null(audit) && !is.null(coords)) {
-    miss <- setdiff(coords, names(data))
+    miss <- setdiff(c(coords, time), names(data))
     if (length(miss)) {
-      stop("Coordinate columns not found in `data`: ",
+      stop("Columns not found in `data`: ",
            paste(miss, collapse = ", "), call. = FALSE)
     }
     first <- data[[model]] == data[[model]][1]
@@ -249,6 +252,7 @@ evaluate_cv <- function(data, model = "model", fold = "fold", set = NULL,
     audit <- fold_report(d1[coords], d1[[fold]], occ = d1[[obs]],
                          block_size = block_size, env = env,
                          set = if (is.null(set)) NULL else d1[[set]],
+                         time = if (is.null(time)) NULL else d1[[time]],
                          coords = coords, crs = crs)
   }
   if (!is.null(audit)) {
@@ -385,6 +389,18 @@ nn_km <- function(Q, X, lonlat) {
 #' * **Spatial sorting bias** (with `occ`): Hijmans' (2012) ratio of the mean
 #'   distance from test presences to the nearest training presence to that
 #'   from test background points; see [spatial_sorting_bias()].
+#' * **Time** (with `time`): the share of training records dated after the
+#'   earliest test record. If the model will be projected forward in time,
+#'   training on later records than those tested is leakage of the future
+#'   (Stock et al. 2023, Table 1); folds ordered in time (forward chaining)
+#'   avoid it (Koldasbayeva and Zaytsev 2025). For a model of one period
+#'   this does not matter, so it is reported, not called leakage.
+#' * **Suspect predictors** (with `env`): layers named like coordinates or
+#'   time (`lon`, `lat`, `x`, `y`, `year`, `month`, `doy`, ...). Such
+#'   predictors let a model learn where and when records were made rather
+#'   than how the species responds to the environment, and the relation
+#'   will not hold in a projection (Stock et al. 2023, Table 1). The check
+#'   looks only at the layer names.
 #'
 #' Duplicate coordinates and shared cells are definite leakage; the
 #' distances and overlaps describe how hard the test is and are reported
@@ -404,6 +420,9 @@ nn_km <- function(Q, X, lonlat) {
 #' @param set Optional vector of background sets or replicates: the checks
 #'   are made within each set.
 #' @param n_bins Number of classes per predictor for the overlap.
+#' @param time Optional date or time of each record (numeric, e.g. year, or
+#'   `Date`): the share of training records later than the test records is
+#'   reported per fold.
 #' @inheritParams extract_predictions
 #' @return A list of class `fold_report`: `folds` (one row per fold and
 #'   set: `n_test`, `n_train` and, with `occ`, `presences_test`,
@@ -411,7 +430,9 @@ nn_km <- function(Q, X, lonlat) {
 #'   `median_dist_km`, `within_block` (share of test records closer than the
 #'   block size to a training record), `separation` (median test-to-training
 #'   distance divided by the median distance between neighbouring records),
-#'   `env_overlap`, `env_overlap_min`, `outside_range`, `ssb`), `leaks` (one
+#'   `env_overlap`, `env_overlap_min`, `outside_range`, `ssb`,
+#'   `later_train`), `suspect_layers` (names of predictors that look like
+#'   coordinates or time), `leaks` (one
 #'   row per leaking record: `index`, `fold`, `type`, `other_folds`),
 #'   `leakage` (`TRUE`/`FALSE`), `overall` and `points` (coordinates and
 #'   folds, for [plot_folds()]).
@@ -445,8 +466,8 @@ nn_km <- function(Q, X, lonlat) {
 #' f2 <- c(sample(1:4, nrow(pts), replace = TRUE), 1 + f[1] %% 4)
 #' fold_report(pts2, f2, occ = pts2$occ)
 fold_report <- function(points, folds, occ = NULL, block_size = NULL,
-                        env = NULL, set = NULL, n_bins = 20, coords = NULL,
-                        crs = "EPSG:4326") {
+                        env = NULL, set = NULL, n_bins = 20, time = NULL,
+                        coords = NULL, crs = "EPSG:4326") {
   if (is.null(block_size)) block_size <- attr(folds, "block_size_km")
   pts <- as_points(points, coords, crs)
   n <- nrow(pts)
@@ -457,6 +478,12 @@ fold_report <- function(points, folds, occ = NULL, block_size = NULL,
   folds <- as.vector(folds)
   if (!is.null(occ) && length(occ) != n) {
     stop("`occ` must have one value per point (", n, ").", call. = FALSE)
+  }
+  if (!is.null(time)) {
+    if (length(time) != n) {
+      stop("`time` must have one value per point (", n, ").", call. = FALSE)
+    }
+    time <- as.numeric(time)
   }
   if (is.null(set)) set <- rep(1L, n)
   if (length(set) != n) stop("`set` must have one value per point.",
@@ -562,13 +589,21 @@ fold_report <- function(points, folds, occ = NULL, block_size = NULL,
         row$ssb <- ssb_value(ds, te & occ == 1, te & occ != 1,
                              tr & occ == 1)
       }
+      if (!is.null(time)) {
+        t0 <- suppressWarnings(min(time[te], na.rm = TRUE))
+        row$later_train <- if (is.finite(t0)) {
+          mean(time[tr] > t0, na.rm = TRUE)
+        } else NA_real_
+      }
       rows[[length(rows) + 1]] <- row
     }
   }
   tab <- do.call(rbind, rows)
   if (length(unique(set)) == 1) tab$set <- NULL
+  suspect <- if (is.null(env)) character(0) else suspect_layers(names(r))
   structure(list(
     folds = tab, leaks = leaks, leakage = nrow(leaks) > 0,
+    suspect_layers = suspect,
     overall = list(n = sum(use), n_folds = length(unique(folds[use])),
                    duplicates = sum(dup), shared_cells = if (is.null(cell))
                      NA_integer_ else sum(shared),
@@ -578,6 +613,14 @@ fold_report <- function(points, folds, occ = NULL, block_size = NULL,
                         leak = dup | shared, set = set),
     lonlat = ds$lonlat),
     class = "fold_report")
+}
+
+# Predictor names that look like coordinates or time (internal)
+suspect_layers <- function(vars) {
+  pat <- paste0("^(lon|long|longitude|lat|latitude|x|y|xcoord|ycoord|",
+                "x_coord|y_coord|easting|northing|coord_?x|coord_?y|year|",
+                "month|day|doy|day_?of_?year|julian|date|time|season)$")
+  vars[grepl(pat, vars, ignore.case = TRUE)]
 }
 
 # Spatial sorting bias Dp / Da from logical selections (internal)
@@ -675,11 +718,35 @@ print.fold_report <- function(x, digits = 2, ...) {
       "background does (median SSB ", fmt(m), "). ",
       if (m < 0.8) "AUC is inflated; use spatial_sorting_bias() for a distance-matched background."))
   }
+  if ("later_train" %in% names(t) && any(!is.na(t$later_train))) {
+    lt <- t$later_train
+    if (any(lt > 0, na.rm = TRUE)) {
+      w <- which(lt > 0)
+      say(paste0("In folds ", paste(t$fold[w], collapse = ", "), ", ",
+                 "training records are later than test records (up to ",
+                 share_label(max(lt, na.rm = TRUE)), " of the training ",
+                 "records). If the model will be projected forward in time, ",
+                 "this tests it with knowledge of the future; use folds ",
+                 "ordered in time. For a model of one period it does not ",
+                 "matter."))
+    } else {
+      say("Every fold is trained only on records not later than its test records (ordered in time).")
+    }
+  }
+  if (length(x$suspect_layers)) {
+    say(paste0("Predictors named like coordinates or time: ",
+               paste(x$suspect_layers, collapse = ", "), ". They let a ",
+               "model learn where and when records were made rather than ",
+               "the response to the environment, which will not hold in a ",
+               "projection. Check that they belong in the model (the check ",
+               "looks only at the names)."))
+  }
   cat("\nPer fold:\n")
   show <- t[intersect(c("set", "fold", "n_test", "n_train",
                         "presences_test", "duplicates", "shared_cells",
                         "median_dist_km", "within_block", "separation",
-                        "env_overlap", "outside_range", "ssb"), names(t))]
+                        "env_overlap", "outside_range", "ssb",
+                        "later_train"), names(t))]
   num <- vapply(show, is.double, logical(1))
   show[num] <- lapply(show[num], round, digits)
   print(show, row.names = FALSE)
@@ -693,7 +760,9 @@ print.fold_report <- function(x, digits = 2, ...) {
     "\"partly\" (>= 0.5) are rules of thumb. SSB = mean distance from test ",
     "presences to the nearest training presence / the same for test ",
     "background (Hijmans 2012: 1 = no bias, near 0 = extreme); the grades ",
-    "0.8 and 0.5 are rules of thumb."), width = 78), sep = "\n")
+    "0.8 and 0.5 are rules of thumb.", if ("later_train" %in% names(t))
+      paste0(" later_train = share of training records dated after the ",
+             "earliest test record.")), width = 78), sep = "\n")
   invisible(x)
 }
 

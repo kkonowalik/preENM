@@ -51,6 +51,7 @@ step can be used on its own.
 | After | [14](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
 | After | [14](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
 | After | [18](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
+| After | [18](#ensembles-and-disagreement) | **Ensemble of the selected models and the disagreement between them** | `ensemble_models()`, `plot_ensemble()` |
 | After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
@@ -1360,6 +1361,10 @@ A typical workflow for choosing the algorithms of an ensemble:
 6. **Plots.** `plot(sel)` draws the full view and a zoom on the best
    models; `plot_models()` draws any two or three metrics, static or
    interactive (see [Plotting any metrics, zoom and 3-D](#plotting-any-metrics-zoom-and-3-d)).
+7. **Ensemble.** `ensemble_models()` combines the prediction rasters of the
+   selected models and maps where they disagree (see
+   [Ensembles and disagreement](#ensembles-and-disagreement) at the end of
+   this section).
 
 A complete example you can run with the simulated data. It compares three GLMs
 on 4 spatial folds and 2 background sets:
@@ -1636,6 +1641,49 @@ s                                         # SSB, matched sample
 p <- test[test$occ == 1, ][s$presence_index, ]
 b <- test[test$occ == 0, ][s$background_index, ]   # evaluate on p and b
 ```
+
+#### Ensembles and disagreement
+
+`ensemble_models()` takes the prediction rasters of the models (a
+SpatRaster or files/folders, from any software) and the result of
+`select_models()` or `evaluate_models()`, and returns the ensemble together
+with the disagreement between the models in every cell:
+
+```r
+ens <- ensemble_models(sim$models, sel)          # median of the selected models
+ens                                              # where do the models disagree?
+plot_ensemble(ens, file = "ensemble.pdf")        # ensemble and SD side by side
+ensemble_models(prediction_folder, sel, method = "pcam",
+                filename = "ensemble.tif")       # large rasters, written to disk
+```
+
+![Median of the selected models and the standard deviation between them](man/figures/ensemble.png)
+
+- **Which models:** only the selected models of `select_models()`, or the
+  Pareto front of `evaluate_models()`; dominated or unselected models are
+  left out (`use = "all"` keeps them all).
+- **How they are combined:** `"median"` (default), `"mean"`, `"pcam"`
+  (the median of the half of the models closest to their common trend, the
+  first principal component of the predictions) or `"weighted"` (weights
+  `1 - distance`, the compromise score of the evaluation, or your own
+  `weights`).
+- **Why weighting is not the default:** weights based on the evaluation
+  reward predicting the data the models were evaluated on, which is not
+  the same as predicting new areas or periods. In transfers across
+  continents, consensus models weighted by AUC were worse than the median
+  of the models closest to their common trend, and the mean was pulled by
+  models with extreme predictions (Zhu et al. 2021, *Ecological Modelling*
+  448, 109502). Zhu et al. recommend PCAm.
+- **Disagreement:** the standard deviation (`sd`) and coefficient of
+  variation (`cv`) of the predictions of the models used, per cell. The
+  printout says how much the models disagree, on how much of the area the
+  SD exceeds 0.1 and 0.2 (rules of thumb for predictions on the 0-1 scale),
+  at which level of the ensemble prediction the disagreement is highest,
+  and which model departs most from the ensemble.
+- **Large rasters:** terra combines the layers block by block from disk;
+  above 10 million cells every intermediate layer goes to a temporary file,
+  and the block size follows `terra::terraOptions(memfrac, memmax)`.
+  `filename` writes the result (layers `ensemble`, `sd`, `cv`) to a GeoTIFF.
 
 ### 19. How the selection works
 

@@ -1,3 +1,24 @@
+# preENM 2.27.0
+
+Ensembles and the disagreement between models (Zhu et al. 2021,
+*Ecological Modelling* 448, 109502):
+
+* `ensemble_models()`: combines the prediction rasters of the selected
+  models (`select_models()`) or of the Pareto front (`evaluate_models()`);
+  dominated or unselected models are left out. Methods: median (default),
+  unweighted mean, PCAm (the median of the half of the models closest to
+  the first principal component of the predictions, recommended by Zhu et
+  al.) and the mean weighted by the compromise score of the evaluation.
+  The help page explains why the weighted mean is not the default. Returns
+  the ensemble with the standard deviation and coefficient of variation
+  between models per cell; the printout says how much and where the models
+  disagree (by level of the ensemble prediction, the area above levels of
+  disagreement, the model that departs most). Rasters are read from files
+  or folders and combined block by block; large stacks keep every
+  intermediate layer on disk.
+* `plot_ensemble()`: the ensemble and the disagreement side by side;
+  `file` saves it.
+
 # preENM 2.26.1
 
 Completing the audit against Table 1 of Stock et al. (2023):

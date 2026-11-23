@@ -46,6 +46,8 @@
 #' * [fold_report()], [plot_folds()], [environmental_folds()],
 #'   [spatial_sorting_bias()]: audit of cross-validation folds for leakage,
 #'   spatial and environmental separation and spatial sorting bias.
+#' * [ensemble_models()], [plot_ensemble()]: ensemble of the selected
+#'   models and the disagreement between them.
 #' * [null_model_test()]: are the models better than expected from where
 #'   records are collected?
 #' * [null_occurrences()], [transfer_bias_test()], [environment_shift()]:

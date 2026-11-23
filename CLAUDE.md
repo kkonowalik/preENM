@@ -43,6 +43,19 @@ and in every session.
   existing entries: minor version for a feature, patch for a fix), the
   Version and, for a feature, the Description field in DESCRIPTION, and the
   package help (`R/preENM-package.R`).
+- Keep the README a coherent manual, ordered as the workflow is done:
+  - Insert a new part where it belongs in the workflow, not simply after
+    the last addition. Move existing sections or subsections when that
+    keeps the order logical, and renumber the sections when needed.
+  - Inside a section, subsections follow the order of its steps. A
+    numbered list of steps must match the subsections, and the
+    cross-references between them must say "below"/"above" correctly.
+  - Never leave other parts broken: after any change, update every link
+    and section number in the overview table and in the text. Check that
+    each `](#anchor)` link matches a heading (GitHub anchors: lower case,
+    punctuation removed, spaces as hyphens).
+  - Section numbers in the overview table must match the headings, and its
+    rows must follow the manual's order.
 
 ## Output objects and printed output
 - Return a classed list with a print method that **leads with the result in

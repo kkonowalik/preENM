@@ -1,3 +1,17 @@
+# preENM 2.27.1
+
+The manual is reordered to follow the workflow:
+
+* "How the selection works" is now section 18, before the full workflow
+  (now section 19), which uses it.
+* The subsections of the full workflow follow its steps: auditing the
+  folds, fossil (temporal) validation, plotting, ensembles, and thresholds
+  (moved from section 14, as a binary map is usually made from the final
+  ensemble; a new step 8 says so).
+* The overview table follows the order of the manual, and every internal
+  link is checked (one link to "Choosing which metrics to compare" was
+  broken).
+
 # preENM 2.27.0
 
 Ensembles and the disagreement between models (Zhu et al. 2021,

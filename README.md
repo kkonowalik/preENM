@@ -49,10 +49,11 @@ step can be used on its own.
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 | After | [14](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
 | After | [14](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
-| After | [14](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
-| After | [18](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
-| After | [18](#ensembles-and-disagreement) | **Ensemble of the selected models and the disagreement between them** | `ensemble_models()`, `plot_ensemble()` |
-| After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
+| After | [18](#18-how-the-selection-works) | **How the selection works** (Pareto front, compromise distance, bootstrap robustness) | `pareto_rank()` |
+| After | [19](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
+| After | [19](#fossil-temporal-validation) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
+| After | [19](#ensembles-and-disagreement) | **Ensemble of the selected models and the disagreement between them** | `ensemble_models()`, `plot_ensemble()` |
+| After | [19](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
 | After | [22](#22-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
@@ -1158,50 +1159,6 @@ and says when the index cannot be read. Use the smoothed index with few
 presences, together with its bootstrap interval, and compare models with
 the same estimator.
 
-#### Thresholds: how much does the mapped range depend on the rule?
-
-A binary map needs a threshold, and the rules for choosing it disagree
-enough to change the mapped range considerably, so report several together
-(Hellegers et al. 2025, *Diversity and Distributions* 31, e70019) or choose
-the rule by the goal of the study: rules that minimise underprediction
-(maxTSS, DSS) suit e.g. finding where invasive species may establish, rules
-that penalise overprediction (MCC, F) suit extinction-risk assessments. `thresholds()` takes the
-predictions at presence and at absence/background points (two vectors, or
-the table of `extract_predictions()` for several models at once) and gives,
-for each rule, the threshold, sensitivity, specificity, TSS and the
-predicted-suitable share (the share of absence/background points at or
-above the threshold; with background that represents the study area, the
-share of the area mapped as suitable):
-
-```r
-tab <- extract_predictions(models, presence, background)
-th <- thresholds(tab)                          # all rules, every model
-th                                             # how much the mapped range varies
-plot_thresholds(th, file = "thresholds.pdf")
-ag <- threshold_agreement(models[["GLM"]], th, model = "GLM")
-ag                                             # area suitable under all / most / any rule
-terra::writeRaster(ag$count, "GLM_rules_suitable.tif")
-```
-
-![Share of the background mapped as suitable under each rule](man/figures/thresholds.png)
-
-| Rule | Threshold |
-|---|---|
-| `maxSSS`, `maxTSS` | maximum of sensitivity + specificity (the same criterion under two names; Liu et al. 2013 recommend it for presence-background data) |
-| `equal_ss` | sensitivity equal to specificity (DSS) |
-| `maxMCC`, `maxF` | maximum of Matthews' correlation coefficient or of the F-measure; they penalise overprediction and give smaller ranges (in 1671 European plants the median range under maxTSS was 3.6 and 9.2 times that under MCC and F; Hellegers et al. 2025); need true or pseudo-absences |
-| `prevalence` | predicted prevalence equal to the observed one, or to a `prevalence` you give |
-| `fixed_sens` | keeps at least `sensitivity` of the presences (default 0.95) |
-| `p10` | 10th percentile of the presence predictions (about a fixed sensitivity of 0.90) |
-| `mutation_point` | the break of Boyce's predicted-to-expected curve (100 classes) found by threshold regression (BTQR, Yu et al. 2024); needs no absences, usually strict |
-
-The printout says how many times larger the area of the most inclusive rule
-is than that of the least inclusive one. `threshold_agreement()` counts, for
-every cell of a prediction raster, the rules that call it suitable: the
-cells suitable under all rules are the robust core of the range, those
-suitable under at least one its widest extent. Restrict the set with
-`rules`, e.g. `thresholds(tab, rules = c("maxSSS", "p10"))`.
-
 ### 15. Quick start: model selection with example data
 
 ```r
@@ -1332,9 +1289,47 @@ tab <- data.frame(obs = c(1, 1, 0, 0, ...),   # 1 = presence, 0 = absence
 evaluate_models(data = tab, n_boot = 1000)
 ```
 
-### 18. Full workflow: spatial cross-validation, fossil validation, selection
+### 18. How the selection works
 
-A typical workflow for choosing the algorithms of an ensemble:
+1. **Metrics.** For each model, compute **AUC** (Mann–Whitney formulation,
+   higher is better), **MAE** (`mean(|obs − pred|)`, lower is better),
+   **MAEbal** (MAE averaged over presences and background, lower is better),
+   **bias** (`mean(obs − pred)`, closer to 0 is better), **TSS** and the
+   **Boyce index**. AUC and MAE are the default criteria; see
+   [Choosing which metrics to compare](#16-choosing-which-metrics-to-compare).
+2. **Pareto front.** Model A *dominates* model B if A is at least as good on
+   every criterion (by default AUC and MAE) and strictly better on one.
+   Models that no other model dominates form the **Pareto front**. These are
+   the defensible choices, each a different trade-off. With `tol`,
+   differences smaller than the tolerance count as ties. Dominated models can
+   be discarded. Repeating the procedure on the remaining models gives fronts 2, 3, …
+   (non-dominated sorting).
+3. **Compromise distance.** The criteria are rescaled to 0–1 and each
+   model's distance to the *ideal point* (the best value of every criterion)
+   is computed. Use it to pick one model from the front. `weights = c(AUC = 2, MAE = 1)` makes AUC
+   count twice as much.
+4. **Bootstrap robustness.** Presence and absence points are resampled with
+   replacement (stratified) `n_boot` times and everything is recomputed. This
+   gives confidence intervals for each criterion and **`p_pareto`**, the
+   proportion of resamples in which a model is on the Pareto front. Small
+   differences between models are often within sampling noise, and
+   `p_pareto` shows how much your choice depends on the particular evaluation
+   points.
+5. **Final `rank`.** Models are ordered by Pareto front, then `p_pareto`, then
+   distance.
+
+`pareto_rank()` works on any table with any number of criteria, e.g. metrics
+computed elsewhere such as AICc or omission rates:
+
+```r
+pareto_rank(my_table, maximize = c("AUC", "TSS"), minimize = c("MAE", "AICc"),
+            zero = "bias")
+```
+
+### 19. Full workflow: cross-validation, fossil validation, selection, ensemble
+
+A typical workflow for choosing the algorithms of an ensemble, building it
+and mapping it. The subsections below follow the steps in order.
 
 1. **Spatial folds.** `spatial_folds()` splits the study area into square
    blocks (side ideally larger than the spatial autocorrelation range of the
@@ -1344,27 +1339,35 @@ A typical workflow for choosing the algorithms of an ensemble:
    `environmental_folds()` clusters the records in environmental space
    instead, to test transfer to new conditions. **Audit the folds** with
    `fold_report()` (see [Auditing the folds](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias)
-   at the end of this section).
+   below).
 2. **Fit models** on all folds but one, for each algorithm, fold and,
    optionally, several background sets. Predict on the held-out fold.
 3. **Hold-out metrics.** `evaluate_cv()` computes AUC, MAE, bias, TSS and the
-   Boyce index per run and summarises them per algorithm. It also shows
-   whether background sets or folds cause more variation, and AUC per fold.
+   Boyce index per run and summarises them per algorithm (and, given the
+   coordinates, audits the folds). It also shows whether background sets or
+   folds cause more variation, and AUC per fold.
 4. **Temporal validation** (optional). `temporal_validation()` checks
-   hindcasts against fossil records (see below).
+   hindcasts against fossil records (see
+   [Fossil (temporal) validation](#fossil-temporal-validation) below).
 5. **Selection.** `select_models()` keeps every algorithm that reaches
    conventional minimum values (default AUC >= 0.8, TSS >= 0.6), only the
    Pareto front, or both (`rule = "both"`). For an ensemble the minimum
    values are usually the better rule: the Pareto front finds the best
    *single* models, and a model can reach it through one criterion alone,
-   e.g. the best present-day fit with weak hindcasts.
+   e.g. the best present-day fit with weak hindcasts. How the Pareto front
+   and the ranking work is explained in
+   [section 18](#18-how-the-selection-works).
 6. **Plots.** `plot(sel)` draws the full view and a zoom on the best
    models; `plot_models()` draws any two or three metrics, static or
    interactive (see [Plotting any metrics, zoom and 3-D](#plotting-any-metrics-zoom-and-3-d)).
 7. **Ensemble.** `ensemble_models()` combines the prediction rasters of the
    selected models and maps where they disagree (see
-   [Ensembles and disagreement](#ensembles-and-disagreement) at the end of
-   this section).
+   [Ensembles and disagreement](#ensembles-and-disagreement) below).
+8. **Binary map** (optional). `thresholds()` gives the threshold of the
+   ensemble (or any prediction) under several rules, and
+   `threshold_agreement()` the cells on which they agree (see
+   [Thresholds](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule)
+   below).
 
 A complete example you can run with the simulated data. It compares three GLMs
 on 4 spatial folds and 2 background sets:
@@ -1406,41 +1409,82 @@ optionally, `set`. Any modelling software's output can be put in this form.
 With biomod2, for example, project the cross-validation models on the
 evaluation points and keep, for each run, the points of its held-out fold.
 
-#### Plotting any metrics, zoom and 3-D
+#### Auditing the folds: leakage, separation and spatial sorting bias
 
-When many algorithms perform alike, the plot gets crowded in one corner.
-`plot(sel)` (also drawn by `select_models()` in interactive sessions) shows
-the full view and, next to it, a **zoom on the region of the best models**:
-the Pareto fronts of the two plotted metrics are added one by one until at
-least half of the models are included. Models outside the zoom are named in
-the subtitle, and selected models are always drawn on top. Dashed lines
-mark the required minimum and maximum values. Error bars (red, `bar_colour`
-to change, `error_bars = FALSE` to hide) show, for each axis, the bootstrap
-interval (`<metric>_lower`, `<metric>_upper`) or else +/- 1 SD across runs
-(`<metric>_sd`); keep those columns when you join tables for
-`select_models()`. `evaluate_models(boot_metrics = "all")` gives intervals
-for every metric, not only the criteria.
-
-![Full view and zoom](man/figures/selection_zoom.png)
-
-`plot_models()` draws any metrics of `select_models()`, `evaluate_models()`
-or `evaluate_cv()` output (or any table with a `model` column):
+Cross-validation tests a model on data it has not seen, but data leakage,
+information about the test data reaching the model during training,
+inflates the reported performance and is widespread in ecological machine
+learning (Stock et al. 2023, *Nature Ecology & Evolution* 7, 1743-1745).
+`fold_report()` checks a fold assignment, each fold against the rest:
 
 ```r
-plot_models(sel, x = "bias", y = "AUC")                  # any pair
-plot_models(sel, x = "MAEbal", y = "AUC", zoom = TRUE)   # zoom only
-plot_models(sel, x = "MAEbal", y = "AUC", zoom = list(x = c(0.19, 0.24),
-                                                      y = c(0.89, 0.93)))
-plot_models(sel, x = "MAEbal", y = "AUC", interactive = TRUE)  # hover, zoom
-plot_models(sel, x = "MAEbal", y = "AUC", z = "fossil_AUC_deep",  # 3-D
-            file = "selection_3d.html")                 # saved, opens in browser
+a <- fold_report(pts, pts$fold, occ = pts$occ, env = sim$env,
+                 block_size = 100)
+a                                        # leakage? which folds?
+plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
 ```
 
-Interactive and 3-D plots use the `plotly` package
-(`install.packages("plotly")`); they open in the RStudio viewer or the
-browser, can be rotated and hovered over (all values of a model), and saved
-as one HTML file. Axes always run from worse to better. Static plots are
-`ggplot` objects: save them with `ggplot2::ggsave()`.
+![Folds with three duplicated records split between folds](man/figures/folds.png)
+
+- **Leakage**: records with the same coordinates, or in the same raster
+  cell, in more than one fold. The model has seen the same place and
+  predictor values in training, so the metrics of those folds are inflated;
+  keep one record per cell (`thin_by_cell()`) before making folds.
+- **Spatial separation**: the distance from each test record to the nearest
+  training record, against the block size and against the distance between
+  neighbouring records. Folds whose test records are as close to training
+  records as records are to each other behave like random cross-validation,
+  and spatial autocorrelation makes their metrics optimistic (Yoo and Koo
+  2025, *Cartography and Geographic Information Science* 52, 596-609;
+  Koldasbayeva and Zaytsev 2025, *Ecological Informatics* 92, 103521).
+- **Environmental separation** (with `env`): the overlap of each predictor's
+  distribution between training and testing records, and the share of test
+  records outside the training range (extrapolation).
+- **Spatial sorting bias** (with `occ`): see below.
+- **Time** (with `time`, e.g. the year of each record): the share of
+  training records later than the test records. A model to be projected
+  forward in time should be tested on records later than those it was
+  trained on (folds ordered in time; Koldasbayeva and Zaytsev 2025). For a
+  model of one period this does not matter, so it is reported, not called
+  leakage.
+- **Suspect predictors** (with `env`): layers named like coordinates or
+  time (`lon`, `lat`, `x`, `y`, `year`, `doy`, ...), which let a model learn
+  where and when records were made rather than the response to the
+  environment (Stock et al. 2023, Table 1). Only the names are checked.
+
+Give `evaluate_cv()` the coordinate columns and it audits the folds itself,
+prints the audit with the metrics and **warns when leakage is found**:
+
+```r
+cv <- evaluate_cv(holdout_with_coordinates, set = "set",
+                  coords = c("lon", "lat"), env = sim$env, block_size = 100)
+```
+
+**Environmental folds.** `environmental_folds(pts, env, k = 4)` places the
+records in the environmental space of `thin_environment()` (a PCA of the
+standardised predictors) and clusters them by k-means; each cluster is a
+fold. Folds differ in size, and a fold may have no presences (a warning says
+so).
+
+**Spatial sorting bias.** Test presences usually lie closer to the training
+presences than test background points do, so a model scores well by
+predicting high values near known records (Hijmans 2012, *Ecology* 93,
+679-688). `spatial_sorting_bias()` gives SSB = Dp / Da, the mean distance
+from test presences to the nearest training presence divided by that from
+test background points: 1 = no bias, near 0 = extreme. It also returns a
+distance-matched sample (pairwise distance sampling): each test presence is
+paired with the background point at the most similar distance from the
+training presences, and evaluating on that sample removes the bias.
+
+```r
+test <- pts[pts$fold == 1, ]
+train <- pts[pts$fold != 1 & pts$occ == 1, ]
+s <- spatial_sorting_bias(test[test$occ == 1, ], test[test$occ == 0, ],
+                          train, seed = 1)
+s                                         # SSB, matched sample
+p <- test[test$occ == 1, ][s$presence_index, ]
+b <- test[test$occ == 0, ][s$background_index, ]   # evaluate on p and b
+```
 
 #### Fossil (temporal) validation
 
@@ -1565,82 +1609,41 @@ Helpers for preparing the climate of each record:
 - `threshold_p10()`: the 10th-percentile training presence threshold, for
   sensitivity.
 
-#### Auditing the folds: leakage, separation and spatial sorting bias
+#### Plotting any metrics, zoom and 3-D
 
-Cross-validation tests a model on data it has not seen, but data leakage,
-information about the test data reaching the model during training,
-inflates the reported performance and is widespread in ecological machine
-learning (Stock et al. 2023, *Nature Ecology & Evolution* 7, 1743-1745).
-`fold_report()` checks a fold assignment, each fold against the rest:
+When many algorithms perform alike, the plot gets crowded in one corner.
+`plot(sel)` (also drawn by `select_models()` in interactive sessions) shows
+the full view and, next to it, a **zoom on the region of the best models**:
+the Pareto fronts of the two plotted metrics are added one by one until at
+least half of the models are included. Models outside the zoom are named in
+the subtitle, and selected models are always drawn on top. Dashed lines
+mark the required minimum and maximum values. Error bars (red, `bar_colour`
+to change, `error_bars = FALSE` to hide) show, for each axis, the bootstrap
+interval (`<metric>_lower`, `<metric>_upper`) or else +/- 1 SD across runs
+(`<metric>_sd`); keep those columns when you join tables for
+`select_models()`. `evaluate_models(boot_metrics = "all")` gives intervals
+for every metric, not only the criteria.
 
-```r
-a <- fold_report(pts, pts$fold, occ = pts$occ, env = sim$env,
-                 block_size = 100)
-a                                        # leakage? which folds?
-plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
-```
+![Full view and zoom](man/figures/selection_zoom.png)
 
-![Folds with three duplicated records split between folds](man/figures/folds.png)
-
-- **Leakage**: records with the same coordinates, or in the same raster
-  cell, in more than one fold. The model has seen the same place and
-  predictor values in training, so the metrics of those folds are inflated;
-  keep one record per cell (`thin_by_cell()`) before making folds.
-- **Spatial separation**: the distance from each test record to the nearest
-  training record, against the block size and against the distance between
-  neighbouring records. Folds whose test records are as close to training
-  records as records are to each other behave like random cross-validation,
-  and spatial autocorrelation makes their metrics optimistic (Yoo and Koo
-  2025, *Cartography and Geographic Information Science* 52, 596-609;
-  Koldasbayeva and Zaytsev 2025, *Ecological Informatics* 92, 103521).
-- **Environmental separation** (with `env`): the overlap of each predictor's
-  distribution between training and testing records, and the share of test
-  records outside the training range (extrapolation).
-- **Spatial sorting bias** (with `occ`): see below.
-- **Time** (with `time`, e.g. the year of each record): the share of
-  training records later than the test records. A model to be projected
-  forward in time should be tested on records later than those it was
-  trained on (folds ordered in time; Koldasbayeva and Zaytsev 2025). For a
-  model of one period this does not matter, so it is reported, not called
-  leakage.
-- **Suspect predictors** (with `env`): layers named like coordinates or
-  time (`lon`, `lat`, `x`, `y`, `year`, `doy`, ...), which let a model learn
-  where and when records were made rather than the response to the
-  environment (Stock et al. 2023, Table 1). Only the names are checked.
-
-Give `evaluate_cv()` the coordinate columns and it audits the folds itself,
-prints the audit with the metrics and **warns when leakage is found**:
+`plot_models()` draws any metrics of `select_models()`, `evaluate_models()`
+or `evaluate_cv()` output (or any table with a `model` column):
 
 ```r
-cv <- evaluate_cv(holdout_with_coordinates, set = "set",
-                  coords = c("lon", "lat"), env = sim$env, block_size = 100)
+plot_models(sel, x = "bias", y = "AUC")                  # any pair
+plot_models(sel, x = "MAEbal", y = "AUC", zoom = TRUE)   # zoom only
+plot_models(sel, x = "MAEbal", y = "AUC", zoom = list(x = c(0.19, 0.24),
+                                                      y = c(0.89, 0.93)))
+plot_models(sel, x = "MAEbal", y = "AUC", interactive = TRUE)  # hover, zoom
+plot_models(sel, x = "MAEbal", y = "AUC", z = "fossil_AUC_deep",  # 3-D
+            file = "selection_3d.html")                 # saved, opens in browser
 ```
 
-**Environmental folds.** `environmental_folds(pts, env, k = 4)` places the
-records in the environmental space of `thin_environment()` (a PCA of the
-standardised predictors) and clusters them by k-means; each cluster is a
-fold. Folds differ in size, and a fold may have no presences (a warning says
-so).
-
-**Spatial sorting bias.** Test presences usually lie closer to the training
-presences than test background points do, so a model scores well by
-predicting high values near known records (Hijmans 2012, *Ecology* 93,
-679-688). `spatial_sorting_bias()` gives SSB = Dp / Da, the mean distance
-from test presences to the nearest training presence divided by that from
-test background points: 1 = no bias, near 0 = extreme. It also returns a
-distance-matched sample (pairwise distance sampling): each test presence is
-paired with the background point at the most similar distance from the
-training presences, and evaluating on that sample removes the bias.
-
-```r
-test <- pts[pts$fold == 1, ]
-train <- pts[pts$fold != 1 & pts$occ == 1, ]
-s <- spatial_sorting_bias(test[test$occ == 1, ], test[test$occ == 0, ],
-                          train, seed = 1)
-s                                         # SSB, matched sample
-p <- test[test$occ == 1, ][s$presence_index, ]
-b <- test[test$occ == 0, ][s$background_index, ]   # evaluate on p and b
-```
+Interactive and 3-D plots use the `plotly` package
+(`install.packages("plotly")`); they open in the RStudio viewer or the
+browser, can be rotated and hovered over (all values of a model), and saved
+as one HTML file. Axes always run from worse to better. Static plots are
+`ggplot` objects: save them with `ggplot2::ggsave()`.
 
 #### Ensembles and disagreement
 
@@ -1685,42 +1688,49 @@ ensemble_models(prediction_folder, sel, method = "pcam",
   and the block size follows `terra::terraOptions(memfrac, memmax)`.
   `filename` writes the result (layers `ensemble`, `sd`, `cv`) to a GeoTIFF.
 
-### 19. How the selection works
+#### Thresholds: how much does the mapped range depend on the rule?
 
-1. **Metrics.** For each model, compute **AUC** (Mann–Whitney formulation,
-   higher is better), **MAE** (`mean(|obs − pred|)`, lower is better),
-   **MAEbal** (MAE averaged over presences and background, lower is better),
-   **bias** (`mean(obs − pred)`, closer to 0 is better), **TSS** and the
-   **Boyce index**. AUC and MAE are the default criteria; see
-   [Choosing which metrics to compare](#choosing-which-metrics-to-compare).
-2. **Pareto front.** Model A *dominates* model B if A is at least as good on
-   every criterion (by default AUC and MAE) and strictly better on one.
-   Models that no other model dominates form the **Pareto front**. These are
-   the defensible choices, each a different trade-off. With `tol`,
-   differences smaller than the tolerance count as ties. Dominated models can
-   be discarded. Repeating the procedure on the remaining models gives fronts 2, 3, …
-   (non-dominated sorting).
-3. **Compromise distance.** The criteria are rescaled to 0–1 and each
-   model's distance to the *ideal point* (the best value of every criterion)
-   is computed. Use it to pick one model from the front. `weights = c(AUC = 2, MAE = 1)` makes AUC
-   count twice as much.
-4. **Bootstrap robustness.** Presence and absence points are resampled with
-   replacement (stratified) `n_boot` times and everything is recomputed. This
-   gives confidence intervals for each criterion and **`p_pareto`**, the
-   proportion of resamples in which a model is on the Pareto front. Small
-   differences between models are often within sampling noise, and
-   `p_pareto` shows how much your choice depends on the particular evaluation
-   points.
-5. **Final `rank`.** Models are ordered by Pareto front, then `p_pareto`, then
-   distance.
-
-`pareto_rank()` works on any table with any number of criteria, e.g. metrics
-computed elsewhere such as AICc or omission rates:
+A binary map needs a threshold, and the rules for choosing it disagree
+enough to change the mapped range considerably, so report several together
+(Hellegers et al. 2025, *Diversity and Distributions* 31, e70019) or choose
+the rule by the goal of the study: rules that minimise underprediction
+(maxTSS, DSS) suit e.g. finding where invasive species may establish, rules
+that penalise overprediction (MCC, F) suit extinction-risk assessments. `thresholds()` takes the
+predictions at presence and at absence/background points (two vectors, or
+the table of `extract_predictions()` for several models at once) and gives,
+for each rule, the threshold, sensitivity, specificity, TSS and the
+predicted-suitable share (the share of absence/background points at or
+above the threshold; with background that represents the study area, the
+share of the area mapped as suitable):
 
 ```r
-pareto_rank(my_table, maximize = c("AUC", "TSS"), minimize = c("MAE", "AICc"),
-            zero = "bias")
+tab <- extract_predictions(models, presence, background)
+th <- thresholds(tab)                          # all rules, every model
+th                                             # how much the mapped range varies
+plot_thresholds(th, file = "thresholds.pdf")
+ag <- threshold_agreement(models[["GLM"]], th, model = "GLM")
+ag                                             # area suitable under all / most / any rule
+terra::writeRaster(ag$count, "GLM_rules_suitable.tif")
 ```
+
+![Share of the background mapped as suitable under each rule](man/figures/thresholds.png)
+
+| Rule | Threshold |
+|---|---|
+| `maxSSS`, `maxTSS` | maximum of sensitivity + specificity (the same criterion under two names; Liu et al. 2013 recommend it for presence-background data) |
+| `equal_ss` | sensitivity equal to specificity (DSS) |
+| `maxMCC`, `maxF` | maximum of Matthews' correlation coefficient or of the F-measure; they penalise overprediction and give smaller ranges (in 1671 European plants the median range under maxTSS was 3.6 and 9.2 times that under MCC and F; Hellegers et al. 2025); need true or pseudo-absences |
+| `prevalence` | predicted prevalence equal to the observed one, or to a `prevalence` you give |
+| `fixed_sens` | keeps at least `sensitivity` of the presences (default 0.95) |
+| `p10` | 10th percentile of the presence predictions (about a fixed sensitivity of 0.90) |
+| `mutation_point` | the break of Boyce's predicted-to-expected curve (100 classes) found by threshold regression (BTQR, Yu et al. 2024); needs no absences, usually strict |
+
+The printout says how many times larger the area of the most inclusive rule
+is than that of the least inclusive one. `threshold_agreement()` counts, for
+every cell of a prediction raster, the rules that call it suitable: the
+cells suitable under all rules are the robust core of the range, those
+suitable under at least one its widest extent. Restrict the set with
+`rules`, e.g. `thresholds(tab, rules = c("maxSSS", "p10"))`.
 
 ### 20. Testing the models against sampling bias
 

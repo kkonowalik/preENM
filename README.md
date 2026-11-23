@@ -48,6 +48,7 @@ step can be used on its own.
 | Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 | After | [14](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
+| After | [14](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
 | After | [14](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
 | After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
@@ -1101,6 +1102,51 @@ points and on how well they represent the environment of the study area
 74-80). Then these values **compare models evaluated on the same presences
 and background**; they do not measure calibration in absolute terms.
 Predictions must be on the 0-1 scale (e.g. Maxent cloglog, not raw output).
+
+#### The Boyce index with few presences
+
+The continuous Boyce index (Hirzel et al. 2006) correlates the
+predicted-to-expected (P/E) ratio, the share of presences divided by the
+share of background points, with the predicted value. The classical
+estimator computes the ratio in a moving window; with few presences the
+ratios of neighbouring windows fluctuate and every fluctuation lowers the
+index, so it is underestimated below about 50-200 presences (Liu et al.
+2024, *Ecography* 2025, e07218). Liu et al. instead model the probability
+that a point is a presence rather than a background point as a smooth
+function of the prediction, from all points at once; the odds of that
+curve are proportional to the P/E ratio.
+
+```r
+pres <- tab$GLM[tab$obs == 1]
+bg <- tab$GLM[tab$obs == 0]
+boyce_index(pres, bg)                         # moving window (default)
+b <- boyce_index(pres, bg, smooth = "spline", n_boot = 199, seed = 1)
+b                                             # index, interval, P/E curve
+plot_boyce(b, file = "boyce.pdf")
+evaluate_models(data = tab, metrics = "Boyce_smooth")   # next to Boyce
+```
+
+![Smoothed P/E curve of a simulated model evaluated with 30 presences and 5000 background points, with its 95% bootstrap band](man/figures/boyce.png)
+
+`smooth = "spline"` is a penalised logistic regression spline computed
+without extra packages, `"gam"` the thin plate spline of Liu et al. (needs
+mgcv; the two agree closely), `"loess"` a local regression. `n_boot`
+resamples presences and background for a confidence interval of the index
+and a band around the curve; `details = TRUE` returns the curve without
+bootstrap.
+
+**Which estimator?** The moving window stays the default, so earlier
+results do not change, and because the smoothed index has two weaknesses
+of its own. For a model no better than random the fitted curve is nearly a
+straight line, and the Spearman correlation of any straight line is +1 or
+-1: in 200 simulated random models with 50 presences, the smoothed index
+was 0.9 or more in a third, the moving window never. And for good models it
+is often exactly 1, so it no longer separates them (in the example data,
+four of five good models score 1.000 against 0.91-0.98 with the moving
+window). The printout therefore tests the smoothed curve against a flat one
+and says when the index cannot be read. Use the smoothed index with few
+presences, together with its bootstrap interval, and compare models with
+the same estimator.
 
 #### Thresholds: how much does the mapped range depend on the rule?
 

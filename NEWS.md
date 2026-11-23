@@ -1,3 +1,29 @@
+# preENM 2.25.0
+
+Smoothed Boyce index (Liu et al. 2024, *Ecography* 2025, e07218):
+
+* `boyce_index()` gains `smooth`: besides the moving window (`"none"`, the
+  default, unchanged, so existing results do not change), the P/E curve can
+  be estimated by a penalised logistic regression spline (`"spline"`,
+  without extra packages), the thin plate spline of Liu et al. (`"gam"`,
+  needs mgcv, now in Suggests) or loess (`"loess"`). With few presences the
+  smoothed index is much less variable and not underestimated.
+* `n_boot` gives a bootstrap confidence interval of the index (presences
+  and background resampled separately) and, for smoothed curves, a band
+  around the P/E curve. With `n_boot > 0` or `details = TRUE` the result is
+  a `boyce_index` object with the P/E curve, the interval and a test of a
+  flat curve; the printout says in plain words how the frequency of
+  presences changes with the prediction, and warns when a smoothed curve is
+  not distinguishable from flat (its index can then be anywhere between -1
+  and 1) and when the moving window has fewer than 50 presences.
+* `plot_boyce()`: the P/E curve with its bootstrap band; `file` saves it.
+* `Boyce_smooth`: optional metric for `evaluate_models()`,
+  `evaluate_cv()` and `null_model_test()` (`metrics = "Boyce_smooth"` or a
+  criterion), next to the moving-window `Boyce`.
+* Why the default stays: in simulated random models with 50 presences the
+  smoothed index was 0.9 or more in a third of the runs (the moving window
+  never), and good models often score exactly 1 and tie.
+
 # preENM 2.24.0
 
 Calibration diagnostics (Silva Filho et al. 2023, *Machine Learning* 112,

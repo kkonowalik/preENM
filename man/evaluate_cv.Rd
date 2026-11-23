@@ -12,7 +12,12 @@ evaluate_cv(
   obs = "obs",
   pred = "pred",
   threshold = NULL,
-  metrics = NULL
+  metrics = NULL,
+  coords = NULL,
+  crs = "EPSG:4326",
+  env = NULL,
+  block_size = NULL,
+  audit = NULL
 )
 }
 \arguments{
@@ -46,6 +51,18 @@ optimistic.}
 \code{"Boyce_smooth"}),
 computed per run and summarised like the built-in ones (see
 \code{\link[=evaluate_models]{evaluate_models()}}).}
+
+\item{coords}{Optional names of the coordinate columns of \code{data} (e.g.
+\code{c("lon", "lat")}): the folds are then audited with \code{\link[=fold_report]{fold_report()}}
+(within each \code{set}, on the rows of the first model), the audit is
+printed with the metrics and a warning is given when leakage is found.}
+
+\item{crs}{Coordinate reference system of \code{coords}.}
+
+\item{env, block_size}{Optional predictor rasters and block size (km) for
+the audit; see \code{\link[=fold_report]{fold_report()}}.}
+
+\item{audit}{Alternatively, a ready \code{\link[=fold_report]{fold_report()}}.}
 }
 \value{
 An object of class \code{enm_cv}: a data.frame with one row per model,
@@ -53,7 +70,8 @@ the mean of each metric over runs, their SDs (\code{AUC_sd}, ...), \code{n_runs}
 and, when available, \code{AUC_sd_folds} and \code{AUC_sd_sets}. Per-run metrics
 are in \code{attr(x, "runs")} and mean AUC per fold in \code{attr(x, "by_fold")}
 (a fold that is low for every model points to a region that is hard to
-predict, not to a bad model).
+predict, not to a bad model). With \code{coords} or \code{audit}, the
+\code{\link[=fold_report]{fold_report()}} is in \code{attr(x, "audit")}.
 }
 \description{
 Summarises spatial (or any) cross-validation results per model or

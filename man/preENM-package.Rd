@@ -53,6 +53,9 @@ Model evaluation and selection:
 \item \code{\link[=suggest_block_size]{suggest_block_size()}}, \code{\link[=spatial_folds]{spatial_folds()}}, \code{\link[=evaluate_cv]{evaluate_cv()}}: spatial
 block cross-validation with a block size from the autocorrelation of
 the predictors.
+\item \code{\link[=fold_report]{fold_report()}}, \code{\link[=plot_folds]{plot_folds()}}, \code{\link[=environmental_folds]{environmental_folds()}},
+\code{\link[=spatial_sorting_bias]{spatial_sorting_bias()}}: audit of cross-validation folds for leakage,
+spatial and environmental separation and spatial sorting bias.
 \item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
 records are collected?
 \item \code{\link[=null_occurrences]{null_occurrences()}}, \code{\link[=transfer_bias_test]{transfer_bias_test()}}, \code{\link[=environment_shift]{environment_shift()}}:

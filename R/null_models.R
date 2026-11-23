@@ -40,7 +40,8 @@
 #'   [evaluate_models()].
 #' @param metrics Optional named list of your own metric functions
 #'   `function(obs, pred)`; the optional metrics `calibration_slope`,
-#'   `calibration_intercept` and `brier` are added when named in
+#'   `calibration_intercept`, `brier` and `Boyce_smooth` are added when
+#'   named in
 #'   `criteria`.
 #' @param n_null Number of null replicates.
 #' @param n_pool Number of cells sampled when `pool` is a raster.

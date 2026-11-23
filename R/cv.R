@@ -134,7 +134,8 @@ spatial_folds <- function(points, k = 5, block_size, occ = NULL,
 #'   optimistic.
 #' @param metrics Optional extra metrics: a named list of functions
 #'   `function(obs, pred)` and/or names of optional metrics
-#'   (`"calibration_slope"`, `"calibration_intercept"`, `"brier"`),
+#'   (`"calibration_slope"`, `"calibration_intercept"`, `"brier"`,
+#'   `"Boyce_smooth"`),
 #'   computed per run and summarised like the built-in ones (see
 #'   [evaluate_models()]).
 #' @return An object of class `enm_cv`: a data.frame with one row per model,

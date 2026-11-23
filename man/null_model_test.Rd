@@ -35,7 +35,8 @@ effort, see \code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}. \code{NUL
 
 \item{metrics}{Optional named list of your own metric functions
 \verb{function(obs, pred)}; the optional metrics \code{calibration_slope},
-\code{calibration_intercept} and \code{brier} are added when named in
+\code{calibration_intercept}, \code{brier} and \code{Boyce_smooth} are added when
+named in
 \code{criteria}.}
 
 \item{n_null}{Number of null replicates.}

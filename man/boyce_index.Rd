@@ -4,7 +4,19 @@
 \alias{boyce_index}
 \title{Continuous Boyce index}
 \usage{
-boyce_index(presence, background, n_windows = 100, window_width = 0.1)
+boyce_index(
+  presence,
+  background,
+  n_windows = 100,
+  window_width = 0.1,
+  smooth = c("none", "spline", "gam", "loess"),
+  n_boot = 0,
+  conf = 0.95,
+  details = n_boot > 0,
+  n_points = 501,
+  span = 0.75,
+  seed = NULL
+)
 }
 \arguments{
 \item{presence}{Predicted values at presence points.}
@@ -12,28 +24,89 @@ boyce_index(presence, background, n_windows = 100, window_width = 0.1)
 \item{background}{Predicted values at background (or absence) points, or
 at all cells of the study area.}
 
-\item{n_windows}{Number of window positions (default 100).}
+\item{n_windows}{Number of window positions (default 100), for
+\code{smooth = "none"}.}
 
 \item{window_width}{Window width as a proportion of the range of the
-background predictions (default 0.1).}
+background predictions (default 0.1), for \code{smooth = "none"}.}
+
+\item{smooth}{Estimator of the P/E curve: \code{"none"} (moving window, the
+default), \code{"spline"}, \code{"gam"} or \code{"loess"}; see Details.}
+
+\item{n_boot}{Number of bootstrap resamples for a confidence interval
+(presences and background resampled separately). With \code{n_boot > 0} the
+result has \code{details}.}
+
+\item{conf}{Confidence level of the bootstrap interval.}
+
+\item{details}{Return the P/E curve, the interval and diagnostics (a
+\code{boyce_index} object) instead of a single number.}
+
+\item{n_points}{Number of equally spaced prediction values at which a
+smoothed curve is evaluated (501 as in Liu et al. 2024).}
+
+\item{span}{Span of \code{smooth = "loess"}.}
+
+\item{seed}{Optional random seed for the bootstrap.}
 }
 \value{
 A single number between -1 and 1, or \code{NA} when it cannot be
-computed (e.g. too few distinct window ratios).
+computed (e.g. too few distinct window ratios). With \code{details = TRUE} or
+\code{n_boot > 0}, a list of class \code{boyce_index} with \code{index}, \code{lower},
+\code{upper} (bootstrap interval, \code{NA} without bootstrap), \code{curve} (the P/E
+curve: \code{prediction}, \code{pe} and, with bootstrap, \code{pe_lower}, \code{pe_upper}),
+\code{boot} (the bootstrap values), \code{flat_p} (smoothed curves: p-value of a
+likelihood-ratio test against a flat P/E curve), \code{n_presence},
+\code{n_background} and \code{smooth}; it has a print method and
+\code{\link[=plot_boyce]{plot_boyce()}}.
 }
 \description{
 Measures how well predictions match the \emph{frequency} of presences, which
-is especially suited to presence-only data (Hirzel et al. 2006). A moving
-window slides along the range of predicted values; in each window the
-ratio of the share of presences to the share of background points
-(predicted/expected ratio) is computed. The index is the Spearman
-correlation between this ratio and the window position: values close to 1
-mean presences become steadily more frequent as suitability increases,
-0 means no better than random and negative values mean a wrong model. The
-implementation reproduces \code{ecospat::ecospat.boyce()} (moving window,
-Spearman correlation), which biomod2 also uses.
+is especially suited to presence-only data (Hirzel et al. 2006). The
+predicted/expected (P/E) ratio, the share of presences divided by the
+share of background points, is estimated along the range of predicted
+values; the index is the Spearman correlation between this ratio and the
+prediction. Values close to 1 mean presences become steadily more frequent
+as suitability increases, 0 means no better than random and negative
+values mean a wrong model.
 }
 \details{
+\strong{Two estimators of the P/E curve.}
+\itemize{
+\item \code{smooth = "none"} (default): a moving window slides along the range of
+predicted values and the ratio is computed in each window. This
+reproduces \code{ecospat::ecospat.boyce()}, which biomod2 also uses. With few
+presences the ratios of neighbouring windows fluctuate, and every
+fluctuation lowers the correlation: in simulations the index was
+underestimated below about 50-200 presences (Liu et al. 2024).
+\item \code{smooth = "spline"}, \code{"gam"} or \code{"loess"}: the probability that a point
+is a presence rather than a background point is modelled as a smooth
+function of the prediction, from all points at once (Liu et al. 2024).
+Its odds are proportional to the P/E ratio, so the index is the
+Spearman correlation between the fitted curve and the prediction at
+\code{n_points} equally spaced values over the range of the predictions.
+\code{"spline"} is a penalised logistic regression spline (P-spline: cubic
+B-splines, 10 basis functions, second-order difference penalty chosen
+by UBRE, as mgcv does for binomial models), computed without extra
+packages; \code{"gam"} is the thin plate regression spline of Liu et al.
+(\code{mgcv::gam()}, \code{k = 10}; needs mgcv); both performed equally well in
+Liu et al. (2024). \code{"loess"} is a local regression of the 0/1 outcome
+(\code{span}), not evaluated by Liu et al.; it is less variable for flat
+curves but biased towards 0.
+}
+
+The smoothed index is much less variable with few presences and agrees
+with the moving window for models whose P/E ratio rises steadily. Two
+cautions, which is why the moving window stays the default: for a model
+no better than random the fitted curve is almost a straight line, and the
+Spearman correlation of any straight line is +1 or -1, so the smoothed
+index of a random model swings across the whole range (in 200 simulated
+random models with 50 presences it was 0.9 or more in a third, the
+moving window never; check the bootstrap interval and the test of a flat
+curve reported with \code{details = TRUE}); good models often score exactly 1
+and tie, which makes it a weaker Pareto criterion; and for curves that rise and then fall the two
+estimators can differ, so compare models with the same estimator.
+
 Use background points that represent the whole study area (or all cells);
 absences sampled away from presences make the index unreliable.
 }
@@ -42,9 +115,26 @@ set.seed(1)
 bg <- runif(1000)
 pres <- rbeta(100, 4, 1)          # presences mostly at high suitability
 boyce_index(pres, bg)
+boyce_index(pres, bg, smooth = "spline")
+# few presences: P/E curve, bootstrap interval and diagnostics
+b <- boyce_index(pres[1:20], bg, smooth = "spline", n_boot = 99, seed = 1)
+b
+plot_boyce(b)
 }
 \references{
 Hirzel, A.H., Le Lay, G., Helfer, V., Randin, C., Guisan, A.
 (2006) Evaluating the ability of habitat suitability models to predict
 species presences. \emph{Ecological Modelling} 199, 142-152.
+
+Liu, C., Newell, G., White, M., Machunter, J. (2024) Improving the
+estimation of the Boyce index using statistical smoothing methods for
+evaluating species distribution models with presence-only data.
+\emph{Ecography} 2025, e07218. \doi{10.1111/ecog.07218}
+
+Eilers, P.H.C., Marx, B.D. (1996) Flexible smoothing with B-splines and
+penalties. \emph{Statistical Science} 11, 89-121.
+}
+\seealso{
+\code{\link[=plot_boyce]{plot_boyce()}}; the optional metric \code{Boyce_smooth} in
+\code{\link[=evaluate_models]{evaluate_models()}}.
 }

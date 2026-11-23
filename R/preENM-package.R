@@ -52,6 +52,8 @@
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto
 #'   ranking and bootstrap robustness.
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.
+#' * [boyce_index()], [plot_boyce()]: the continuous Boyce index by moving
+#'   window or smoothed P/E curve, with bootstrap interval.
 #' * [calibration_curve()], [brier_decompose()], [plot_calibration()]:
 #'   calibration of the predictions (reliability diagram, calibration slope
 #'   and intercept, Brier score decomposition).

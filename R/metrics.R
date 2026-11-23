@@ -119,15 +119,47 @@ tss_score <- function(obs, pred, threshold = NULL) {
 #' Continuous Boyce index
 #'
 #' Measures how well predictions match the *frequency* of presences, which
-#' is especially suited to presence-only data (Hirzel et al. 2006). A moving
-#' window slides along the range of predicted values; in each window the
-#' ratio of the share of presences to the share of background points
-#' (predicted/expected ratio) is computed. The index is the Spearman
-#' correlation between this ratio and the window position: values close to 1
-#' mean presences become steadily more frequent as suitability increases,
-#' 0 means no better than random and negative values mean a wrong model. The
-#' implementation reproduces `ecospat::ecospat.boyce()` (moving window,
-#' Spearman correlation), which biomod2 also uses.
+#' is especially suited to presence-only data (Hirzel et al. 2006). The
+#' predicted/expected (P/E) ratio, the share of presences divided by the
+#' share of background points, is estimated along the range of predicted
+#' values; the index is the Spearman correlation between this ratio and the
+#' prediction. Values close to 1 mean presences become steadily more frequent
+#' as suitability increases, 0 means no better than random and negative
+#' values mean a wrong model.
+#'
+#' **Two estimators of the P/E curve.**
+#' * `smooth = "none"` (default): a moving window slides along the range of
+#'   predicted values and the ratio is computed in each window. This
+#'   reproduces `ecospat::ecospat.boyce()`, which biomod2 also uses. With few
+#'   presences the ratios of neighbouring windows fluctuate, and every
+#'   fluctuation lowers the correlation: in simulations the index was
+#'   underestimated below about 50-200 presences (Liu et al. 2024).
+#' * `smooth = "spline"`, `"gam"` or `"loess"`: the probability that a point
+#'   is a presence rather than a background point is modelled as a smooth
+#'   function of the prediction, from all points at once (Liu et al. 2024).
+#'   Its odds are proportional to the P/E ratio, so the index is the
+#'   Spearman correlation between the fitted curve and the prediction at
+#'   `n_points` equally spaced values over the range of the predictions.
+#'   `"spline"` is a penalised logistic regression spline (P-spline: cubic
+#'   B-splines, 10 basis functions, second-order difference penalty chosen
+#'   by UBRE, as mgcv does for binomial models), computed without extra
+#'   packages; `"gam"` is the thin plate regression spline of Liu et al.
+#'   (`mgcv::gam()`, `k = 10`; needs mgcv); both performed equally well in
+#'   Liu et al. (2024). `"loess"` is a local regression of the 0/1 outcome
+#'   (`span`), not evaluated by Liu et al.; it is less variable for flat
+#'   curves but biased towards 0.
+#'
+#' The smoothed index is much less variable with few presences and agrees
+#' with the moving window for models whose P/E ratio rises steadily. Two
+#' cautions, which is why the moving window stays the default: for a model
+#' no better than random the fitted curve is almost a straight line, and the
+#' Spearman correlation of any straight line is +1 or -1, so the smoothed
+#' index of a random model swings across the whole range (in 200 simulated
+#' random models with 50 presences it was 0.9 or more in a third, the
+#' moving window never; check the bootstrap interval and the test of a flat
+#' curve reported with `details = TRUE`); good models often score exactly 1
+#' and tie, which makes it a weaker Pareto criterion; and for curves that rise and then fall the two
+#' estimators can differ, so compare models with the same estimator.
 #'
 #' Use background points that represent the whole study area (or all cells);
 #' absences sampled away from presences make the index unreliable.
@@ -135,29 +167,115 @@ tss_score <- function(obs, pred, threshold = NULL) {
 #' @param presence Predicted values at presence points.
 #' @param background Predicted values at background (or absence) points, or
 #'   at all cells of the study area.
-#' @param n_windows Number of window positions (default 100).
+#' @param n_windows Number of window positions (default 100), for
+#'   `smooth = "none"`.
 #' @param window_width Window width as a proportion of the range of the
-#'   background predictions (default 0.1).
+#'   background predictions (default 0.1), for `smooth = "none"`.
+#' @param smooth Estimator of the P/E curve: `"none"` (moving window, the
+#'   default), `"spline"`, `"gam"` or `"loess"`; see Details.
+#' @param n_boot Number of bootstrap resamples for a confidence interval
+#'   (presences and background resampled separately). With `n_boot > 0` the
+#'   result has `details`.
+#' @param conf Confidence level of the bootstrap interval.
+#' @param details Return the P/E curve, the interval and diagnostics (a
+#'   `boyce_index` object) instead of a single number.
+#' @param n_points Number of equally spaced prediction values at which a
+#'   smoothed curve is evaluated (501 as in Liu et al. 2024).
+#' @param span Span of `smooth = "loess"`.
+#' @param seed Optional random seed for the bootstrap.
 #' @return A single number between -1 and 1, or `NA` when it cannot be
-#'   computed (e.g. too few distinct window ratios).
+#'   computed (e.g. too few distinct window ratios). With `details = TRUE` or
+#'   `n_boot > 0`, a list of class `boyce_index` with `index`, `lower`,
+#'   `upper` (bootstrap interval, `NA` without bootstrap), `curve` (the P/E
+#'   curve: `prediction`, `pe` and, with bootstrap, `pe_lower`, `pe_upper`),
+#'   `boot` (the bootstrap values), `flat_p` (smoothed curves: p-value of a
+#'   likelihood-ratio test against a flat P/E curve), `n_presence`,
+#'   `n_background` and `smooth`; it has a print method and
+#'   [plot_boyce()].
 #' @references Hirzel, A.H., Le Lay, G., Helfer, V., Randin, C., Guisan, A.
 #'   (2006) Evaluating the ability of habitat suitability models to predict
 #'   species presences. *Ecological Modelling* 199, 142-152.
+#'
+#'   Liu, C., Newell, G., White, M., Machunter, J. (2024) Improving the
+#'   estimation of the Boyce index using statistical smoothing methods for
+#'   evaluating species distribution models with presence-only data.
+#'   *Ecography* 2025, e07218. \doi{10.1111/ecog.07218}
+#'
+#'   Eilers, P.H.C., Marx, B.D. (1996) Flexible smoothing with B-splines and
+#'   penalties. *Statistical Science* 11, 89-121.
+#' @seealso [plot_boyce()]; the optional metric `Boyce_smooth` in
+#'   [evaluate_models()].
 #' @export
 #' @examples
 #' set.seed(1)
 #' bg <- runif(1000)
 #' pres <- rbeta(100, 4, 1)          # presences mostly at high suitability
 #' boyce_index(pres, bg)
+#' boyce_index(pres, bg, smooth = "spline")
+#' # few presences: P/E curve, bootstrap interval and diagnostics
+#' b <- boyce_index(pres[1:20], bg, smooth = "spline", n_boot = 99, seed = 1)
+#' b
+#' plot_boyce(b)
 boyce_index <- function(presence, background, n_windows = 100,
-                        window_width = 0.1) {
+                        window_width = 0.1,
+                        smooth = c("none", "spline", "gam", "loess"),
+                        n_boot = 0, conf = 0.95, details = n_boot > 0,
+                        n_points = 501, span = 0.75, seed = NULL) {
+  smooth <- match.arg(smooth)
+  if (smooth == "gam" && !requireNamespace("mgcv", quietly = TRUE)) {
+    stop("smooth = \"gam\" needs mgcv: install.packages(\"mgcv\"), or use ",
+         "smooth = \"spline\".", call. = FALSE)
+  }
   presence <- presence[!is.na(presence)]
   background <- background[!is.na(background)]
-  if (length(presence) < 2 || length(background) < 2) return(NA_real_)
+  rg <- range(c(presence, background))
+  one <- function(p, b, curve = FALSE) {
+    if (smooth == "none") {
+      boyce_windows(p, b, n_windows, window_width, curve)
+    } else {
+      boyce_smooth(p, b, smooth, rg, n_points, span, curve)
+    }
+  }
+  if (!details && n_boot == 0) return(one(presence, background)$index)
+
+  est <- one(presence, background, curve = TRUE)
+  out <- list(index = est$index, lower = NA_real_, upper = NA_real_,
+              curve = est$curve, boot = NULL, flat_p = est$flat_p,
+              n_presence = length(presence),
+              n_background = length(background), smooth = smooth,
+              conf = conf, n_boot = n_boot)
+  if (n_boot > 0 && !is.na(est$index)) {
+    bs <- with_seed(seed, lapply(seq_len(n_boot), function(i) {
+      one(sample(presence, replace = TRUE),
+          sample(background, replace = TRUE), curve = smooth != "none")
+    }))
+    out$boot <- vapply(bs, `[[`, numeric(1), "index")
+    a <- (1 - conf) / 2
+    q <- stats::quantile(out$boot, c(a, 1 - a), na.rm = TRUE, names = FALSE)
+    out$lower <- q[1]
+    out$upper <- q[2]
+    if (smooth != "none") {
+      pe <- vapply(bs, function(z) z$curve$pe, numeric(nrow(out$curve)))
+      out$curve$pe_lower <- apply(pe, 1, stats::quantile, a, na.rm = TRUE,
+                                  names = FALSE)
+      out$curve$pe_upper <- apply(pe, 1, stats::quantile, 1 - a,
+                                  na.rm = TRUE, names = FALSE)
+    }
+  }
+  structure(out, class = "boyce_index")
+}
+
+# Moving-window estimator (internal); reproduces ecospat.boyce()
+boyce_windows <- function(presence, background, n_windows, window_width,
+                          curve = FALSE) {
+  na <- list(index = NA_real_, curve = data.frame(prediction = numeric(0),
+                                                  pe = numeric(0)),
+             flat_p = NA_real_)
+  if (length(presence) < 2 || length(background) < 2) return(na)
   lo <- min(background, presence)
   hi <- max(background, presence)
   w <- (max(background) - min(background)) * window_width
-  if (hi == lo || w <= 0 || hi - lo - w <= 0) return(NA_real_)
+  if (hi == lo || w <= 0 || hi - lo - w <= 0) return(na)
   start <- seq(from = lo, to = hi - w, by = (hi - lo - w) / n_windows)
   # reproduces ecospat exactly: the last window start is shifted by +1
   # (an ecospat "trick" for closed intervals that in effect drops it)
@@ -173,15 +291,250 @@ boyce_index <- function(presence, background, n_windows = 100,
   }
   # p > 0, e = 0 gives Inf (kept); 0/0 = NaN
   ratio <- round(share(presence) / share(background), 10)
+  if (curve) {
+    ok <- is.finite(ratio)
+    na$curve <- data.frame(prediction = (start + w / 2)[ok], pe = ratio[ok])
+  }
   keep <- which(!is.nan(ratio))
   ratio <- ratio[keep]
   start <- start[keep]
-  if (length(ratio) < 2) return(NA_real_)
+  if (length(ratio) < 2) return(na)
   # drop successive duplicated ratios (flat stretches), exactly as ecospat
   r <- which(ratio != c(ratio[-1], TRUE))
-  if (length(r) < 2) return(NA_real_)
+  if (length(r) < 2) return(na)
   out <- suppressWarnings(stats::cor(ratio[r], start[r], method = "spearman"))
-  if (is.na(out)) NA_real_ else out
+  na$index <- if (is.na(out)) NA_real_ else out
+  na
+}
+
+# Smoothed estimator (internal, Liu et al. 2024): P(presence | prediction)
+# modelled from all points; its odds times n0/n1 is the P/E ratio. `rg` is
+# the range of the original predictions (kept fixed in the bootstrap).
+boyce_smooth <- function(presence, background, method, rg, n_points = 501,
+                         span = 0.75, curve = FALSE) {
+  grid <- seq(0, 1, length.out = n_points)
+  na <- list(index = NA_real_, curve = data.frame(
+    prediction = rg[1] + grid * diff(rg), pe = NA_real_), flat_p = NA_real_)
+  n1 <- length(presence)
+  n0 <- length(background)
+  if (n1 < 2 || n0 < 2 || diff(rg) <= 0) return(na)
+  x <- (c(presence, background) - rg[1]) / diff(rg)
+  y <- rep(c(1, 0), c(n1, n0))
+  if (length(unique(x)) < 4) return(na)
+  dev_null <- -2 * (n1 * log(n1 / (n1 + n0)) + n0 * log(n0 / (n1 + n0)))
+  if (method == "spline") {
+    f <- pspline_logit(x, y)
+    if (is.null(f)) return(na)
+    eta <- drop(bspline_basis(grid) %*% f$beta)
+    dev <- f$deviance
+    edf <- f$edf
+  } else if (method == "gam") {
+    d <- data.frame(x = x, y = y)
+    m <- tryCatch(suppressWarnings(mgcv::gam(
+      y ~ s(x, k = 10, bs = "tp"), family = stats::binomial(), data = d)),
+      error = function(e) NULL)
+    if (is.null(m)) return(na)
+    eta <- as.vector(stats::predict(m, data.frame(x = grid)))
+    dev <- m$deviance
+    edf <- sum(m$edf)
+  } else {
+    m <- tryCatch(suppressWarnings(stats::loess(
+      y ~ x, span = span, degree = 2,
+      control = stats::loess.control(surface = "direct"))),
+      error = function(e) NULL)
+    if (is.null(m)) return(na)
+    p <- as.vector(stats::predict(m, data.frame(x = grid)))
+    p <- pmin(pmax(p, 1e-9), 1 - 1e-9)
+    eta <- stats::qlogis(p)
+    pf <- pmin(pmax(stats::fitted(m), 1e-9), 1 - 1e-9)
+    dev <- -2 * sum(y * log(pf) + (1 - y) * log(1 - pf))
+    edf <- m$enp
+  }
+  idx <- suppressWarnings(stats::cor(eta, grid, method = "spearman"))
+  na$index <- if (is.na(idx)) NA_real_ else idx
+  if (curve) na$curve$pe <- exp(eta) * n0 / n1
+  df <- max(edf - 1, 1)
+  na$flat_p <- stats::pchisq(max(dev_null - dev, 0), df, lower.tail = FALSE)
+  na
+}
+
+# Cubic B-spline basis on [0, 1] with k functions (internal; Eilers and
+# Marx 1996, differences of truncated powers)
+bspline_basis <- function(x, k = 10, deg = 3) {
+  ndx <- k - deg
+  dx <- 1 / ndx
+  knots <- seq(-deg * dx, 1 + deg * dx, by = dx)
+  tp <- outer(x, knots, function(x, t) (x - t)^deg * (x >= t))
+  n <- length(knots)
+  d <- diff(diag(n), differences = deg + 1) / (gamma(deg + 1) * dx^deg)
+  b <- (-1)^(deg + 1) * tp %*% t(d)
+  b[, seq_len(k), drop = FALSE]
+}
+
+# Penalised logistic regression spline (P-spline), smoothing parameter
+# chosen by UBRE over a grid (internal)
+pspline_logit <- function(x, y, k = 10) {
+  b <- bspline_basis(x, k)
+  dd <- diff(diag(k), differences = 2)
+  pen <- crossprod(dd)
+  fit <- function(lam) {
+    eta <- rep(stats::qlogis(mean(y)), length(y))
+    for (it in 1:100) {
+      mu <- stats::plogis(eta)
+      w <- pmax(mu * (1 - mu), 1e-10)
+      z <- eta + (y - mu) / w
+      beta <- solve(crossprod(b, b * w) + lam * pen, crossprod(b, w * z))
+      new <- drop(b %*% beta)
+      done <- max(abs(new - eta)) < 1e-8
+      eta <- new
+      if (done) break
+    }
+    mu <- pmin(pmax(stats::plogis(eta), 1e-12), 1 - 1e-12)
+    w <- mu * (1 - mu)
+    bwb <- crossprod(b, b * w)
+    edf <- sum(diag(solve(bwb + lam * pen, bwb)))
+    dev <- -2 * sum(y * log(mu) + (1 - y) * log(1 - mu))
+    list(beta = beta, deviance = dev, edf = edf,
+         ubre = dev / length(y) + 2 * edf / length(y) - 1)
+  }
+  best <- NULL
+  for (l in 10^seq(-2, 8, by = 0.5)) {
+    f <- tryCatch(fit(l), error = function(e) NULL)
+    if (!is.null(f) && is.finite(f$ubre) &&
+        (is.null(best) || f$ubre < best$ubre)) best <- f
+  }
+  best
+}
+
+#' @export
+print.boyce_index <- function(x, digits = 3, ...) {
+  est <- switch(x$smooth, none = "moving window",
+                spline = "penalised regression spline",
+                gam = "thin plate regression spline (mgcv)",
+                loess = "loess")
+  f <- function(v) formatC(v, digits = digits, format = "f")
+  cat("Boyce index: ", f(x$index), sep = "")
+  if (!is.na(x$lower)) {
+    cat(" (", round(100 * x$conf), "% bootstrap interval ", f(x$lower),
+        " to ", f(x$upper), ")", sep = "")
+  }
+  cat("\nP/E curve: ", est, "; ", x$n_presence, " presences, ",
+      x$n_background, " background points\n", sep = "")
+  cat("\nIN SHORT\n")
+  say <- function(txt) cat(strwrap(txt, width = 76, initial = "- ",
+                                   exdent = 2), sep = "\n")
+  flat <- !is.na(x$flat_p) && x$flat_p > 0.05
+  zero_in <- !is.na(x$lower) && x$lower <= 0 && x$upper >= 0
+  if (is.na(x$index)) {
+    say("The index cannot be computed (too few points or no range of predictions).")
+  } else if (flat) {
+    say(paste0("The P/E curve is not distinguishable from flat: presences ",
+               "are about as frequent at every predicted value, so the ",
+               "model is not shown to be better than random. A smoothed ",
+               "index of a flat curve can be anywhere between -1 and 1; ",
+               "do not read ", f(x$index), " as a result."))
+  } else if (x$index < 0 && !zero_in) {
+    say("Presences become rarer as the predicted suitability increases: the model runs against the data.")
+  } else if (zero_in) {
+    say("The interval includes 0: the model is not shown to be better than random.")
+  } else {
+    say(if (x$index >= 0.9) {
+      "Presences become steadily more frequent as the predicted suitability increases."
+    } else if (x$index >= 0.5) {
+      "Presences become more frequent as the predicted suitability increases, with some reversals."
+    } else {
+      "Presences show only a weak tendency to become more frequent as the predicted suitability increases."
+    })
+  }
+  if (!is.na(x$lower) && x$upper - x$lower > 0.5) {
+    say("The bootstrap interval is wide: the index is uncertain with these data.")
+  }
+  if (x$smooth == "none" && x$n_presence < 50) {
+    say(paste0("Fewer than 50 presences: the moving-window index tends to ",
+               "be underestimated (Liu et al. 2024); a smoothed estimate ",
+               "(smooth = \"spline\") is more stable."))
+  }
+  cat("", strwrap(paste0(
+    "The P/E ratio is the share of presences divided by the share of ",
+    "background points at a predicted value; the index is its Spearman ",
+    "correlation with the prediction (1 = P/E rises steadily, 0 = random). ",
+    "The wording \"steadily\" (index >= 0.9), \"with some reversals\" ",
+    "(>= 0.5) and \"weak\" (below 0.5) is a rule of thumb.", if (!is.na(x$flat_p)) paste0(
+      " Flat curve: likelihood-ratio test of the smooth against a constant, ",
+      "p = ", formatC(x$flat_p, digits = 2, format = "g"), ".")),
+    width = 78), sep = "\n")
+  invisible(x)
+}
+
+#' Plot the P/E curve of the Boyce index
+#'
+#' The predicted-to-expected (P/E) ratio against the predicted value, as
+#' estimated by [boyce_index()]: the moving-window ratios, or the smoothed
+#' curve with its bootstrap band (on a log scale, as the smoothed ratio
+#' spans orders of magnitude). A ratio above 1 (dotted line) means presences
+#' are more frequent there than in the background.
+#'
+#' @param x A result of [boyce_index()] with `details = TRUE` or
+#'   `n_boot > 0`.
+#' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF. The plot is also
+#'   returned.
+#' @param width,height Size of the saved plot in inches.
+#' @return A ggplot object.
+#' @references Liu, C., Newell, G., White, M., Machunter, J. (2024)
+#'   Improving the estimation of the Boyce index using statistical smoothing
+#'   methods for evaluating species distribution models with presence-only
+#'   data. *Ecography* 2025, e07218. \doi{10.1111/ecog.07218}
+#' @export
+#' @examples
+#' set.seed(1)
+#' b <- boyce_index(rbeta(30, 4, 1), runif(1000), smooth = "spline",
+#'                  details = TRUE)
+#' plot_boyce(b)
+plot_boyce <- function(x, base_size = 11, file = NULL, width = 7,
+                       height = 5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width, height))
+  }
+  if (!inherits(x, "boyce_index")) {
+    stop("`x` must come from boyce_index(..., details = TRUE).",
+         call. = FALSE)
+  }
+  ink <- "#3a3a38"
+  muted <- "#8a8a86"
+  d <- x$curve
+  sub <- paste0(
+    if (x$smooth == "none") "Moving window" else "Smoothed (" ,
+    if (x$smooth != "none") paste0(x$smooth, ")"),
+    "; ", x$n_presence, " presences, ", x$n_background,
+    " background points.\nBoyce index ", sprintf("%.2f", x$index),
+    if (!is.na(x$lower)) sprintf(" (%d%% interval %.2f to %.2f)",
+                                 round(100 * x$conf), x$lower, x$upper),
+    if ("pe_lower" %in% names(d)) "; band: bootstrap interval of the curve",
+    ".")
+  p <- ggplot2::ggplot(d, ggplot2::aes(.data$prediction, .data$pe)) +
+    ggplot2::geom_hline(yintercept = 1, colour = muted, linetype = "dotted")
+  if ("pe_lower" %in% names(d)) {
+    p <- p + ggplot2::geom_ribbon(ggplot2::aes(ymin = .data$pe_lower,
+                                               ymax = .data$pe_upper),
+                                  fill = "#9ecae1", alpha = 0.6)
+  }
+  p <- p + ggplot2::geom_line(colour = "#08519c", linewidth = 0.7) +
+    ggplot2::labs(x = "Predicted value", y = "P/E ratio",
+                  title = "Predicted-to-expected ratio", subtitle = sub) +
+    theme_enm(base_size, ink, muted)
+  # a smoothed P/E ratio is positive and spans orders of magnitude
+  if (x$smooth != "none") {
+    top <- max(c(d$pe, d$pe_upper), na.rm = TRUE)
+    p <- p + ggplot2::scale_y_log10(
+      breaks = 10^(-2:4), labels = format(10^(-2:4), scientific = FALSE,
+                                          drop0trailing = TRUE, trim = TRUE)) +
+      ggplot2::coord_cartesian(ylim = c(0.01, max(top, 2))) +
+      ggplot2::labs(y = "P/E ratio (log scale, cut at 0.01)")
+  }
+  p
 }
 
 #' Threshold at a given percentile of presence predictions

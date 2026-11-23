@@ -318,3 +318,95 @@ test_that("calibration works on tables, as criteria and in plots", {
                            one = "s")$model[1], "b")
   expect_error(calibration_curve(c(0, 1), c(0.5, 2)), "not probabilities")
 })
+
+# Smoothed Boyce index ---------------------------------------------------------
+
+# presences drawn with probability f(prediction) from uniform predictions,
+# so the true P/E curve is f / mean(f)
+draw_presences <- function(n, f) {
+  x <- runif(n * 60)
+  x[runif(length(x)) < f(x)][seq_len(n)]
+}
+rising <- function(v) plogis(8 * (v - 0.6))
+
+test_that("smoothed and moving-window Boyce agree on a large sample", {
+  set.seed(5)
+  bg <- runif(5000)
+  pres <- draw_presences(2000, rising)
+  b0 <- boyce_index(pres, bg)
+  for (m in c("spline", "loess")) {
+    expect_equal(boyce_index(pres, bg, smooth = m), b0, tolerance = 0.03)
+  }
+  # the smoothed P/E curve recovers the true one
+  b <- boyce_index(pres, bg, smooth = "spline", details = TRUE)
+  truth <- rising(b$curve$prediction) / mean(rising(runif(1e5)))
+  mid <- b$curve$prediction > 0.3            # P/E well away from 0
+  expect_lt(max(abs(b$curve$pe[mid] / truth[mid] - 1)), 0.2)
+  expect_lt(b$flat_p, 1e-6)
+})
+
+test_that("the smoothed index varies less with few presences", {
+  set.seed(6)
+  bg <- runif(3000)
+  r <- replicate(40, {
+    p <- draw_presences(20, rising)
+    c(none = boyce_index(p, bg), spline = boyce_index(p, bg, smooth = "spline"))
+  })
+  sds <- apply(r, 1, stats::sd, na.rm = TRUE)
+  expect_lt(sds[["spline"]], sds[["none"]])
+  # and the moving window underestimates it (Liu et al. 2024)
+  expect_lt(mean(r["none", ], na.rm = TRUE), mean(r["spline", ]))
+})
+
+test_that("Boyce bootstrap interval covers the estimate; curve and plot", {
+  set.seed(7)
+  bg <- runif(2000)
+  pres <- draw_presences(40, rising)
+  b <- boyce_index(pres, bg, smooth = "spline", n_boot = 50, seed = 1)
+  expect_s3_class(b, "boyce_index")
+  expect_true(b$lower <= b$index && b$index <= b$upper)
+  expect_length(b$boot, 50)
+  expect_true(all(b$curve$pe_lower <= b$curve$pe_upper))
+  expect_equal(nrow(b$curve), 501)
+  expect_identical(boyce_index(pres, bg, smooth = "spline", n_boot = 50,
+                               seed = 1)$boot, b$boot)
+  expect_output(print(b), "IN SHORT")
+  b0 <- boyce_index(pres, bg, n_boot = 50, seed = 1)
+  expect_equal(b0$index, boyce_index(pres, bg))     # default unchanged
+  expect_true(b0$lower <= b0$index && b0$index <= b0$upper)
+  expect_s3_class(plot_boyce(b), "ggplot")
+  expect_s3_class(plot_boyce(b0), "ggplot")
+  f <- tempfile(fileext = ".png")
+  plot_boyce(b, file = f)
+  expect_true(file.exists(f))
+  expect_error(plot_boyce(0.5), "details")
+})
+
+test_that("Boyce: reversed and flat models are recognised", {
+  set.seed(8)
+  bg <- runif(3000)
+  rev_p <- draw_presences(200, function(v) 1 - rising(v))
+  expect_lt(boyce_index(rev_p, bg, smooth = "spline"), -0.9)
+  flat <- boyce_index(runif(200), bg, smooth = "spline", details = TRUE)
+  expect_gt(flat$flat_p, 0.01)
+  expect_output(print(flat), "not distinguishable from flat")
+  expect_true(is.na(boyce_index(0.5, runif(10), smooth = "spline")))
+})
+
+test_that("the internal spline matches mgcv; Boyce_smooth as a metric", {
+  skip_if_not_installed("mgcv")
+  set.seed(9)
+  bg <- runif(2000)
+  pres <- draw_presences(300, rising)
+  expect_equal(boyce_index(pres, bg, smooth = "spline"),
+               boyce_index(pres, bg, smooth = "gam"), tolerance = 0.02)
+  sim <- simulate_enm_data(seed = 1)
+  tab <- extract_predictions(sim$models, sim$presence, sim$absence)
+  ev <- evaluate_models(data = tab, criteria = c(AUC = "max",
+                                                 Boyce_smooth = "max"))
+  expect_equal(ev$Boyce_smooth[ev$model == "GLM"],
+               boyce_index(tab$GLM[tab$obs == 1], tab$GLM[tab$obs == 0],
+                           smooth = "spline"))
+  expect_equal(ev$Boyce, evaluate_models(data = tab)$Boyce[
+    match(ev$model, evaluate_models(data = tab)$model)])
+})

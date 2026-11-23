@@ -47,7 +47,7 @@ best models, or axis limits; see \code{\link[=plot_selection]{plot_selection()}}
 package does not know, e.g. \code{c(fossil_AUC_deep = "max")} (\code{"max"},
 \code{"min"}, \code{"zero"} or \code{"one"}). Known: the criteria of \code{object}, AUC,
 MAE, MAEbal, bias, TSS, Boyce, calibration_slope,
-calibration_intercept, brier and any column ending in \verb{_AUC*}, \verb{_sens},
+calibration_intercept, brier, Boyce_smooth and any column ending in \verb{_AUC*}, \verb{_sens},
 \verb{_lift} (higher is better) or \verb{_area} (lower is better).}
 
 \item{file}{Optional file(s) to save the plot to. Interactive plots:

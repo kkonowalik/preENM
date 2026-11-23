@@ -39,7 +39,8 @@ direction (\code{"max"}, \code{"min"}, \code{"zero"} or \code{"one"}); see Detai
 \item{metrics}{Optional extra metrics: a named list of functions
 \verb{function(obs, pred)} returning a single number (\code{obs} is 0/1, \code{pred}
 the predicted suitability), and/or names of optional metrics
-(\code{"calibration_slope"}, \code{"calibration_intercept"}, \code{"brier"}), e.g.
+(\code{"calibration_slope"}, \code{"calibration_intercept"}, \code{"brier"},
+\code{"Boyce_smooth"}), e.g.
 \code{metrics = "brier"} to add the Brier score to the table.}
 
 \item{n_boot}{Number of bootstrap resamples (0 = no bootstrap). 500 to 1000
@@ -116,6 +117,11 @@ With background points instead of absences they compare models evaluated
 on the same background only, not absolute calibration
 (Jimenez-Valverde 2025, 2026; see \code{\link[=calibration_curve]{calibration_curve()}}). They need
 predictions on the 0-1 scale (otherwise \code{NA}).
+
+\strong{Smoothed Boyce index.} The optional metric \code{Boyce_smooth} is the Boyce
+index from a smoothed P/E curve (\code{boyce_index(smooth = "spline")}; Liu et
+al. 2024), steadier than \code{Boyce} with few presences; see
+\code{\link[=boyce_index]{boyce_index()}} for its caveats.
 
 Your own metrics are
 added with \code{metrics}, e.g.

@@ -18,7 +18,10 @@ optional_metrics <- function() {
   list(
     calibration_slope = calibration_slope_score,
     calibration_intercept = calibration_intercept_score,
-    brier = brier_score
+    brier = brier_score,
+    Boyce_smooth = function(obs, pred) {
+      boyce_index(pred[obs == 1], pred[obs == 0], smooth = "spline")
+    }
   )
 }
 
@@ -26,7 +29,8 @@ optional_metrics <- function() {
 default_directions <- c(AUC = "max", MAE = "min", MAEbal = "min",
                         bias = "zero", TSS = "max", Boyce = "max",
                         calibration_slope = "one",
-                        calibration_intercept = "zero", brier = "min")
+                        calibration_intercept = "zero", brier = "min",
+                        Boyce_smooth = "max")
 
 # Built-in metrics plus the user's (a user metric with a built-in name
 # replaces it) (internal)

@@ -42,7 +42,8 @@ optimistic.}
 
 \item{metrics}{Optional extra metrics: a named list of functions
 \verb{function(obs, pred)} and/or names of optional metrics
-(\code{"calibration_slope"}, \code{"calibration_intercept"}, \code{"brier"}),
+(\code{"calibration_slope"}, \code{"calibration_intercept"}, \code{"brier"},
+\code{"Boyce_smooth"}),
 computed per run and summarised like the built-in ones (see
 \code{\link[=evaluate_models]{evaluate_models()}}).}
 }

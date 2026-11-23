@@ -27,6 +27,11 @@
 #' (Jimenez-Valverde 2025, 2026; see [calibration_curve()]). They need
 #' predictions on the 0-1 scale (otherwise `NA`).
 #'
+#' **Smoothed Boyce index.** The optional metric `Boyce_smooth` is the Boyce
+#' index from a smoothed P/E curve (`boyce_index(smooth = "spline")`; Liu et
+#' al. 2024), steadier than `Boyce` with few presences; see
+#' [boyce_index()] for its caveats.
+#'
 #' Your own metrics are
 #' added with `metrics`, e.g.
 #' `metrics = list(Brier = function(obs, pred) mean((obs - pred)^2))`, and can
@@ -51,7 +56,8 @@
 #' @param metrics Optional extra metrics: a named list of functions
 #'   `function(obs, pred)` returning a single number (`obs` is 0/1, `pred`
 #'   the predicted suitability), and/or names of optional metrics
-#'   (`"calibration_slope"`, `"calibration_intercept"`, `"brier"`), e.g.
+#'   (`"calibration_slope"`, `"calibration_intercept"`, `"brier"`,
+#'   `"Boyce_smooth"`), e.g.
 #'   `metrics = "brier"` to add the Brier score to the table.
 #' @param weights Optional named vector of the relative importance of the
 #'   criteria in the compromise score (default: equal); see [pareto_rank()].

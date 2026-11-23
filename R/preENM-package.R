@@ -52,6 +52,9 @@
 #' * [evaluate_models()]: AUC, MAE and bias for one or many models, Pareto
 #'   ranking and bootstrap robustness.
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.
+#' * [calibration_curve()], [brier_decompose()], [plot_calibration()]:
+#'   calibration of the predictions (reliability diagram, calibration slope
+#'   and intercept, Brier score decomposition).
 #' * [thresholds()], [threshold_agreement()], [plot_thresholds()]: the
 #'   threshold of a prediction under several rules, and the cells on which
 #'   they agree.

@@ -62,6 +62,9 @@ of your workflow.
 \item \code{\link[=evaluate_models]{evaluate_models()}}: AUC, MAE and bias for one or many models, Pareto
 ranking and bootstrap robustness.
 \item \code{\link[=plot_pareto]{plot_pareto()}}: publication-ready AUC-MAE plot with the Pareto front.
+\item \code{\link[=calibration_curve]{calibration_curve()}}, \code{\link[=brier_decompose]{brier_decompose()}}, \code{\link[=plot_calibration]{plot_calibration()}}:
+calibration of the predictions (reliability diagram, calibration slope
+and intercept, Brier score decomposition).
 \item \code{\link[=thresholds]{thresholds()}}, \code{\link[=threshold_agreement]{threshold_agreement()}}, \code{\link[=plot_thresholds]{plot_thresholds()}}: the
 threshold of a prediction under several rules, and the cells on which
 they agree.

@@ -1,3 +1,33 @@
+# preENM 2.24.0
+
+Calibration diagnostics (Silva Filho et al. 2023, *Machine Learning* 112,
+3211-3260), completing the evaluation with discrimination, calibration and
+ranking:
+
+* `calibration_curve()`: the reliability diagram of one model or of every
+  model in an `extract_predictions()` table, with bins of equal width or
+  equal count, the observed frequency against the mean prediction of each
+  bin and binomial (Clopper-Pearson) intervals; plus the calibration slope
+  and intercept with confidence intervals. The printout says in plain words
+  whether a model is over- or under-confident and whether its predictions
+  are too high or too low on average, and says when the slope is not
+  different from 0, so calibration cannot be judged.
+* `brier_decompose()`: the Brier score split into reliability, resolution
+  and uncertainty, with the two within-bin terms of Stephenson et al.
+  (2008) that make the sum exact. `brier_score()`: the Brier score.
+* `plot_calibration()`: the reliability diagram with the 1:1 line, one
+  panel per model; `file` saves it.
+* `evaluate_models()`, `evaluate_cv()` and `null_model_test()` accept
+  `calibration_slope`, `calibration_intercept` and `brier` as optional
+  metrics, computed when named in `criteria` or in `metrics` (e.g.
+  `metrics = "brier"`), so they can be Pareto criteria.
+* New criterion direction `"one"` (closer to 1 is better), for the
+  calibration slope; also in `select_models()`, `pareto_rank(one = )` and
+  the plots (dotted reference line at 1).
+* The help pages note that with background instead of absences these
+  values compare models evaluated on the same background only
+  (Jimenez-Valverde 2025, 2026).
+
 # preENM 2.23.0
 
 Thresholds under several rules (Hellegers et al. 2025, *Diversity and

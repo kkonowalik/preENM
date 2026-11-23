@@ -47,6 +47,7 @@ step can be used on its own.
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
+| After | [14](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
 | After | [14](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
 | After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
@@ -1032,7 +1033,8 @@ AUC and still be badly calibrated, and MAE reveals this.
 On top of this, the package offers:
 
 - **any metrics you choose:** AUC vs MAE by default, plus TSS, the
-  continuous Boyce index, bias or your own metrics;
+  continuous Boyce index, bias, the calibration slope and intercept, the
+  Brier score or your own metrics;
 - **Pareto-front selection** with a tolerance for ties, or conventional
   **minimum values**;
 - **bootstrap** confidence intervals and the probability that each model is on
@@ -1040,6 +1042,65 @@ On top of this, the package offers:
 - **spatial block cross-validation** across folds and background sets;
 - **temporal validation** of hindcasts against fossil or other dated records;
 - ready-to-publish `ggplot2` figures.
+
+#### Calibration: can the predictions be read as probabilities?
+
+Discrimination (AUC, TSS, Boyce) only asks whether presences get higher
+predictions than absences; calibration asks whether a prediction of 0.3
+means the species is found at about 30% of such places. MAE is one answer;
+the machine-learning literature has since formalised the question into a
+standard toolkit (Silva Filho et al. 2023, *Machine Learning* 112,
+3211-3260), which `calibration_curve()` implements:
+
+```r
+tab <- extract_predictions(models, presence, absence)
+cc <- calibration_curve(tab)                 # every model; bins = 10
+cc                                           # over- or under-confident?
+plot_calibration(cc, file = "calibration.pdf")
+brier_decompose(tab$obs, tab$GLM)            # reliability, resolution, uncertainty
+```
+
+![Reliability diagrams of seven models](man/figures/calibration.png)
+
+- **Reliability diagram**: the predictions are cut into bins of equal width
+  (or, with `binning = "count"`, equal numbers of points); for each bin the
+  observed frequency of presences is plotted against the *mean prediction*
+  of the bin, with a binomial confidence interval. Points on the dashed 1:1
+  line mean good calibration.
+- **Calibration slope**: the slope of a logistic regression of the
+  observations on the logit of the predictions. 1 is calibrated; below 1 the
+  model is *over-confident* (too extreme: high predictions too high, low
+  ones too low); above 1 *under-confident* (too moderate).
+- **Calibration intercept**: the intercept of the same regression with the
+  slope fixed at 1. 0 is calibrated; above 0 the predictions are too low on
+  average, below 0 too high.
+- **Brier score** and its decomposition: Brier = reliability - resolution +
+  uncertainty, plus two small within-bin terms that make it exact with
+  binned predictions (Stephenson et al. 2008). Lower reliability (calibration
+  loss) and higher resolution are better; uncertainty is the same for every
+  model.
+
+The three can be **Pareto criteria** next to AUC and MAE, which gives the
+evaluation all three sides, discrimination, calibration and ranking:
+
+```r
+evaluate_models(data = tab, criteria = c(AUC = "max",
+                                         calibration_slope = "one"))
+evaluate_models(data = tab, metrics = "brier")   # only add the column
+```
+
+`"one"` is a direction like `"max"`, `"min"` and `"zero"`: closer to 1 is
+better.
+
+**Presence-background data.** With background points instead of true
+absences, the "observed frequency" in a bin is the share of presences among
+presences and background points. It depends on the number of background
+points and on how well they represent the environment of the study area
+(the environmental representativeness effect; Jimenez-Valverde 2025,
+*Ecology and Evolution* 15, e72573; 2026, *Biodiversity Informatics* 20,
+74-80). Then these values **compare models evaluated on the same presences
+and background**; they do not measure calibration in absolute terms.
+Predictions must be on the 0-1 scale (e.g. Maxent cloglog, not raw output).
 
 #### Thresholds: how much does the mapped range depend on the rule?
 

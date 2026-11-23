@@ -56,6 +56,8 @@ the predictors.
 \item \code{\link[=fold_report]{fold_report()}}, \code{\link[=plot_folds]{plot_folds()}}, \code{\link[=environmental_folds]{environmental_folds()}},
 \code{\link[=spatial_sorting_bias]{spatial_sorting_bias()}}: audit of cross-validation folds for leakage,
 spatial and environmental separation and spatial sorting bias.
+\item \code{\link[=ensemble_models]{ensemble_models()}}, \code{\link[=plot_ensemble]{plot_ensemble()}}: ensemble of the selected
+models and the disagreement between them.
 \item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
 records are collected?
 \item \code{\link[=null_occurrences]{null_occurrences()}}, \code{\link[=transfer_bias_test]{transfer_bias_test()}}, \code{\link[=environment_shift]{environment_shift()}}:

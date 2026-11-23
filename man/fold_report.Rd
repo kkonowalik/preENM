@@ -74,7 +74,7 @@ nearest training record, compared with the block size and with the
 typical distance between neighbouring records. Folds whose test records
 are as close to training records as records are to each other are not
 spatially separated (as in random cross-validation), so spatial
-autocorrelation makes their metrics optimistic (Yoo and Koo 2024;
+autocorrelation makes their metrics optimistic (Yoo and Koo 2025;
 Koldasbayeva and Zaytsev 2025).
 \item \strong{Environmental separation} (with \code{env}): the overlap of the
 distribution of each predictor between training and testing records
@@ -104,7 +104,7 @@ Stock, A., Gregr, E.J., Chan, K.M.A. (2023) Data leakage
 jeopardizes ecological applications of machine learning. \emph{Nature
 Ecology & Evolution} 7, 1743-1745. \doi{10.1038/s41559-023-02162-1}
 
-Yoo, M., Koo, H. (2024) Exploring the impact of spatial autocorrelation
+Yoo, M., Koo, H. (2025) Exploring the impact of spatial autocorrelation
 on optimistic bias in cross-validation and assessing the effectiveness
 of spatial cross-validation. \emph{Cartography and Geographic Information
 Science} 52, 596-609. \doi{10.1080/15230406.2024.2422593}

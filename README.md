@@ -1418,7 +1418,7 @@ plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
   neighbouring records. Folds whose test records are as close to training
   records as records are to each other behave like random cross-validation,
   and spatial autocorrelation makes their metrics optimistic (Yoo and Koo
-  2024, *Cartography and Geographic Information Science* 52, 596-609;
+  2025, *Cartography and Geographic Information Science* 52, 596-609;
   Koldasbayeva and Zaytsev 2025, *Ecological Informatics* 92, 103521).
 - **Environmental separation** (with `env`): the overlap of each predictor's
   distribution between training and testing records, and the share of test

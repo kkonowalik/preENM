@@ -1,7 +1,7 @@
 # preENM 2.26.0
 
 Auditing cross-validation folds (Stock et al. 2023, *Nature Ecology &
-Evolution* 7, 1743-1745; Yoo and Koo 2024; Koldasbayeva and Zaytsev 2025;
+Evolution* 7, 1743-1745; Yoo and Koo 2025; Koldasbayeva and Zaytsev 2025;
 Hijmans 2012, *Ecology* 93, 679-688):
 
 * `fold_report()`: checks a fold assignment for leakage (records with the

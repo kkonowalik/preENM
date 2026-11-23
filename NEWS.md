@@ -11,6 +11,9 @@ The manual is reordered to follow the workflow:
 * The overview table follows the order of the manual, and every internal
   link is checked (one link to "Choosing which metrics to compare" was
   broken).
+* A test of `ensemble_models()` compared file paths literally and failed on
+  macOS, where temporary files lie under `/private/var`; it now compares
+  normalised paths.
 
 # preENM 2.27.0
 

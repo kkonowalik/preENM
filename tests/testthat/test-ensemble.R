@@ -99,7 +99,8 @@ test_that("files on disk, filename and plot", {
   out <- tempfile(fileext = ".tif")
   e <- ensemble_models(dir, method = "mean", filename = out)
   expect_true(file.exists(out))
-  expect_equal(terra::sources(e$raster), out)
+  # macOS resolves /var to /private/var: compare normalised paths
+  expect_equal(normalizePath(terra::sources(e$raster)), normalizePath(out))
   expect_equal(names(terra::rast(out)), c("ensemble", "sd", "cv"))
   expect_equal(sort(e$models), c("A", "B", "C", "D"))
   expect_true(is.list(plot_ensemble(e)))

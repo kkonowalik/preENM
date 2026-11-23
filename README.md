@@ -944,6 +944,14 @@ too, recording bias along a layer looks like a response (use thinned
 records), and a layer that is one gradient across the whole area cannot be
 told apart from geography.
 
+**With cross-validation, run it within the folds.** The test uses the
+records, so dropping layers because of it is feature selection on the
+response. If the models are later cross-validated, selection on all records
+lets the test records influence the models, a common form of data leakage
+(Stock et al. 2023, Table 1): run it on the training records of each fold.
+Collinearity screening with `select_variables()` does not use the records
+and can be done once.
+
 **Inside the models, with any software.** `random_variables()` writes
 random layers to add to the predictors. Each takes the values of one real
 layer (same distribution, same empty cells) and arranges them in smooth
@@ -1424,6 +1432,16 @@ plot_folds(a, file = "folds.pdf")        # map, leaking records crossed
   distribution between training and testing records, and the share of test
   records outside the training range (extrapolation).
 - **Spatial sorting bias** (with `occ`): see below.
+- **Time** (with `time`, e.g. the year of each record): the share of
+  training records later than the test records. A model to be projected
+  forward in time should be tested on records later than those it was
+  trained on (folds ordered in time; Koldasbayeva and Zaytsev 2025). For a
+  model of one period this does not matter, so it is reported, not called
+  leakage.
+- **Suspect predictors** (with `env`): layers named like coordinates or
+  time (`lon`, `lat`, `x`, `y`, `year`, `doy`, ...), which let a model learn
+  where and when records were made rather than the response to the
+  environment (Stock et al. 2023, Table 1). Only the names are checked.
 
 Give `evaluate_cv()` the coordinate columns and it audits the folds itself,
 prints the audit with the metrics and **warns when leakage is found**:

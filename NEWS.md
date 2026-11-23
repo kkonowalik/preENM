@@ -1,3 +1,23 @@
+# preENM 2.26.1
+
+Completing the audit against Table 1 of Stock et al. (2023):
+
+* `fold_report()` gains `time`: the share of training records dated after
+  the earliest test record, per fold. For a model to be projected forward
+  in time, folds should be ordered in time; for a model of one period it
+  does not matter, so it is reported, not called leakage.
+  `evaluate_cv(time = )` passes a column of dates or years to the audit.
+* `fold_report(env = )` names predictors that look like coordinates or
+  time (`lon`, `lat`, `x`, `y`, `year`, `doy`, ...), which let a model
+  learn where and when records were made rather than the response to the
+  environment. Only the names are checked.
+* `variable_relevance()` and the manual say that, when models are
+  cross-validated, the test should be run on the training records of each
+  fold: selecting predictors on all records is feature selection on the
+  response before cross-validation, a form of data leakage.
+* The year of Yoo and Koo is 2025 (*Cartography and Geographic Information
+  Science* 52, 596-609), not 2024.
+
 # preENM 2.26.0
 
 Auditing cross-validation folds (Stock et al. 2023, *Nature Ecology &

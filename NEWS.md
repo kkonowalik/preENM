@@ -1,3 +1,23 @@
+# preENM 2.23.0
+
+Thresholds under several rules (Hellegers et al. 2025, *Diversity and
+Distributions* 31, e70019; Yu et al. 2024, *Ecology and Evolution* 14,
+e11208):
+
+* `thresholds()`: the threshold of a continuous prediction under nine
+  rules (maxSSS, maxTSS, equal sensitivity and specificity, maxMCC, maxF,
+  prevalence, fixed sensitivity, p10 and the mutation point of the P/E
+  curve found by threshold regression, BTQR), with sensitivity,
+  specificity, TSS, MCC, F and the predicted-suitable share of each. Takes two vectors or the table of
+  `extract_predictions()` for several models at once; `rules` restricts the
+  set. The printout says how much the mapped range varies between the most
+  and the least inclusive rule.
+* `threshold_agreement()`: for a prediction raster, the number of rules
+  that call each cell suitable, and the area suitable under all rules,
+  under most and under at least one.
+* `plot_thresholds()`: the predicted-suitable share under each rule, or the
+  map of the agreement.
+
 # preENM 2.22.1
 
 * `plot_niche_coverage()`: the subtitle of the map is shorter and wrapped,

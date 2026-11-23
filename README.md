@@ -47,6 +47,7 @@ step can be used on its own.
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | Before | [13](#13-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
+| After | [14](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
 | After | [18](#18-full-workflow-spatial-cross-validation-fossil-validation-selection) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
@@ -1040,6 +1041,50 @@ On top of this, the package offers:
 - **spatial block cross-validation** across folds and background sets;
 - **temporal validation** of hindcasts against fossil or other dated records;
 - ready-to-publish `ggplot2` figures.
+
+#### Thresholds: how much does the mapped range depend on the rule?
+
+A binary map needs a threshold, and the rules for choosing it disagree
+enough to change the mapped range considerably, so report several together
+(Hellegers et al. 2025, *Diversity and Distributions* 31, e70019) or choose
+the rule by the goal of the study: rules that minimise underprediction
+(maxTSS, DSS) suit e.g. finding where invasive species may establish, rules
+that penalise overprediction (MCC, F) suit extinction-risk assessments. `thresholds()` takes the
+predictions at presence and at absence/background points (two vectors, or
+the table of `extract_predictions()` for several models at once) and gives,
+for each rule, the threshold, sensitivity, specificity, TSS and the
+predicted-suitable share (the share of absence/background points at or
+above the threshold; with background that represents the study area, the
+share of the area mapped as suitable):
+
+```r
+tab <- extract_predictions(models, presence, background)
+th <- thresholds(tab)                          # all rules, every model
+th                                             # how much the mapped range varies
+plot_thresholds(th, file = "thresholds.pdf")
+ag <- threshold_agreement(models[["GLM"]], th, model = "GLM")
+ag                                             # area suitable under all / most / any rule
+terra::writeRaster(ag$count, "GLM_rules_suitable.tif")
+```
+
+![Share of the background mapped as suitable under each rule](man/figures/thresholds.png)
+
+| Rule | Threshold |
+|---|---|
+| `maxSSS`, `maxTSS` | maximum of sensitivity + specificity (the same criterion under two names; Liu et al. 2013 recommend it for presence-background data) |
+| `equal_ss` | sensitivity equal to specificity (DSS) |
+| `maxMCC`, `maxF` | maximum of Matthews' correlation coefficient or of the F-measure; they penalise overprediction and give smaller ranges (in 1671 European plants the median range under maxTSS was 3.6 and 9.2 times that under MCC and F; Hellegers et al. 2025); need true or pseudo-absences |
+| `prevalence` | predicted prevalence equal to the observed one, or to a `prevalence` you give |
+| `fixed_sens` | keeps at least `sensitivity` of the presences (default 0.95) |
+| `p10` | 10th percentile of the presence predictions (about a fixed sensitivity of 0.90) |
+| `mutation_point` | the break of Boyce's predicted-to-expected curve (100 classes) found by threshold regression (BTQR, Yu et al. 2024); needs no absences, usually strict |
+
+The printout says how many times larger the area of the most inclusive rule
+is than that of the least inclusive one. `threshold_agreement()` counts, for
+every cell of a prediction raster, the rules that call it suitable: the
+cells suitable under all rules are the robust core of the range, those
+suitable under at least one its widest extent. Restrict the set with
+`rules`, e.g. `thresholds(tab, rules = c("maxSSS", "p10"))`.
 
 ### 15. Quick start: model selection with example data
 

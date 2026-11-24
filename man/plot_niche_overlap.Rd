@@ -7,6 +7,8 @@
 plot_niche_overlap(
   x,
   pair = 1,
+  limits = "available",
+  margin = 0.1,
   base_size = 11,
   file = NULL,
   width = 7.5,
@@ -17,6 +19,17 @@ plot_niche_overlap(
 \item{x}{A result of \code{\link[=niche_overlap]{niche_overlap()}}.}
 
 \item{pair}{Which pair of groups (row of \code{x$pairs}).}
+
+\item{limits}{The part of the space shown: \code{"available"} (default, all
+environments available to either group), \code{"niches"} (zoom to the
+occupied envelopes of the pair, for niches much narrower than the
+available environment), or \code{c(xmin, xmax, ymin, ymax)} in axis units
+(e.g. to show several pairs or analyses on the same scale).}
+
+\item{margin}{Space added around the \code{"available"} or \code{"niches"}
+window, as a share of its width and height (not beyond the grid of
+the densities, which ends at the most extreme record or background
+point).}
 
 \item{base_size}{Base font size.}
 

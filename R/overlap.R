@@ -92,6 +92,15 @@
 #'   records (Lo Parrino et al. 2023); with 0 the kernel tails make nearly
 #'   the whole space "occupied". D, I and breadth use the full densities,
 #'   as ecospat does by default.
+#' @param truncate Also compute D, I and breadth from densities set to 0
+#'   outside the occupied envelope (`marginal_records`), as ecospat does
+#'   with `th.sp > 0`. Default `FALSE`: in simulations with known overlap
+#'   (uniform niches in a uniform environment; 100 replicates of 20, 50
+#'   and 200 records per group), truncation lowered D in every case, e.g.
+#'   for a true D of 0.5 a mean of 0.40 instead of 0.48 with 200 records
+#'   and 0.32 instead of 0.46 with 20, and raised its error; it only
+#'   brought D of fully separate niches from 0.007 to exactly 0. The
+#'   equivalency and similarity tests use the same choice.
 #' @param marginal_env Share of the rarest available environments ignored
 #'   in the niche dynamics (0 = none; 0.25 = above the 25th percentile).
 #' @param n_rep Number of replicates of each test (0 = no tests).
@@ -155,8 +164,8 @@
 niche_overlap <- function(records, env, group = "group", background = NULL,
                           space = c("pca", "raw"), vars = NULL,
                           log_vars = NULL, grid = 100, correct = TRUE,
-                          marginal_records = 0.05, marginal_env = 0,
-                          n_rep = 100, tests = c("equivalency", "similarity"),
+                          marginal_records = 0.05, truncate = FALSE,
+                          marginal_env = 0, n_rep = 100, tests = c("equivalency", "similarity"),
                           n_background = 10000, predictions = NULL,
                           seed = NULL, coords = NULL, crs = "EPSG:4326") {
   space <- match.arg(space)
@@ -203,7 +212,8 @@ niche_overlap <- function(records, env, group = "group", background = NULL,
   names(S_occ) <- names(S_bg) <- groups
   ext <- range_ext(c(S_occ, S_bg))
   dens <- lapply(groups, function(g) {
-    group_density(S_occ[[g]], S_bg[[g]], ext, grid, marginal_records)
+    group_density(S_occ[[g]], S_bg[[g]], ext, grid, marginal_records,
+                  truncate)
   })
   names(dens) <- groups
 
@@ -226,7 +236,7 @@ niche_overlap <- function(records, env, group = "group", background = NULL,
         nd <- with_seed(if (is.null(seed)) NULL else seed + 1,
                         equivalency_null(S_occ[[pr[1]]], S_occ[[pr[2]]], a, b,
                                          ext, grid, marginal_records, correct,
-                                         n_rep))
+                                         n_rep, truncate))
         null[[key]]$equivalency <<- nd
         row <- cbind(row, test_columns(ov[["D"]], nd[, "D"], "eq"))
       }
@@ -234,11 +244,12 @@ niche_overlap <- function(records, env, group = "group", background = NULL,
         n12 <- with_seed(if (is.null(seed)) NULL else seed + 2,
                          similarity_null(a, S_bg[[pr[2]]], nrow(S_occ[[pr[2]]]),
                                          b, ext, grid, marginal_records,
-                                         correct, n_rep))
+                                         correct, n_rep, truncate = truncate))
         n21 <- with_seed(if (is.null(seed)) NULL else seed + 3,
                          similarity_null(b, S_bg[[pr[1]]], nrow(S_occ[[pr[1]]]),
                                          a, ext, grid, marginal_records,
-                                         correct, n_rep, swap = TRUE))
+                                         correct, n_rep, swap = TRUE,
+                                         truncate = truncate))
         null[[key]]$similarity_12 <<- n12
         null[[key]]$similarity_21 <<- n21
         row <- cbind(row, test_columns(ov[["D"]], n12[, "D"], "sim12"),
@@ -267,6 +278,7 @@ niche_overlap <- function(records, env, group = "group", background = NULL,
                  space = c(sp_info, list(type = space, extent = ext)),
                  settings = list(grid = grid, correct = correct,
                                  marginal_records = marginal_records,
+                                 truncate = truncate,
                                  marginal_env = marginal_env, n_rep = n_rep,
                                  tests = tests,
                                  background = if (is.null(background))
@@ -397,22 +409,33 @@ at_points <- function(m, S, ext, grid) {
 
 # Densities of one group (internal): Z environment, z records (masked by
 # the environment), occupancy uncorrected and corrected, occupied cells
-group_density <- function(So, Sb, ext, grid, marginal_records) {
+group_density <- function(So, Sb, ext, grid, marginal_records,
+                          truncate = FALSE) {
   Zd <- kernel_grid(Sb, ext, grid)
   Zd[Zd < max(Zd) * 1e-6] <- 0
   Z <- Zd * nrow(Sb) / sum(Zd)
-  zd <- kernel_grid(So, ext, grid)
+  out <- occupancy(kernel_grid(So, ext, grid), So, Z, ext, grid,
+                   marginal_records, truncate)
+  out$Z <- Z
+  out
+}
+
+# Occupancy of records from their kernel density `zd` within the
+# environment Z (internal): the occupied envelope `w` (cells above the
+# density at the most marginal records) and, with `truncate`, the density
+# set to 0 outside it before scaling (ecospat's th.sp)
+occupancy <- function(zd, S, Z, ext, grid, marginal_records, truncate) {
   zd[Z <= 0] <- 0
-  z <- zd * nrow(So) / max(sum(zd), 1e-300)
-  z_uncor <- z / max(z)
-  zc <- ifelse(Z > 0, z / Z, 0)
-  z_cor <- zc / max(zc)
-  # occupied envelope: above the density at the most marginal records
   th <- if (marginal_records > 0) {
-    stats::quantile(at_points(zd, So, ext, grid), marginal_records,
+    stats::quantile(at_points(zd, S, ext, grid), marginal_records,
                     names = FALSE)
   } else max(zd) * 1e-3
-  list(Z = Z, z = z, z_uncor = z_uncor, z_cor = z_cor, w = zd >= th & Z > 0)
+  w <- zd >= th & Z > 0
+  if (truncate && marginal_records > 0) zd[!w] <- 0
+  z <- zd * nrow(S) / max(sum(zd), 1e-300)
+  z_uncor <- z / max(z, 1e-300)
+  zc <- ifelse(Z > 0, z / Z, 0)
+  list(z = z, z_uncor = z_uncor, z_cor = zc / max(zc, 1e-300), w = w)
 }
 
 # Schoener's D and Warren's I (corrected form) (internal)
@@ -456,13 +479,16 @@ niche_dynamics <- function(a, b, marginal_env) {
 }
 
 # Null distribution of the equivalency test (internal)
-equivalency_null <- function(S1, S2, a, b, ext, grid, mr, correct, n_rep) {
+equivalency_null <- function(S1, S2, a, b, ext, grid, mr, correct, n_rep,
+                             truncate = FALSE) {
   pool <- rbind(S1, S2)
   n1 <- nrow(S1)
   out <- t(vapply(seq_len(n_rep), function(i) {
     k <- sample.int(nrow(pool))
-    da <- redensity(pool[k[seq_len(n1)], , drop = FALSE], a, ext, grid, mr)
-    db <- redensity(pool[k[-seq_len(n1)], , drop = FALSE], b, ext, grid, mr)
+    da <- redensity(pool[k[seq_len(n1)], , drop = FALSE], a, ext, grid, mr,
+                    truncate)
+    db <- redensity(pool[k[-seq_len(n1)], , drop = FALSE], b, ext, grid, mr,
+                    truncate)
     overlap_DI(da, db, correct)
   }, numeric(2)))
   colnames(out) <- c("D", "I")
@@ -472,12 +498,12 @@ equivalency_null <- function(S1, S2, a, b, ext, grid, mr, correct, n_rep) {
 # Null distribution of the similarity test: `fixed` against random points
 # from the background of the other group (internal)
 similarity_null <- function(fixed, Sb_other, n_other, other, ext, grid, mr,
-                            correct, n_rep, swap = FALSE) {
+                            correct, n_rep, swap = FALSE, truncate = FALSE) {
   out <- t(vapply(seq_len(n_rep), function(i) {
     pts <- Sb_other[sample.int(nrow(Sb_other), n_other,
                                replace = nrow(Sb_other) < n_other), ,
                     drop = FALSE]
-    dr <- redensity(pts, other, ext, grid, mr)
+    dr <- redensity(pts, other, ext, grid, mr, truncate)
     if (swap) overlap_DI(dr, fixed, correct) else
       overlap_DI(fixed, dr, correct)
   }, numeric(2)))
@@ -487,13 +513,11 @@ similarity_null <- function(fixed, Sb_other, n_other, other, ext, grid, mr,
 
 # Occupancy of new points with the environment of an existing group
 # (internal)
-redensity <- function(S, g, ext, grid, mr) {
-  zd <- kernel_grid(S, ext, grid)
-  zd[g$Z <= 0] <- 0
-  z <- zd * nrow(S) / max(sum(zd), 1e-300)
-  z_uncor <- z / max(z)
-  zc <- ifelse(g$Z > 0, z / g$Z, 0)
-  list(Z = g$Z, z_uncor = z_uncor, z_cor = zc / max(zc))
+redensity <- function(S, g, ext, grid, mr, truncate = FALSE) {
+  out <- occupancy(kernel_grid(S, ext, grid), S, g$Z, ext, grid, mr,
+                   truncate)
+  out$Z <- g$Z
+  out
 }
 
 # Test summary columns (internal)
@@ -636,6 +660,13 @@ print.niche_overlap <- function(x, digits = 2, alpha = 0.05, ...) {
     say(paste0("Fewer than 30 records in ", paste(small, collapse = ", "),
                ": densities and tests are uncertain."))
   }
+  if (isTRUE(s$truncate)) {
+    say(paste0("D, I and breadth are computed from densities cut at the ",
+               "occupied envelope (truncate = TRUE). In simulations with ",
+               "known overlap this lowered D, by up to a third with few ",
+               "records; compare with truncate = FALSE before reading the ",
+               "grade."))
+  }
   if (s$n_rep > 0 && s$n_rep < 99) {
     say(paste0("Only ", s$n_rep, " replicates: p-values cannot be smaller ",
                "than ", f(1 / (s$n_rep + 1)), "; use 100 or more."))
@@ -656,7 +687,8 @@ print.niche_overlap <- function(x, digits = 2, alpha = 0.05, ...) {
   cat("", strwrap(paste0(
     "D = Schoener's overlap, I = Warren's (corrected) overlap of the ",
     if (s$correct) "occupancies (record density / environment density)"
-    else "record densities", "; 0 = none, 1 = identical. Grades (below 0.2 ",
+    else "record densities", if (isTRUE(s$truncate))
+      ", set to 0 outside the occupied envelope" else "", "; 0 = none, 1 = identical. Grades (below 0.2 ",
     "no or very limited, 0.2-0.4 low, 0.4-0.6 moderate, 0.6-0.8 high, above 0.8 ",
     "very high) are those suggested by Rodder and Engler (2011). breadth_B2 = Levins' ",
     "standardised breadth (0-1). Tests: equivalency p_lower small = not ",
@@ -904,6 +936,15 @@ print.overlap_scenarios <- function(x, digits = 2, ...) {
 #'
 #' @param x A result of [niche_overlap()].
 #' @param pair Which pair of groups (row of `x$pairs`).
+#' @param limits The part of the space shown: `"available"` (default, all
+#'   environments available to either group), `"niches"` (zoom to the
+#'   occupied envelopes of the pair, for niches much narrower than the
+#'   available environment), or `c(xmin, xmax, ymin, ymax)` in axis units
+#'   (e.g. to show several pairs or analyses on the same scale).
+#' @param margin Space added around the `"available"` or `"niches"`
+#'   window, as a share of its width and height (not beyond the grid of
+#'   the densities, which ends at the most extreme record or background
+#'   point).
 #' @param base_size Base font size.
 #' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
 #'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
@@ -919,13 +960,20 @@ print.overlap_scenarios <- function(x, digits = 2, ...) {
 #' pres <- sim$presence
 #' pres$group <- ifelse(pres$lon < 19, "west", "east")
 #' plot_niche_overlap(niche_overlap(pres, sim$env, n_rep = 0))
-plot_niche_overlap <- function(x, pair = 1, base_size = 11, file = NULL,
+plot_niche_overlap <- function(x, pair = 1, limits = "available",
+                               margin = 0.1, base_size = 11, file = NULL,
                                width = 7.5, height = 6) {
   if (!is.null(file)) {
     return(save_call(match.call(), parent.frame(), file, width, height))
   }
   if (!inherits(x, "niche_overlap")) {
     stop("`x` must come from niche_overlap().", call. = FALSE)
+  }
+  if (!(is.numeric(limits) && length(limits) == 4) &&
+      !(is.character(limits) && length(limits) == 1 &&
+        limits %in% c("available", "niches"))) {
+    stop("`limits` must be \"available\", \"niches\" or c(xmin, xmax, ",
+         "ymin, ymax).", call. = FALSE)
   }
   p <- x$pairs[pair, ]
   a <- x$densities[[p$group1]]
@@ -960,6 +1008,21 @@ plot_niche_overlap <- function(x, pair = 1, base_size = 11, file = NULL,
   dc <- d
   dc$z1 <- as.vector(a$z_uncor)
   dc$z2 <- as.vector(b$z_uncor)
+  # plotted window: the whole space, the niches of the pair, or given
+  lim <- if (is.numeric(limits)) limits else if (limits == "available") {
+    av <- d[d$avail > 0, , drop = FALSE]
+    c(range(av$x), range(av$y))
+  } else {
+    oc <- d[as.vector(w1 | w2), , drop = FALSE]
+    if (!nrow(oc)) oc <- d
+    c(range(oc$x), range(oc$y))
+  }
+  if (!is.numeric(limits)) {
+    dx <- diff(lim[1:2]) * margin
+    dy <- diff(lim[3:4]) * margin
+    lim <- c(max(e[1], lim[1] - dx), min(e[2], lim[2] + dx),
+             max(e[3], lim[3] - dy), min(e[4], lim[4] + dy))
+  }
   axl <- if (!is.null(x$space$variance)) {
     paste0(x$space$axes, " (", round(100 * x$space$variance, 1), "%)")
   } else x$space$axes
@@ -990,5 +1053,7 @@ plot_niche_overlap <- function(x, pair = 1, base_size = 11, file = NULL,
                     sprintf("%.2f", p$I), "; lines: 50% of the occupancy ",
                     "of ", p$group1, " (solid) and ", p$group2,
                     " (dashed).")) +
+    ggplot2::coord_cartesian(xlim = lim[1:2], ylim = lim[3:4],
+                             expand = FALSE) +
     theme_enm(base_size, "#3a3a38", "#8a8a86")
 }

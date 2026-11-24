@@ -136,3 +136,60 @@ test_that("overlap_scenarios reports robust and fragile verdicts", {
   expect_error(overlap_scenarios(rec, env, backgrounds = list(NULL)),
                "named list")
 })
+
+test_that("truncate: disjoint niches give D = 0; it lowers D of identical niches", {
+  set.seed(1)
+  Sb <- cbind(stats::runif(4000), stats::runif(4000))
+  ext <- c(0, 1, 0, 1)
+  box <- function(n, x0, x1) cbind(stats::runif(n, x0, x1),
+                                   stats::runif(n, 0.2, 0.8))
+  s1 <- box(60, 0.05, 0.35)
+  s2 <- box(60, 0.65, 0.95)
+  full <- overlap_DI(group_density(s1, Sb, ext, 80, 0.05),
+                     group_density(s2, Sb, ext, 80, 0.05), TRUE)
+  cut <- overlap_DI(group_density(s1, Sb, ext, 80, 0.05, TRUE),
+                    group_density(s2, Sb, ext, 80, 0.05, TRUE), TRUE)
+  expect_gt(full[["D"]], 0)
+  expect_equal(cut[["D"]], 0)
+  # the same distribution: truncation removes shared tails, so D falls
+  d <- replicate(20, {
+    a <- box(50, 0.2, 0.8)
+    b <- box(50, 0.2, 0.8)
+    c(overlap_DI(group_density(a, Sb, ext, 80, 0.05),
+                 group_density(b, Sb, ext, 80, 0.05), TRUE)[["D"]],
+      overlap_DI(group_density(a, Sb, ext, 80, 0.05, TRUE),
+                 group_density(b, Sb, ext, 80, 0.05, TRUE), TRUE)[["D"]])
+  })
+  expect_lt(mean(d[2, ]), mean(d[1, ]))
+  # niche_overlap() passes it on and reports it
+  sim <- simulate_enm_data(seed = 1)
+  pres <- sim$presence
+  pres$group <- ifelse(pres$lon < 19, "west", "east")
+  o0 <- niche_overlap(pres, sim$env, n_rep = 0, seed = 1)
+  o1 <- niche_overlap(pres, sim$env, n_rep = 0, seed = 1, truncate = TRUE)
+  expect_lte(o1$pairs$D, o0$pairs$D)
+  expect_equal(o1$pairs$expansion, o0$pairs$expansion)
+  expect_output(print(o1), "truncate = TRUE")
+})
+
+test_that("plot_niche_overlap() limits", {
+  sim <- simulate_enm_data(seed = 1)
+  pres <- sim$presence
+  pres$group <- ifelse(pres$lon < 19, "west", "east")
+  o <- niche_overlap(pres, sim$env, n_rep = 0, seed = 1)
+  e <- o$space$extent
+  lims <- function(p) {
+    b <- ggplot2::ggplot_build(p)$layout$panel_params[[1]]
+    c(b$x.range, b$y.range)
+  }
+  la <- lims(plot_niche_overlap(o))
+  ln <- lims(plot_niche_overlap(o, limits = "niches", margin = 0))
+  expect_lte(diff(ln[1:2]), diff(la[1:2]))
+  expect_lte(diff(ln[3:4]), diff(la[3:4]))
+  manual <- c(-0.5, 0.5, -0.4, 0.4)
+  expect_equal(lims(plot_niche_overlap(o, limits = manual)), manual)
+  expect_error(plot_niche_overlap(o, limits = "zoom"), "limits")
+  # never beyond the grid of the densities
+  lw <- lims(plot_niche_overlap(o, margin = 1))
+  expect_true(lw[1] >= e[1] - 1e-9 && lw[2] <= e[2] + 1e-9)
+})

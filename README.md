@@ -2181,7 +2181,17 @@ no <- niche_overlap(records, env, group = "cytotype",
                     n_rep = 100, seed = 1)
 no                                     # overlap, tests, in plain words
 plot_niche_overlap(no, file = "niche_overlap.pdf")
+plot_niche_overlap(no, limits = "niches")             # zoom to the two niches
+plot_niche_overlap(no, limits = c(-3, 3, -2, 2.5))    # same axes for several plots
 ```
+
+By default the plot shows all environments available to either group
+(`limits = "available"`); `limits = "niches"` zooms to the occupied
+envelopes of the pair, for niches much narrower than the available
+environment, and four numbers set the window by hand. The grid of the
+densities ends at the most extreme record or background point, so the
+available environment can look cut off at the edges of the plot: that is
+the edge of what was sampled, not of the species' niche.
 
 ![Niches of two groups in the shared PCA environmental space](man/figures/niche_overlap.png)
 
@@ -2195,7 +2205,12 @@ plot_niche_overlap(no, file = "niche_overlap.pdf")
   Engler 2011, *Global Ecology and Biogeography* 20, 915-927; the form used
   by ecospat and ENMTools), 0 = none, 1 = identical, graded with Rodder and
   Engler's classes (below 0.2 no or very limited, ..., above 0.8 very high);
-  Levins' breadth of each group.
+  Levins' breadth of each group. D, I and breadth use the full densities,
+  as ecospat does by default. `truncate = TRUE` sets the densities outside
+  the occupied envelope to 0 first (ecospat's `th.sp`); in simulations with
+  known overlap this lowered D in every case (a true D of 0.5 was
+  estimated as 0.40 instead of 0.48 with 200 records per group, 0.32
+  instead of 0.46 with 20), so it is an option, not the default.
 - **Niche dynamics** (Guisan et al. 2014, *Trends in Ecology & Evolution*
   29, 260-269): expansion, stability and unfilling of the second group
   relative to the first, within environments available to both; the

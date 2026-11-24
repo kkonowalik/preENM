@@ -1,3 +1,16 @@
+# preENM 2.33.0
+
+* `niche_overlap()`: new `truncate` option computes D, I and breadth from
+  densities set to 0 outside the occupied envelope (`marginal_records`), as
+  ecospat does with `th.sp`; the tests use the same choice. It is off by
+  default: in simulations with known overlap it lowered D in every case
+  (true D 0.5 estimated as 0.40 instead of 0.48 with 200 records per
+  group) and only brought fully separate niches from 0.007 to exactly 0.
+* `plot_niche_overlap()`: `limits = "available"` (default, all available
+  environments), `"niches"` (zoom to the occupied envelopes of the pair)
+  or `c(xmin, xmax, ymin, ymax)`, with a `margin` around the automatic
+  windows.
+
 # preENM 2.32.0
 
 Grain sensitivity (Henderson et al. 2023, *Forest Ecology and Management*

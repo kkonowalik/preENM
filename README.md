@@ -1204,7 +1204,25 @@ predictions beyond depend on how the algorithm extrapolates. With
 `occurrences` (and `background`) it says whether the curve follows the
 records along the gradient, and with `projection` how much of the projected
 area lies beyond a rising edge (compare `extrapolation_risk()` and
-`environment_shift()`). The limits are rules of thumb. Background drawn
+`environment_shift()`). The limits are rules of thumb.
+
+**Which shape is plausible?** It depends on the gradient and on how much of
+it the data cover (Austin 2002, *Ecological Modelling* 157, 101-118):
+
+| Gradient | Plausible shape |
+|---|---|
+| Direct, acting on the physiology (temperature, pH) | a bell: highest at the optimum, falling to zero beyond the tolerance; narrow or broad, skewed, with a peak or a plateau (Fiorentino et al. 2025) |
+| Resource (water, nutrients) | a rise that levels off (plateau) |
+| Covered only on one side of the niche | monotonic, **still rising at the edge**: a truncated niche, not a wrong model; the response beyond the edge is unknown (see [section 10](#10-checking-that-the-niche-is-not-truncated-by-m)) |
+| Indirect (elevation, latitude) | any shape; the curve says little about the species |
+| Any | irregular curves and U-shapes are rarely plausible: the model fits noise or follows where records happen to lie |
+
+The curve should not follow how common the values of a predictor are in the
+area (the raster's own distribution, often unimodal), but how much more often
+the species occurs at a value than that value is available. Give
+`background` so that the comparison uses the ratio of presence to background
+density; otherwise a bell of records can merely mirror a bell of available
+conditions. Background drawn
 evenly in environmental space (`sample_background(method = "envstrat")`)
 gives response curves closer to the species' true response (Broussin et al.
 2024, *Ecological Modelling* 498, 110865).

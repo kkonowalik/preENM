@@ -125,6 +125,40 @@ reflects which conditions are common. The calibrated range is the range
 of \code{calibration} (default: \code{background} and \code{occurrences}, else the
 curve itself).
 
+\strong{Reading the shapes: which curve is plausible?} There is no single
+correct shape; what to expect depends on the gradient and on how much
+of it the data cover.
+\itemize{
+\item Along a \strong{direct gradient} (one acting on the physiology, such as
+temperature or pH) a species is expected to respond with a bell: the
+highest suitability at its optimum, falling towards zero beyond its
+tolerance; narrow or broad, symmetric or skewed, with a peak or a
+plateau at the optimum (Austin 2002; Fiorentino et al. 2025).
+\item Along a \strong{resource gradient} (water, nutrients) a rise that levels off
+(a plateau) is plausible: more of the resource helps until it no longer
+limits.
+\item A \strong{monotonic} curve is plausible when the data cover only one side of
+the niche, e.g. a cold-adapted species whose warm limit lies inside the
+area but whose cold limit lies beyond it. Then it is still rising at an
+edge (\code{rising_low}/\code{rising_high}), and the response beyond that edge is
+unknown: it is a truncated niche, not a wrong model (see
+\code{\link[=niche_truncation]{niche_truncation()}}).
+\item Along an \strong{indirect gradient} (elevation, latitude), which acts through
+others, any shape can arise, and the curve says little about the
+species.
+\item \strong{Irregular} curves (several peaks, steps) and \strong{U-shapes} are
+rarely plausible; they usually mean the model fits noise or follows
+where records happen to lie (Chollet Ramampiandra et al. 2023).
+}
+
+The curve should not follow how common the values of a predictor are in
+the area (the distribution of the raster, which is often unimodal
+itself), but how much more often the species is found at a value than
+that value is available. That is why the agreement uses the ratio of
+presence to background density when \code{background} is given: without it,
+a bell-shaped density of records can simply mirror a bell-shaped
+availability of the conditions.
+
 \strong{Projection.} With \code{projection} (predictor values of the area or
 period the model is projected to: a data.frame or rasters), the share of
 it beyond each edge where the curve is still rising is reported.
@@ -155,6 +189,11 @@ D., Akimova, A. (2025) Improving species distribution models for
 climate change studies: ecological plausibility and performance
 metrics. \emph{Ecological Modelling} 508, 111207.
 \doi{10.1016/j.ecolmodel.2025.111207}
+
+Austin, M.P. (2002) Spatial prediction of species distribution: an
+interface between ecological theory and statistical modelling.
+\emph{Ecological Modelling} 157, 101-118.
+\doi{10.1016/S0304-3800(02)00205-3}
 
 Chollet Ramampiandra, E., Scheidegger, A., Wydler, J., Schuwirth, N.
 (2023) A comparison of machine learning and statistical species

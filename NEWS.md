@@ -1,3 +1,20 @@
+# preENM 2.32.0
+
+Grain sensitivity (Henderson et al. 2023, *Forest Ecology and Management*
+529, 120741; Brambilla et al. 2023, *Ecology* 105, e4224; Ferrer-Ferrando
+et al. 2025, *Ecography* e07766):
+
+* `grain_sensitivity()`: aggregates the predictor layers to a series of
+  coarser grains, on disk with GDAL and one grain at a time, and repeats
+  cell thinning, environmental thinning, the coordinate-uncertainty check
+  and the variable selection at each. It reports the records kept, the
+  share of records too uncertain for the grain, the collinear pairs and the
+  change of Spearman rho, the selected variable set and its Jaccard
+  agreement with the finest grain, and says up to which grain the selected
+  set stays the same. Ties for the top rank are flagged, with the agreement
+  of all passing sets as the safer measure there.
+* `plot_grain_sensitivity()` and `write_grain_sensitivity()`.
+
 # preENM 2.31.1
 
 * `plot_niche_overlap()` uses the ColorBrewer diverging palette RdYlBu: the

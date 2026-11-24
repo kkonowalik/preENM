@@ -36,6 +36,10 @@ sets uncorrelated in every period, scenario and region, ranked.
 \item \code{\link[=variable_relevance]{variable_relevance()}}, \code{\link[=random_variables]{random_variables()}}, \code{\link[=compare_to_random]{compare_to_random()}}:
 are the predictors more informative than random variables, before
 modelling and inside the models?
+\item \code{\link[=grain_sensitivity]{grain_sensitivity()}}, \code{\link[=plot_grain_sensitivity]{plot_grain_sensitivity()}},
+\code{\link[=write_grain_sensitivity]{write_grain_sensitivity()}}: how records kept, records too uncertain,
+correlation structure and the selected variable set change at coarser
+grains, and up to which grain the selection is stable.
 \item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell.
 \item \code{\link[=thin_environment]{thin_environment()}}, \code{\link[=plot_env_thinning]{plot_env_thinning()}}, \code{\link[=write_env_thinning]{write_env_thinning()}}:
 thinning in environmental space without truncating the niche.

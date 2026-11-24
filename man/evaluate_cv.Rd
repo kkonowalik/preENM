@@ -18,7 +18,8 @@ evaluate_cv(
   env = NULL,
   block_size = NULL,
   time = NULL,
-  audit = NULL
+  audit = NULL,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -67,6 +68,10 @@ the audit; see \code{\link[=fold_report]{fold_report()}}.}
 record, for the time check of the audit.}
 
 \item{audit}{Alternatively, a ready \code{\link[=fold_report]{fold_report()}}.}
+
+\item{rescale}{Bring the predictions of each model to the 0-1 scale
+(models on 0-100 or 0-1000 are divided by 100 or 1000, with a
+message); see \code{\link[=extract_predictions]{extract_predictions()}}.}
 }
 \value{
 An object of class \code{enm_cv}: a data.frame with one row per model,

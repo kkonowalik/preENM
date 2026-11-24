@@ -42,7 +42,7 @@ test_that("equal weights equal the unweighted mean; median and mean", {
                terra::values(em$raster[["ensemble"]]))
   v <- terra::values(s)
   expect_equal(terra::values(em$raster[["ensemble"]])[, 1], rowMeans(v))
-  emed <- ensemble_models(s)
+  emed <- ensemble_models(s, method = "median")
   expect_equal(terra::values(emed$raster[["ensemble"]])[, 1],
                apply(v, 1, stats::median))
   expect_equal(terra::values(em$raster[["sd"]])[, 1], apply(v, 1, stats::sd))
@@ -57,7 +57,9 @@ test_that("the selection is respected and dominated models are ignored", {
   s <- make_stack()
   sel <- data.frame(model = c("A", "B", "C", "D"),
                     selected = c(TRUE, TRUE, FALSE, FALSE))
-  e <- ensemble_models(s, sel)
+  # two models: the default PCAm falls back to the median
+  expect_message(e <- ensemble_models(s, sel), "median is used")
+  expect_equal(e$method, "median")
   expect_equal(e$models, c("A", "B"))
   expect_equal(sort(e$left_out), c("C", "D"))
   expect_equal(terra::values(e$raster[["ensemble"]])[, 1],
@@ -109,4 +111,25 @@ test_that("files on disk, filename and plot", {
   f <- tempfile(fileext = ".png")
   plot_ensemble(e, file = f)
   expect_true(file.exists(f))
+})
+
+test_that("PCAm is the default; models on other scales are rescaled", {
+  s <- make_stack()
+  expect_equal(ensemble_models(s)$method, "pcam")
+  # B written on 0-100, C on 0-1000: rescaled to 0-1 with a message
+  s2 <- s
+  s2[["B"]] <- s[["B"]] * 100
+  s2[["C"]] <- s[["C"]] * 1000
+  expect_message(e2 <- ensemble_models(s2, method = "mean"),
+                 "divided by 100 or 1000")
+  e1 <- ensemble_models(s, method = "mean")
+  expect_equal(terra::values(e2$raster), terra::values(e1$raster))
+  expect_equal(e2$scales$divided_by, c(1, 100, 1000, 1))
+  # without rescaling: a warning, and the values are kept
+  expect_warning(ensemble_models(s2, method = "mean", rescale = FALSE),
+                 "not on the 0-1 scale")
+  # unknown scale (negative values)
+  s3 <- s
+  s3[["D"]] <- s[["D"]] - 5
+  expect_warning(ensemble_models(s3, method = "mean"), "cannot be recognised")
 })

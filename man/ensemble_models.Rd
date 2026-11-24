@@ -7,7 +7,7 @@
 ensemble_models(
   models,
   evaluation = NULL,
-  method = c("median", "mean", "pcam", "weighted"),
+  method = c("pcam", "median", "mean", "weighted"),
   use = c("selected", "all"),
   weights = NULL,
   filename = NULL,
@@ -17,7 +17,8 @@ ensemble_models(
   pattern = "\\\\.tif{1,2}$",
   recursive = FALSE,
   seed = 1,
-  big_cells = 1e+07
+  big_cells = 1e+07,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -30,7 +31,7 @@ per model (layer names = model names), or raster files and/or folders
 \code{\link[=evaluate_models]{evaluate_models()}} (or \code{\link[=evaluate_cv]{evaluate_cv()}} passed through
 \code{\link[=select_models]{select_models()}}); its \code{model} names must match the rasters.}
 
-\item{method}{\code{"median"}, \code{"mean"}, \code{"pcam"} or \code{"weighted"}.}
+\item{method}{\code{"pcam"} (default), \code{"median"}, \code{"mean"} or \code{"weighted"}.}
 
 \item{use}{\code{"selected"} (default; the Pareto front for an
 \code{\link[=evaluate_models]{evaluate_models()}} result) or \code{"all"} models of the evaluation.}
@@ -56,6 +57,11 @@ the 0-1 scale; rules of thumb).}
 \item{big_cells}{Rasters with more cells are combined with every
 intermediate layer in temporary files (terra option \code{todisk}), so
 memory use stays bounded.}
+
+\item{rescale}{Bring every model to the 0-1 scale before combining:
+algorithms write 0-1, 0-100 or 0-1000, recognised from the largest
+value of each layer; layers on 0-100 or 0-1000 are divided by 100 or
+1000, with a message. \code{FALSE} keeps them and warns.}
 }
 \value{
 A list of class \code{enm_ensemble}: \code{raster} (a
@@ -65,8 +71,9 @@ A list of class \code{enm_ensemble}: \code{raster} (a
 and whether it was kept), \code{summary} (quantiles of \code{sd} and \code{cv}),
 \code{by_level} (mean \code{sd} per class of the ensemble prediction), \code{area}
 (area with \code{sd} above each level, km^2 and share), \code{departure} (mean
-absolute difference of each model from the ensemble) and \code{scale01}
-(whether the predictions are on the 0-1 scale).
+absolute difference of each model from the ensemble), \code{scales} (the
+recognised scale of each model and what it was divided by) and
+\code{scale01} (whether the predictions are on the 0-1 scale).
 }
 \description{
 Takes the prediction rasters of several models (from any software) and an
@@ -84,15 +91,16 @@ evaluation). Without an evaluation every supplied model is used.
 
 \strong{How they are combined} (\code{method}):
 \itemize{
-\item \code{"median"} (default): the median prediction per cell; robust to a
-single model with extreme values.
+\item \code{"pcam"} (default): the median of the half of the models closest to
+their common trend: a principal component analysis of the model
+predictions (on a sample of cells) is computed and the models with the
+highest loadings on the first component, the consensus axis, are kept
+(Thuiller 2004; Araujo et al. 2005). Zhu et al. (2021) found it the
+most reliable consensus in transfers to new areas. Needs at least three
+models; with fewer, the default falls back to the median.
+\item \code{"median"}: the median prediction per cell; robust to a single model
+with extreme values.
 \item \code{"mean"}: the unweighted mean.
-\item \code{"pcam"}: the median of the half of the models closest to their common
-trend: a principal component analysis of the model predictions (on a
-sample of cells) is computed and the models with the highest loadings
-on the first component, the consensus axis, are kept (Thuiller 2004;
-Araujo et al. 2005). Zhu et al. (2021) found it the most reliable
-consensus in transfers to new areas. Needs at least three models.
 \item \code{"weighted"}: the mean weighted by the compromise score of the
 evaluation, \code{1 - distance}, where \code{distance} is the normalised distance
 of the model to the ideal point on the evaluation criteria (as in

@@ -15,15 +15,16 @@
 #' evaluation). Without an evaluation every supplied model is used.
 #'
 #' **How they are combined** (`method`):
-#' * `"median"` (default): the median prediction per cell; robust to a
-#'   single model with extreme values.
+#' * `"pcam"` (default): the median of the half of the models closest to
+#'   their common trend: a principal component analysis of the model
+#'   predictions (on a sample of cells) is computed and the models with the
+#'   highest loadings on the first component, the consensus axis, are kept
+#'   (Thuiller 2004; Araujo et al. 2005). Zhu et al. (2021) found it the
+#'   most reliable consensus in transfers to new areas. Needs at least three
+#'   models; with fewer, the default falls back to the median.
+#' * `"median"`: the median prediction per cell; robust to a single model
+#'   with extreme values.
 #' * `"mean"`: the unweighted mean.
-#' * `"pcam"`: the median of the half of the models closest to their common
-#'   trend: a principal component analysis of the model predictions (on a
-#'   sample of cells) is computed and the models with the highest loadings
-#'   on the first component, the consensus axis, are kept (Thuiller 2004;
-#'   Araujo et al. 2005). Zhu et al. (2021) found it the most reliable
-#'   consensus in transfers to new areas. Needs at least three models.
 #' * `"weighted"`: the mean weighted by the compromise score of the
 #'   evaluation, `1 - distance`, where `distance` is the normalised distance
 #'   of the model to the ideal point on the evaluation criteria (as in
@@ -61,7 +62,11 @@
 #' @param evaluation Optional result of [select_models()] or
 #'   [evaluate_models()] (or [evaluate_cv()] passed through
 #'   [select_models()]); its `model` names must match the rasters.
-#' @param method `"median"`, `"mean"`, `"pcam"` or `"weighted"`.
+#' @param method `"pcam"` (default), `"median"`, `"mean"` or `"weighted"`.
+#' @param rescale Bring every model to the 0-1 scale before combining:
+#'   algorithms write 0-1, 0-100 or 0-1000, recognised from the largest
+#'   value of each layer; layers on 0-100 or 0-1000 are divided by 100 or
+#'   1000, with a message. `FALSE` keeps them and warns.
 #' @param use `"selected"` (default; the Pareto front for an
 #'   [evaluate_models()] result) or `"all"` models of the evaluation.
 #' @param weights Optional named weights for `method = "weighted"` (names =
@@ -85,8 +90,9 @@
 #'   and whether it was kept), `summary` (quantiles of `sd` and `cv`),
 #'   `by_level` (mean `sd` per class of the ensemble prediction), `area`
 #'   (area with `sd` above each level, km^2 and share), `departure` (mean
-#'   absolute difference of each model from the ensemble) and `scale01`
-#'   (whether the predictions are on the 0-1 scale).
+#'   absolute difference of each model from the ensemble), `scales` (the
+#'   recognised scale of each model and what it was divided by) and
+#'   `scale01` (whether the predictions are on the 0-1 scale).
 #' @references Zhu, G., Fan, J., Peterson, A.T. (2021) Cautions in weighting
 #'   individual ecological niche models in ensemble forecasting. *Ecological
 #'   Modelling* 448, 109502. \doi{10.1016/j.ecolmodel.2021.109502}
@@ -107,12 +113,13 @@
 #' ens
 #' plot_ensemble(ens)
 ensemble_models <- function(models, evaluation = NULL,
-                            method = c("median", "mean", "pcam", "weighted"),
+                            method = c("pcam", "median", "mean", "weighted"),
                             use = c("selected", "all"), weights = NULL,
                             filename = NULL, overwrite = FALSE,
                             n_sample = 1e5, levels = c(0.1, 0.2),
                             pattern = "\\.tif{1,2}$", recursive = FALSE,
-                            seed = 1, big_cells = 1e7) {
+                            seed = 1, big_cells = 1e7, rescale = TRUE) {
+  default_method <- missing(method)
   method <- match.arg(method)
   use <- match.arg(use)
   x <- ensemble_stack(models, pattern, recursive)
@@ -167,6 +174,18 @@ ensemble_models <- function(models, evaluation = NULL,
   smp <- with_seed(seed, sample_complete(x, n_sample))
   if (!nrow(smp)) stop("No cell has predictions of all models.",
                        call. = FALSE)
+  # one scale for all models (0-1, 0-100 and 0-1000 outputs)
+  h <- harmonise_scales(as.data.frame(smp), rescale, "prediction rasters")
+  div <- h$divisor[chosen]
+  if (any(div != 1)) {
+    x <- x / unname(div)
+    names(x) <- chosen
+    smp <- sweep(smp, 2, div, "/")
+  }
+  if (method == "pcam" && n < 3 && default_method) {
+    message("Fewer than three models: the median is used instead of PCAm.")
+    method <- "median"
+  }
 
   w <- NULL
   loadings <- NULL
@@ -284,6 +303,7 @@ ensemble_models <- function(models, evaluation = NULL,
   }
 
   structure(list(raster = out, models = chosen, members = members,
+                 scales = h$table,
                  left_out = left_out, method = method, weights = w,
                  loadings = loadings, summary = summ, by_level = by_level,
                  area = area, departure = departure, scale01 = scale01,

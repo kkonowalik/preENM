@@ -19,7 +19,8 @@ evaluate_models(
   na_action = c("common", "per_model"),
   boot_metrics = c("criteria", "all"),
   seed = NULL,
-  data = NULL
+  data = NULL,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -80,6 +81,12 @@ an \code{NA} in one model, which would remove those points for all models.
 With out-of-fold predictions from cross-validation (each point
 predicted by the model that did not see it), this bootstraps the pooled
 hold-out predictions.}
+
+\item{rescale}{Bring the predictions of every model to the 0-1 scale
+(models on 0-100 or 0-1000 are divided by 100 or 1000, with a
+message); see \code{\link[=extract_predictions]{extract_predictions()}}. Algorithms differ in their
+output scale, and MAE, bias, calibration and ensembles are only
+comparable on one scale.}
 }
 \value{
 An object of class \code{enm_evaluation} (a data.frame) with one row per

@@ -148,6 +148,9 @@ spatial_folds <- function(points, k = 5, block_size, occ = NULL,
 #' @param time Optional column of `data` with the date or year of each
 #'   record, for the time check of the audit.
 #' @param audit Alternatively, a ready [fold_report()].
+#' @param rescale Bring the predictions of each model to the 0-1 scale
+#'   (models on 0-100 or 0-1000 are divided by 100 or 1000, with a
+#'   message); see [extract_predictions()].
 #' @return An object of class `enm_cv`: a data.frame with one row per model,
 #'   the mean of each metric over runs, their SDs (`AUC_sd`, ...), `n_runs`
 #'   and, when available, `AUC_sd_folds` and `AUC_sd_sets`. Per-run metrics
@@ -168,7 +171,7 @@ evaluate_cv <- function(data, model = "model", fold = "fold", set = NULL,
                         obs = "obs", pred = "pred", threshold = NULL,
                         metrics = NULL, coords = NULL, crs = "EPSG:4326",
                         env = NULL, block_size = NULL, time = NULL,
-                        audit = NULL) {
+                        audit = NULL, rescale = TRUE) {
   extra <- check_extra_metrics(metrics)
   cols <- c(model, fold, set, obs, pred, threshold)
   miss <- setdiff(cols, names(data))
@@ -179,7 +182,11 @@ evaluate_cv <- function(data, model = "model", fold = "fold", set = NULL,
   if (!all(data[[obs]] %in% c(0, 1))) {
     stop("`", obs, "` must contain only 0 and 1.", call. = FALSE)
   }
-  check_prediction_scale(data[pred])
+  # scale per model (algorithms write 0-1, 0-100 or 0-1000)
+  h <- harmonise_scales(split(data[[pred]], as.character(data[[model]])),
+                        rescale)
+  div <- h$divisor[as.character(data[[model]])]
+  if (any(div != 1)) data[[pred]] <- data[[pred]] / div
   set_v <- if (is.null(set)) rep(1L, nrow(data)) else data[[set]]
   key <- interaction(data[[model]], set_v, data[[fold]], drop = TRUE,
                      lex.order = TRUE, sep = "\r")

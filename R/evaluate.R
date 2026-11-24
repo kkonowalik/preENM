@@ -66,6 +66,11 @@
 #'   (default) or `"all"` metrics (slower, mainly because of the Boyce
 #'   index).
 #' @param seed Optional random seed for reproducible bootstraps.
+#' @param rescale Bring the predictions of every model to the 0-1 scale
+#'   (models on 0-100 or 0-1000 are divided by 100 or 1000, with a
+#'   message); see [extract_predictions()]. Algorithms differ in their
+#'   output scale, and MAE, bias, calibration and ensembles are only
+#'   comparable on one scale.
 #' @param data Optionally, a table returned by [extract_predictions()]. When
 #'   supplied, `models`, `presence` and `absence` are ignored. This is also
 #'   useful when predictions were extracted with other software: supply a
@@ -124,7 +129,7 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
                             coords = NULL, crs = "EPSG:4326",
                             na_action = c("common", "per_model"),
                             boot_metrics = c("criteria", "all"),
-                            seed = NULL, data = NULL) {
+                            seed = NULL, data = NULL, rescale = TRUE) {
   na_action <- match.arg(na_action)
   boot_metrics <- match.arg(boot_metrics)
   if (is.null(data)) {
@@ -133,7 +138,11 @@ evaluate_models <- function(models = NULL, presence = NULL, absence = NULL,
            call. = FALSE)
     }
     data <- extract_predictions(models, presence, absence, coords = coords,
-                                crs = crs, na_action = na_action)
+                                crs = crs, na_action = na_action,
+                                rescale = rescale)
+  } else {
+    validate_table(data)
+    data <- rescale_table(data, rescale)
   }
   validate_table(data)
   obs <- data$obs

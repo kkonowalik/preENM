@@ -9,7 +9,8 @@ calibration_curve(
   pred = NULL,
   bins = 10,
   binning = c("width", "count"),
-  conf = 0.95
+  conf = 0.95,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -26,6 +27,10 @@ curve.}
 predictions) or \code{"count"} (equal numbers of points).}
 
 \item{conf}{Confidence level of the intervals.}
+
+\item{rescale}{For a table of several models: bring each to the 0-1
+scale (models on 0-100 or 0-1000 are divided by 100 or 1000, with a
+message); see \code{\link[=extract_predictions]{extract_predictions()}}.}
 }
 \value{
 A list of class \code{calibration_curve} with \code{bins} (one row per

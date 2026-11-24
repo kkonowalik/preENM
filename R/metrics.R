@@ -1178,6 +1178,9 @@ calibration_bins <- function(pred, bins, binning) {
 #' @param binning `"width"` (equal-width bins over the range of the
 #'   predictions) or `"count"` (equal numbers of points).
 #' @param conf Confidence level of the intervals.
+#' @param rescale For a table of several models: bring each to the 0-1
+#'   scale (models on 0-100 or 0-1000 are divided by 100 or 1000, with a
+#'   message); see [extract_predictions()].
 #' @return A list of class `calibration_curve` with `bins` (one row per
 #'   model and bin: `n`, `mean_pred`, `observed`, `lower`, `upper`) and
 #'   `summary` (one row per model: `n`, `slope`, `slope_lo`, `slope_hi`,
@@ -1214,14 +1217,15 @@ calibration_bins <- function(pred, bins, binning) {
 #' cc
 #' plot_calibration(cc)
 calibration_curve <- function(obs, pred = NULL, bins = 10,
-                              binning = c("width", "count"), conf = 0.95) {
+                              binning = c("width", "count"), conf = 0.95,
+                              rescale = TRUE) {
   binning <- match.arg(binning)
   if (!is.numeric(bins) || bins < 2) {
     stop("`bins` must be a number of at least 2.", call. = FALSE)
   }
   if (is.data.frame(obs)) {
     validate_table(obs)
-    tab <- obs
+    tab <- rescale_table(obs, rescale)
     mods <- setdiff(names(tab), "obs")
     parts <- lapply(mods, function(m) {
       calibration_one(tab$obs, tab[[m]], bins, binning, conf, m)

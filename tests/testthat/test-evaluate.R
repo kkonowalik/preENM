@@ -86,3 +86,32 @@ test_that("fronts and distances stay attached to the right model", {
   ref <- pareto_rank(as.data.frame(res)[c("model", "AUC", "MAE")])
   expect_equal(res$distance, ref$distance[match(res$model, ref$model)])
 })
+
+test_that("predictions on 0-100 and 0-1000 are rescaled per model", {
+  sim <- simulate_enm_data(seed = 1)
+  tab <- extract_predictions(sim$models, sim$presence, sim$absence)
+  big <- tab
+  big$GLM <- big$GLM * 100
+  big$GBM <- big$GBM * 1000
+  expect_message(ev <- evaluate_models(data = big), "divided by 100 or 1000")
+  ref <- evaluate_models(data = tab)
+  expect_equal(ev$MAE[match(ref$model, ev$model)], ref$MAE)
+  sc <- prediction_scales(big[-1])
+  expect_equal(sc$scale[match(c("GLM", "GBM", "BIOCLIM"), sc$model)],
+               c(100, 1000, 1))
+  expect_warning(evaluate_models(data = big, rescale = FALSE),
+                 "not on the 0-1 scale")
+  # rasters: a layer written on 0-100
+  m <- sim$models
+  m[["GLM"]] <- m[["GLM"]] * 100
+  expect_message(t2 <- extract_predictions(m, sim$presence, sim$absence),
+                 "GLM")
+  expect_equal(t2$GLM, tab$GLM)
+  # evaluate_cv: per model in long format
+  d <- data.frame(model = rep(c("a", "b"), each = 100),
+                  fold = rep(rep(1:4, each = 25), 2),
+                  obs = rep(rep(0:1, 50), 2), pred = c(runif(100),
+                                                       runif(100) * 100))
+  expect_message(cv <- evaluate_cv(d), "b (0-100", fixed = TRUE)
+  expect_lte(max(attr(cv, "runs")$MAE), 1)
+})

@@ -10,7 +10,8 @@ extract_predictions(
   absence,
   coords = NULL,
   crs = "EPSG:4326",
-  na_action = c("common", "per_model")
+  na_action = c("common", "per_model"),
+  rescale = TRUE
 )
 }
 \arguments{
@@ -33,11 +34,20 @@ when points are tabular. Detected automatically if \code{NULL}.}
 model, so every model is evaluated on exactly the same points (a fair
 comparison). \code{"per_model"} keeps points independently for each model
 (this reproduces the original 2021 script).}
+
+\item{rescale}{Bring predictions to the 0-1 scale. Algorithms write
+their output on different scales (0-1, 0-100, 0-1000); the scale of
+each model is recognised from its largest value, and models on 0-100
+or 0-1000 are divided by 100 or 1000, with a message. \code{FALSE} keeps
+the values and warns when they are not on the 0-1 scale. Models whose
+scale cannot be recognised (negative values or above 1000, e.g. raw
+Maxent output) are left as they are, with a warning.}
 }
 \value{
 A data.frame with columns \code{obs} (1 = presence, 0 = absence) and one
 column of predicted values per model. Attribute \code{"n_dropped"} holds the
-number of points removed because of \code{NA} predictions.
+number of points removed because of \code{NA} predictions, and \code{"scales"}
+the recognised scale of each model and what it was divided by.
 }
 \description{
 Builds the observation/prediction table that all evaluation metrics are

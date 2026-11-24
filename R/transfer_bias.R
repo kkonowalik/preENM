@@ -379,6 +379,9 @@ change_metrics <- function(V, sel, thr) {
 #' @param maps Also return the maps.
 #' @param coords,points_crs Coordinate columns and CRS of `points`.
 #' @param verbose Show progress when `fit` is run.
+#' @param rescale Bring every set of predictions (observed and null) to the
+#'   0-1 scale: predictions on 0-100 or 0-1000 are divided by 100 or 1000,
+#'   with a message; see [extract_predictions()].
 #' @return A list of class `transfer_bias` with `summary` (one row per
 #'   projection, scope and metric: `observed`, `null_mean`, `null_sd`,
 #'   `null_lo` and `null_hi` (95% interval), `null_agreement` (share of
@@ -433,7 +436,8 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
                                points = NULL, null_points = NULL,
                                baseline = 1, region = NULL, threshold = NULL,
                                dominance = 0.5, maps = TRUE, coords = NULL,
-                               points_crs = "EPSG:4326", verbose = TRUE) {
+                               points_crs = "EPSG:4326", verbose = TRUE,
+                               rescale = TRUE) {
   if (!is.numeric(dominance) || length(dominance) != 1 || dominance <= 0 ||
       dominance >= 1) {
     stop("`dominance` must be a number between 0 and 1.", call. = FALSE)
@@ -491,10 +495,36 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
     }
     V <- terra::values(x)[, ord, drop = FALSE]
     colnames(V) <- lyr[ord]
+    rescale_v(V)
+  }
+  # one scale for every set of predictions (0-1, 0-100, 0-1000)
+  rescaled <- 0
+  rescale_v <- function(V) {
+    if (!rescale) return(V)
+    d <- scale_divisor(V)
+    if (d != 1) {
+      rescaled <<- rescaled + 1
+      V <- V / d
+    }
     V
   }
   Vobs <- terra::values(obs)[, ord, drop = FALSE]
   colnames(Vobs) <- lyr[ord]
+  sc_obs <- prediction_scales(list(observed = as.vector(Vobs)))
+  if (is.na(sc_obs$scale)) {
+    warning("The scale of the predictions cannot be recognised (negative ",
+            "values or larger than 1000); they were left as they are.",
+            call. = FALSE)
+  } else if (!rescale && sc_obs$scale > 1) {
+    warning("The predictions are not on the 0-1 scale (max ",
+            signif(sc_obs$max, 3), "); thresholds and changes are in their ",
+            "units. Use rescale = TRUE to bring them to 0-1.", call. = FALSE)
+  }
+  Vobs <- rescale_v(Vobs)
+  if (rescale && is.numeric(threshold) && !is.na(sc_obs$scale) &&
+      sc_obs$scale > 1) {
+    threshold <- threshold / sc_obs$scale     # given on the model's scale
+  }
   sel <- list(area = rep(TRUE, nrow(Vobs)))
   if (!is.null(region)) {
     sel$region <- in_mask(obs, seq_len(nrow(Vobs)), region)
@@ -548,6 +578,11 @@ transfer_bias_test <- function(observed = NULL, null = NULL, fit = NULL,
       S2 <- S2 + d^2
       N <- N + ok
     }
+  }
+  if (rescaled > 0) {
+    message(rescaled, " set(s) of predictions were not on the 0-1 scale ",
+            "(0-100 or 0-1000) and were divided by 100 or 1000 (rescale = ",
+            "FALSE keeps them).")
   }
   q <- function(p) apply(nm, 1, stats::quantile, probs = p, na.rm = TRUE,
                          names = FALSE)

@@ -12,7 +12,8 @@ null_model_test(
   metrics = NULL,
   n_null = 499,
   n_pool = 20000,
-  seed = NULL
+  seed = NULL,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -44,6 +45,12 @@ named in
 \item{n_pool}{Number of cells sampled when \code{pool} is a raster.}
 
 \item{seed}{Seed.}
+
+\item{rescale}{Bring predictions to the 0-1 scale: the scale of each
+model (0-1, 0-100 or 0-1000) is recognised from its largest value and
+0-100 or 0-1000 are divided by 100 or 1000, with a message; see
+\code{\link[=extract_predictions]{extract_predictions()}}. The pool is divided by the same
+factor as the evaluation data of each model.}
 }
 \value{
 A data.frame with one row per model and metric: \code{observed},

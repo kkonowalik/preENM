@@ -94,6 +94,10 @@
 #' difference you would consider meaningful) before looking at the results.
 #' The replicates are in `attr(x, "bootstrap")`.
 #'
+#' @param rescale Bring the predictions of each model to the 0-1 scale
+#'   (0-100 or 0-1000 are divided by 100 or 1000, with a message; see
+#'   [extract_predictions()]); `thresholds` given on the model's scale are
+#'   divided by the same factor.
 #' @return A data.frame with one row per model: `<prefix>_AUC`, per-period and
 #'   combined columns `<prefix>_AUC_<period>`, `<prefix>_AUC_analog`,
 #'   `<prefix>_sens`, `<prefix>_area`, `<prefix>_lift`, `<prefix>_n_records`,
@@ -127,13 +131,34 @@ temporal_validation <- function(sites, background, model = "model",
                                 thresholds = NULL, combine = NULL,
                                 pool = NULL, n_boot = 0, conf = 0.95,
                                 compare = NULL, margin = 0, seed = NULL,
-                                prefix = "temporal") {
+                                prefix = "temporal", rescale = TRUE) {
   need_s <- c(model, run, record, slice, pred, period, novel)
   need_b <- c(model, run, slice, pred)
   miss <- c(setdiff(need_s, names(sites)), setdiff(need_b, names(background)))
   if (length(miss)) {
     stop("Columns not found: ", paste(unique(miss), collapse = ", "),
          call. = FALSE)
+  }
+  # one scale per model (0-1, 0-100, 0-1000), for sites, background and
+  # thresholds alike
+  mods <- unique(c(as.character(sites[[model]]),
+                   as.character(background[[model]])))
+  h <- harmonise_scales(stats::setNames(lapply(mods, function(m) {
+    c(sites[[pred]][as.character(sites[[model]]) == m],
+      background[[pred]][as.character(background[[model]]) == m])
+  }), mods), rescale)
+  if (any(h$divisor != 1)) {
+    sites[[pred]] <- sites[[pred]] / h$divisor[as.character(sites[[model]])]
+    background[[pred]] <- background[[pred]] /
+      h$divisor[as.character(background[[model]])]
+    if (is.numeric(thresholds)) {
+      hit <- names(thresholds) %in% names(h$divisor)
+      thresholds[hit] <- thresholds[hit] / h$divisor[names(thresholds)[hit]]
+    } else if (is.data.frame(thresholds)) {
+      d <- h$divisor[as.character(thresholds$model)]
+      d[is.na(d)] <- 1
+      thresholds$threshold <- thresholds$threshold / d
+    }
   }
   run_s <- if (is.null(run)) rep("1", nrow(sites)) else as.character(sites[[run]])
   run_b <- if (is.null(run)) rep("1", nrow(background)) else

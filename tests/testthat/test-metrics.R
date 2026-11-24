@@ -410,3 +410,16 @@ test_that("the internal spline matches mgcv; Boyce_smooth as a metric", {
   expect_equal(ev$Boyce, evaluate_models(data = tab)$Boyce[
     match(ev$model, evaluate_models(data = tab)$model)])
 })
+
+test_that("thresholds() brings 0-100 predictions to 0-1", {
+  set.seed(1)
+  pres <- runif(100, 0.4, 1)
+  bg <- runif(500)
+  t1 <- thresholds(pres, bg, rules = c("p10", "maxSSS"))
+  expect_message(t2 <- thresholds(pres * 100, bg * 100,
+                                  rules = c("p10", "maxSSS")), "divided by 100")
+  expect_equal(t2$threshold, t1$threshold)
+  expect_warning(t3 <- thresholds(pres * 100, bg * 100, rules = "p10",
+                                  rescale = FALSE), "not on the 0-1 scale")
+  expect_equal(t3$threshold, 100 * t1$threshold[1])
+})

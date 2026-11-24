@@ -252,3 +252,18 @@ test_that("effect size, design share and probability of exceeding", {
                       logical(1)))
   expect_match(ggplot2::layer_data(p, txt)$label, "^SES -?[0-9.]+")
 })
+
+test_that("transfer_bias_test() rescales predictions on 0-100", {
+  f <- bias_fixture()
+  sets <- null_occurrences(f$present, f$sim$presence, n_sets = 9)
+  ref <- transfer_bias_test(fit = f$fit, points = f$sim$presence,
+                            null_points = sets, threshold = 0.5,
+                            verbose = FALSE)
+  fit100 <- function(p) f$fit(p) * 100
+  expect_message(tb <- transfer_bias_test(fit = fit100,
+                                          points = f$sim$presence,
+                                          null_points = sets, threshold = 50,
+                                          verbose = FALSE), "divided by 100")
+  expect_equal(tb$summary$observed, ref$summary$observed)
+  expect_equal(tb$summary$null_mean, ref$summary$null_mean)
+})

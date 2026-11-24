@@ -17,7 +17,8 @@ transfer_bias_test(
   maps = TRUE,
   coords = NULL,
   points_crs = "EPSG:4326",
-  verbose = TRUE
+  verbose = TRUE,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -61,6 +62,10 @@ null interval is called "design-dominated" instead of "data-driven"
 \item{coords, points_crs}{Coordinate columns and CRS of \code{points}.}
 
 \item{verbose}{Show progress when \code{fit} is run.}
+
+\item{rescale}{Bring every set of predictions (observed and null) to the
+0-1 scale: predictions on 0-100 or 0-1000 are divided by 100 or 1000,
+with a message; see \code{\link[=extract_predictions]{extract_predictions()}}.}
 }
 \value{
 A list of class \code{transfer_bias} with \code{summary} (one row per

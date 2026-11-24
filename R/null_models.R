@@ -46,6 +46,11 @@
 #' @param n_null Number of null replicates.
 #' @param n_pool Number of cells sampled when `pool` is a raster.
 #' @param seed Seed.
+#' @param rescale Bring predictions to the 0-1 scale: the scale of each
+#'   model (0-1, 0-100 or 0-1000) is recognised from its largest value and
+#'   0-100 or 0-1000 are divided by 100 or 1000, with a message; see
+#'   [extract_predictions()]. The pool is divided by the same
+#'   factor as the evaluation data of each model.
 #' @return A data.frame with one row per model and metric: `observed`,
 #'   `null_mean`, `null_95` (the value reached or bettered by 5% of the
 #'   null replicates; for `"zero"` and `"one"` criteria, the distance from
@@ -66,7 +71,7 @@
 null_model_test <- function(data, pool, weight = NULL,
                             criteria = c(AUC = "max", MAEbal = "min"),
                             metrics = NULL, n_null = 499, n_pool = 20000,
-                            seed = NULL) {
+                            seed = NULL, rescale = TRUE) {
   validate_table(data)
   obs <- data$obs
   models <- setdiff(names(data), "obs")
@@ -102,6 +107,15 @@ null_model_test <- function(data, pool, weight = NULL,
   if (length(miss)) {
     stop("`pool` lacks model column(s): ", paste(miss, collapse = ", "),
          call. = FALSE)
+  }
+  # one scale per model, the same for the data and the pool
+  h <- harmonise_scales(data[models], rescale)
+  for (m in models) {
+    d <- h$divisor[[m]]
+    if (d != 1) {
+      data[[m]] <- data[[m]] / d
+      pool[[m]] <- pool[[m]] / d
+    }
   }
   w <- if (is.null(weight)) {
     rep(1, nrow(pool))

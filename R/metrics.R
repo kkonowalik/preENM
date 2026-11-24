@@ -643,6 +643,10 @@ threshold_rule_names <- c("maxSSS", "maxTSS", "equal_ss", "maxMCC", "maxF",
 #' @param prevalence Optional prevalence for the `prevalence` rule.
 #' @param n_classes Number of classes of the P/E curve for the
 #'   `mutation_point` rule.
+#' @param rescale Bring predictions to the 0-1 scale: the scale of each
+#'   model (0-1, 0-100 or 0-1000) is recognised from its largest value and
+#'   0-100 or 0-1000 are divided by 100 or 1000, with a message; see
+#'   [extract_predictions()].
 #' @return A data.frame of class `enm_thresholds` with `model` (if several),
 #'   `rule`, `threshold`, `sensitivity`, `specificity`, `TSS`, `MCC`, `F`
 #'   and `suitable_share`.
@@ -680,7 +684,7 @@ threshold_rule_names <- c("maxSSS", "maxTSS", "equal_ss", "maxMCC", "maxF",
 #' thresholds(tab, rules = c("maxSSS", "p10", "mutation_point"))
 thresholds <- function(presence, background = NULL,
                        rules = threshold_rule_names, sensitivity = 0.95,
-                       prevalence = NULL, n_classes = 100) {
+                       prevalence = NULL, n_classes = 100, rescale = TRUE) {
   bad <- setdiff(rules, threshold_rule_names)
   if (length(bad)) {
     stop("Unknown rule(s): ", paste(bad, collapse = ", "), ". Available: ",
@@ -697,6 +701,7 @@ thresholds <- function(presence, background = NULL,
   }
   if (is.data.frame(presence)) {
     validate_table(presence)
+    presence <- rescale_table(presence, rescale)
     obs <- presence$obs
     mods <- setdiff(names(presence), "obs")
     out <- do.call(rbind, lapply(mods, function(m) {
@@ -709,6 +714,9 @@ thresholds <- function(presence, background = NULL,
       stop("Give `background` (predictions at absence/background points).",
            call. = FALSE)
     }
+    h <- harmonise_scales(list(model = c(presence, background)), rescale)
+    presence <- presence / h$divisor[[1]]
+    background <- background / h$divisor[[1]]
     out <- threshold_table(presence, background, rules, sensitivity,
                            prevalence, n_classes)
   }

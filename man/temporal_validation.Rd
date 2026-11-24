@@ -22,7 +22,8 @@ temporal_validation(
   compare = NULL,
   margin = 0,
   seed = NULL,
-  prefix = "temporal"
+  prefix = "temporal",
+  rescale = TRUE
 )
 }
 \arguments{
@@ -78,6 +79,11 @@ paired interval. Set it before looking at the results.}
 
 \item{prefix}{Prefix of the output columns, e.g. \code{"fossil"} gives
 \code{fossil_AUC}.}
+
+\item{rescale}{Bring the predictions of each model to the 0-1 scale
+(0-100 or 0-1000 are divided by 100 or 1000, with a message; see
+\code{\link[=extract_predictions]{extract_predictions()}}); \code{thresholds} given on the model's scale are
+divided by the same factor.}
 }
 \value{
 A data.frame with one row per model: \verb{<prefix>_AUC}, per-period and

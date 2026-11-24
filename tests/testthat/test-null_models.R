@@ -54,3 +54,18 @@ test_that("null_model_test takes rasters and checks its input", {
   pool <- as.data.frame(terra::values(sim$models))[1:10, ]
   expect_error(null_model_test(tab, pool), "fewer usable rows")
 })
+
+test_that("null_model_test() rescales data and pool alike", {
+  sim <- simulate_enm_data(seed = 1)
+  tab <- extract_predictions(sim$models, sim$presence, sim$absence)
+  big <- tab
+  big$GLM <- big$GLM * 100
+  m <- sim$models
+  m[["GLM"]] <- m[["GLM"]] * 100
+  a <- null_model_test(tab[c("obs", "GLM")], sim$models, n_null = 19,
+                       seed = 1)
+  expect_message(b <- null_model_test(big[c("obs", "GLM")], m, n_null = 19,
+                                      seed = 1), "divided by 100")
+  expect_equal(b$observed, a$observed)
+  expect_equal(b$null_mean, a$null_mean)
+})

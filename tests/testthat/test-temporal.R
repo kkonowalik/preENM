@@ -203,3 +203,19 @@ test_that("record bootstrap is paired across models", {
   expect_error(temporal_validation(st, bg, n_boot = 10, compare = "nope"),
                "must be one of")
 })
+
+test_that("temporal_validation() rescales predictions and thresholds", {
+  b <- data.frame(model = "m", slice = rep(1:2, each = 4),
+                  pred = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8))
+  s <- data.frame(model = "m", record = c("r1", "r1", "r2"),
+                  slice = c(1, 2, 2), pred = c(0.35, 0.65, 0.9))
+  ref <- temporal_validation(s, b, thresholds = c(m = 0.5))
+  b2 <- transform(b, pred = pred * 1000)
+  s2 <- transform(s, pred = pred * 1000)
+  expect_message(tv <- temporal_validation(s2, b2,
+                                           thresholds = c(m = 500)),
+                 "divided by 1000")
+  expect_equal(tv$temporal_AUC, ref$temporal_AUC)
+  expect_equal(tv$temporal_sens, ref$temporal_sens)
+  expect_equal(tv$temporal_area, ref$temporal_area)
+})

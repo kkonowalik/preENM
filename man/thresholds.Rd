@@ -10,7 +10,8 @@ thresholds(
   rules = threshold_rule_names,
   sensitivity = 0.95,
   prevalence = NULL,
-  n_classes = 100
+  n_classes = 100,
+  rescale = TRUE
 )
 }
 \arguments{
@@ -28,6 +29,11 @@ model): then \code{background} is not needed and every model gets its rows.}
 
 \item{n_classes}{Number of classes of the P/E curve for the
 \code{mutation_point} rule.}
+
+\item{rescale}{Bring predictions to the 0-1 scale: the scale of each
+model (0-1, 0-100 or 0-1000) is recognised from its largest value and
+0-100 or 0-1000 are divided by 100 or 1000, with a message; see
+\code{\link[=extract_predictions]{extract_predictions()}}.}
 }
 \value{
 A data.frame of class \code{enm_thresholds} with \code{model} (if several),

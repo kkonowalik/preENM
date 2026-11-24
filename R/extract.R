@@ -258,6 +258,13 @@ harmonise_scales <- function(preds, rescale = TRUE, what = "predictions") {
   list(divisor = div, table = sc)
 }
 
+# Divisor bringing one set of predictions to 0-1 (internal, no message):
+# 1, 100 or 1000; 1 also when the scale cannot be recognised
+scale_divisor <- function(v) {
+  sc <- prediction_scales(list(x = as.vector(v)))$scale
+  if (is.na(sc)) 1 else sc
+}
+
 # Apply harmonise_scales() to the prediction columns of a table (internal)
 rescale_table <- function(tab, rescale = TRUE, what = "predictions") {
   mods <- setdiff(names(tab), "obs")

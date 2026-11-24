@@ -50,7 +50,8 @@ The records (data.frame) with added columns: \code{unc_m} (the
 uncertainty used), \code{unc_cells} (cells touched by the circle),
 \verb{unc_rel_<layer>} (range within the circle / niche breadth, one column
 per layer), \code{unc_rel_max} (the largest of them), \code{unc_limiting} (its
-layer) and \code{unc_ok}. \code{attr(, "breadth")} holds the niche breadth of
+layer), \code{unc_ok} and \code{unc_action} (\code{"keep"}, \code{"propagate"} or
+\code{"drop"}). \code{attr(, "breadth")} holds the niche breadth of
 each layer.
 }
 \description{
@@ -76,6 +77,16 @@ Use the layers you will model with (or their main gradients, e.g.
 temperature and precipitation), at the resolution you will model at.
 Typical use: run \code{\link[=filter_occurrences]{filter_occurrences()}} with a generous
 \code{max_coord_unc_m} (or none), then keep the records with \code{unc_ok}.
+
+\strong{Decide or propagate.} Instead of dropping the records whose
+environment varies, they can be kept and their uncertainty propagated
+into the models with \code{\link[=jitter_uncertainty]{jitter_uncertainty()}}, which samples the same
+quantity (the range of the predictors within the radius, relative to the
+niche breadth) by moving the records in replicate datasets.
+\code{unc_action} says which: \code{"keep"} (the environment is uniform within the
+radius; the record can be used as it is), \code{"propagate"} (it varies;
+drop the record, or keep it and propagate) and \code{"drop"} (radius above
+\code{max_radius_km}, not examined).
 Records without an uncertainty get \code{NA} (decide yourself, or set
 \code{na_uncertainty} to an assumed value in metres).
 }
@@ -97,4 +108,7 @@ Wieczorek, J.R., Pico, F.X., Uribe, F., Waller, J., Arino, A.H. (2022)
 Uncertainty matters: ascertaining where specimens in natural history
 collections come from and its implications for predicting species
 distributions. \emph{Ecography} 2022, e06025.
+}
+\seealso{
+\code{\link[=jitter_uncertainty]{jitter_uncertainty()}}
 }

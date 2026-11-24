@@ -1,3 +1,26 @@
+# preENM 2.35.0
+
+Propagating coordinate uncertainty (Gabor et al. 2023, *Ecography*
+e06358; Wu et al. 2026, *Environmental Modelling & Software* 204, 107096):
+
+* `jitter_uncertainty()`: `n` replicate datasets in which every record is
+  moved to a random point within its own uncertainty circle (uniform over
+  its area), optionally only inside M, on land and in cells with values in
+  every layer; records with an uncertainty of 0 do not move, records
+  without one stay fixed or get `na_uncertainty`. Reports how much the
+  environment at each record changes across the replicates, relative to
+  the niche breadth (the scale of `uncertainty_environment()`), and says
+  whether propagating is worth the extra model runs. `propagate =
+  "variable"` moves only records whose environment varies within the
+  radius. With `plot_jitter()` and `write_jitter()`.
+* `coordinate_spread()`: from one prediction per replicate, the per-cell
+  mean, standard deviation and coefficient of variation due to coordinate
+  error alone, computed as the disagreement layer of `ensemble_models()`
+  and optionally compared with it; `plot_coordinate_spread()`.
+* `uncertainty_environment()` adds `unc_action`: `"keep"` (uniform
+  environment), `"propagate"` (it varies) or `"drop"` (radius above
+  `max_radius_km`).
+
 # preENM 2.34.0
 
 Taxonomic name matching (Fuehrding-Potschkat et al. 2022, *Ecology and

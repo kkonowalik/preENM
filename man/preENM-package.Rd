@@ -22,7 +22,10 @@ variables (water balance, heat, cold, season and light; see
 \code{\link[=climate_index_names]{climate_index_names()}}) from monthly climatologies of the present,
 the future or the past.
 \item \code{\link[=uncertainty_environment]{uncertainty_environment()}}: coordinate uncertainty judged by how much
-the predictors vary within it.
+the predictors vary within it (keep, propagate or drop).
+\item \code{\link[=jitter_uncertainty]{jitter_uncertainty()}}, \code{\link[=plot_jitter]{plot_jitter()}}, \code{\link[=write_jitter]{write_jitter()}}: replicate
+datasets with records moved within their uncertainty, to propagate it
+into the models.
 \item \code{\link[=niche_truncation]{niche_truncation()}}, \code{\link[=plot_niche_truncation]{plot_niche_truncation()}}: is the niche cut off
 by the calibration area, and do projections go beyond it?
 \item \code{\link[=niche_coverage]{niche_coverage()}}, \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}, \code{\link[=classify_points]{classify_points()}},
@@ -68,6 +71,9 @@ models and the disagreement between them.
 \item \code{\link[=partition_uncertainty]{partition_uncertainty()}}, \code{\link[=plot_partition]{plot_partition()}}: which source (GCM,
 scenario, algorithm, run) dominates the variance of projections, and
 where.
+\item \code{\link[=coordinate_spread]{coordinate_spread()}}, \code{\link[=plot_coordinate_spread]{plot_coordinate_spread()}}: spread of the
+predictions due to coordinate error, from models fitted to jittered
+replicates.
 \item \code{\link[=ignorance_map]{ignorance_map()}}, \code{\link[=record_ignorance]{record_ignorance()}}, \code{\link[=taxon_complexity]{taxon_complexity()}},
 \code{\link[=plot_ignorance]{plot_ignorance()}}:
 biogeographical ignorance from recording effort or from the records

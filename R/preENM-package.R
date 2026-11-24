@@ -15,7 +15,10 @@
 #'   [climate_index_names()]) from monthly climatologies of the present,
 #'   the future or the past.
 #' * [uncertainty_environment()]: coordinate uncertainty judged by how much
-#'   the predictors vary within it.
+#'   the predictors vary within it (keep, propagate or drop).
+#' * [jitter_uncertainty()], [plot_jitter()], [write_jitter()]: replicate
+#'   datasets with records moved within their uncertainty, to propagate it
+#'   into the models.
 #' * [niche_truncation()], [plot_niche_truncation()]: is the niche cut off
 #'   by the calibration area, and do projections go beyond it?
 #' * [niche_coverage()], [plot_niche_coverage()], [classify_points()],
@@ -58,6 +61,9 @@
 #' * [partition_uncertainty()], [plot_partition()]: which source (GCM,
 #'   scenario, algorithm, run) dominates the variance of projections, and
 #'   where.
+#' * [coordinate_spread()], [plot_coordinate_spread()]: spread of the
+#'   predictions due to coordinate error, from models fitted to jittered
+#'   replicates.
 #' * [ignorance_map()], [record_ignorance()], [taxon_complexity()],
 #'   [plot_ignorance()]:
 #'   biogeographical ignorance from recording effort or from the records

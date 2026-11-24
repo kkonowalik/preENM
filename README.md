@@ -38,7 +38,7 @@ step can be used on its own.
 | Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
 | Before | [4](#4-computing-derived-climate-variables) | **Derived climate variables** (25 indices of water balance, heat, cold, season and light; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
 | Before | [5](#5-checks-before-modelling) | **Checks** (sample size, record years vs climate period) | `check_sample_size()`, `match_climate_period()` |
-| Before | [6](#6-keeping-imprecise-records-where-the-environment-is-uniform) | **Coordinate uncertainty in environmental terms** | `uncertainty_environment()` |
+| Before | [6](#6-imprecise-records-keep-propagate-or-drop) | **Coordinate uncertainty in environmental terms**: keep, propagate (replicate datasets jittered within each record's uncertainty) or drop | `uncertainty_environment()`, `jitter_uncertainty()`, `plot_jitter()`, `write_jitter()` |
 | Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()`, `thin_by_cell()`, `sample_background()` |
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
@@ -61,6 +61,7 @@ step can be used on its own.
 | After | [22](#22-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [23](#23-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
 | After | [24](#24-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
+| After | [24](#spread-due-to-coordinate-error) | **Spread due to coordinate error** (models fitted to jittered replicates), compared with the disagreement between models | `coordinate_spread()`, `plot_coordinate_spread()` |
 | After | [25](#25-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `taxon_complexity()`, `plot_ignorance()` |
 | After | [26](#26-how-different-are-the-niches-of-two-groups) | **Niche overlap** between species, lineages or cytotypes (D, I, breadth, expansion/unfilling, equivalency and similarity tests) and its sensitivity to methodological choices | `niche_overlap()`, `overlap_scenarios()`, `plot_niche_overlap()`, `prediction_overlap()` |
 | After | [27](#27-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
@@ -462,7 +463,7 @@ widespread species), with 10 records per predictor and with 5 per fold.
 `match_climate_period()` adds `period_match` (`within`, `before`, `after`,
 `unknown`) and `years_outside`, and prints the counts.
 
-### 6. Keeping imprecise records where the environment is uniform
+### 6. Imprecise records: keep, propagate or drop
 
 Records are usually dropped above a fixed coordinate uncertainty, e.g.
 1 km. That discards many usable records, often the older ones and those
@@ -488,6 +489,44 @@ on any layer. `unc_rel_<layer>` gives the value for each layer and
 are rejected without being examined. Use the layers and the resolution you
 will model with, and run `filter_occurrences()` with a generous
 `max_coord_unc_m` beforehand.
+
+**Propagate instead of dropping.** A record whose environment varies within
+its radius need not be dropped: its uncertainty can be carried into the
+models. `unc_action` says what to do with each record: `"keep"` (uniform
+environment), `"propagate"` (it varies) or `"drop"` (radius above
+`max_radius_km`). Models built from positionally uncertain records can
+remain ecologically interpretable: in simulations, positional error lowered
+predictive performance more than it changed variable importance and
+response shapes, especially for spatially homogeneous predictors (Gabor et
+al. 2023, *Ecography* e06358). `jitter_uncertainty()` makes `n` replicate
+datasets in which every record is moved to a random point within its own
+uncertainty circle (uniform over its area), optionally only inside M, on
+land and in cells with values in every layer; records with an uncertainty
+of 0 do not move, and records without one stay fixed or get a default
+radius (`na_uncertainty`):
+
+```r
+j <- jitter_uncertainty(occ, env, n = 20, m = m_area, land = "land.gpkg",
+                        seed = 1)
+j                       # IN SHORT: is propagating worth the extra runs?
+plot_jitter(j)          # per record: uncertainty against environmental change
+for (d in j$replicates) {
+  # thin_by_cell(d, env), fit the model in your software, predict, save
+}
+write_jitter(j, "jittered")                       # or one CSV per replicate
+```
+
+The printout answers the practical question: how many records change their
+environment by more than `max_rel` of the niche breadth across the
+replicates (the same scale as `uncertainty_environment()`). If almost none
+do, the replicates are environmentally the same dataset and propagating is
+not worth the model runs. `propagate = "variable"` moves only the records
+that `uncertainty_environment()` marks as `"propagate"`, keeping the others
+where they are. After modelling, `coordinate_spread()` turns the replicate
+predictions into the spread due to coordinate error (section 24 below).
+Coordinates can also be optimised within the radius against model
+performance (Wu et al. 2026, *Environmental Modelling & Software* 204,
+107096); that needs the model and is left to the modelling software.
 
 ### 7. One point per raster cell and background points
 
@@ -2131,6 +2170,22 @@ plot_partition(pu, file = "partition.pdf")
   climate models (Wilson et al. 2024).
 - Large stacks are processed block by block on disk; projections on 0-100
   or 0-1000 are rescaled to 0-1.
+
+#### Spread due to coordinate error
+
+Fitting one model per replicate of `jitter_uncertainty()` (section 6 above)
+gives predictions that differ only in where the records were placed.
+`coordinate_spread()` returns their per-cell mean, standard deviation and
+coefficient of variation, computed as the disagreement layer of
+`ensemble_models()`, so the two are directly comparable: with `ensemble`,
+it says in which share of cells coordinate error moves the predictions
+more than the choice of model.
+
+```r
+cs <- coordinate_spread("predictions/jittered", ensemble = ens)
+cs                                       # IN SHORT: how much, and compared with the models
+plot_coordinate_spread(cs, file = "coordinate_spread.pdf")
+```
 
 ### 25. Where are the data too sparse to trust a prediction?
 

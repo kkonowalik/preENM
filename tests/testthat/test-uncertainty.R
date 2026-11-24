@@ -82,3 +82,140 @@ test_that("uncertainty_environment works in longitude/latitude", {
   expect_error(uncertainty_environment(occ, sim$env, uncertainty = -1),
                "Negative")
 })
+
+jitter_records <- function() {
+  data.frame(lon = c(10, 10.5, 11, 11.5, 12, 12.5),
+             lat = c(45, 45.5, 46, 46.5, 47, 47.5),
+             unc = c(0, 5000, 20000, NA, 1000, 300000))
+}
+km_between <- function(lon1, lat1, lon2, lat2) {
+  sqrt(((lon2 - lon1) * 111.32 * cos(lat1 * pi / 180))^2 +
+         ((lat2 - lat1) * 111.32)^2)
+}
+
+test_that("jittered points lie within their radius; zero does not move", {
+  j <- jitter_uncertainty(jitter_records(), n = 50, uncertainty = "unc",
+                          seed = 1, verbose = FALSE)
+  expect_s3_class(j, "jittered_records")
+  expect_length(j$replicates, 50)
+  all_d <- do.call(rbind, j$replicates)
+  d <- km_between(all_d$lon_orig, all_d$lat_orig, all_d$lon, all_d$lat)
+  rad <- jitter_records()$unc[all_d$record] / 1000
+  moved <- all_d$record %in% c(2, 3, 5)
+  expect_true(all(d[moved] <= rad[moved] * 1.001))
+  # they do move, and fill the circle (uniform over the area: mean
+  # distance 2/3 of the radius)
+  expect_gt(mean(d[all_d$record == 3]), 0)
+  expect_equal(mean(d[all_d$record == 3]) / 20, 2 / 3, tolerance = 0.1)
+  # uncertainty 0, no uncertainty and radius above max_radius_km: fixed
+  for (k in c(1, 4, 6)) {
+    expect_true(all(all_d$lon[all_d$record == k] == jitter_records()$lon[k]))
+    expect_true(all(all_d$lat[all_d$record == k] == jitter_records()$lat[k]))
+  }
+  expect_equal(j$records$status[c(1, 4, 6)],
+               c("fixed: uncertainty 0", "fixed: no uncertainty",
+                 "fixed: radius above max_radius_km"))
+  # a default radius for records without one
+  j2 <- jitter_uncertainty(jitter_records(), n = 5, uncertainty = "unc",
+                           na_uncertainty = 2000, seed = 1, verbose = FALSE)
+  expect_true(j2$records$moved[4])
+  # the same seed gives the same replicates
+  j3 <- jitter_uncertainty(jitter_records(), n = 50, uncertainty = "unc",
+                           seed = 1, verbose = FALSE)
+  expect_equal(j3$replicates[[7]]$lon, j$replicates[[7]]$lon)
+})
+
+test_that("jittered points stay inside M and in cells with values", {
+  rec <- data.frame(lon = c(10, 10.02), lat = c(45, 45), unc = 30000)
+  # M: a narrow strip; most of each circle lies outside it
+  m <- sf::st_sfc(sf::st_polygon(list(rbind(c(9.9, 44.9), c(10.1, 44.9),
+                                            c(10.1, 45.1), c(9.9, 45.1),
+                                            c(9.9, 44.9)))), crs = 4326)
+  j <- jitter_uncertainty(rec, n = 40, uncertainty = "unc", m = m,
+                          seed = 2, verbose = FALSE)
+  all_d <- do.call(rbind, j$replicates)
+  pts <- sf::st_as_sf(all_d, coords = c("lon", "lat"), crs = 4326)
+  expect_true(all(lengths(sf::st_intersects(pts, m)) > 0))
+  expect_true(all(km_between(all_d$lon_orig, all_d$lat_orig, all_d$lon,
+                             all_d$lat) <= 30.03))
+  # cells without values are avoided
+  r <- terra::rast(nrows = 40, ncols = 40, xmin = 9, xmax = 11, ymin = 44,
+                   ymax = 46, vals = 1, crs = "EPSG:4326")
+  r[terra::cellFromXY(r, cbind(10.05, 45.05))] <- NA
+  r[terra::xFromCell(r, 1:terra::ncell(r)) > 10] <- NA   # east half empty
+  j2 <- jitter_uncertainty(rec, r, n = 40, uncertainty = "unc", seed = 2,
+                           verbose = FALSE)
+  all2 <- do.call(rbind, j2$replicates)
+  ok <- !all2$jitter_failed
+  v <- terra::extract(r, cbind(all2$lon[ok], all2$lat[ok]))[, 1]
+  expect_false(anyNA(v))
+})
+
+test_that("environmental spread: none on a constant layer, known on a ramp", {
+  r <- terra::rast(nrows = 100, ncols = 100, xmin = 9, xmax = 13,
+                   ymin = 43, ymax = 47, crs = "EPSG:4326")
+  terra::values(r) <- 1
+  rec <- data.frame(lon = c(10, 11, 12), lat = 45, unc = 20000)
+  j <- jitter_uncertainty(rec, r, n = 20, uncertainty = "unc", seed = 1,
+                          verbose = FALSE)
+  expect_true(all(j$records$rel_range_max == 0))
+  expect_output(print(j), "almost the same dataset")
+  # a steep east-west ramp: points 20 km apart differ, records vary
+  ramp <- terra::init(r, "x")
+  rec2 <- rbind(rec, data.frame(lon = c(9.5, 12.5), lat = 45, unc = 0))
+  j2 <- jitter_uncertainty(rec2, ramp, n = 30, uncertainty = "unc",
+                           seed = 1, verbose = FALSE)
+  expect_true(all(j2$records$varies[1:3]))
+  expect_equal(j2$records$rel_range_max[4:5], c(0, 0))
+  expect_equal(j2$variables$share_above, 1)
+  expect_output(print(j2), "worthwhile")
+  # propagate = "variable": records in a uniform environment stay fixed
+  both <- c(r, ramp)
+  names(both) <- c("flat", "ramp")
+  flat_rec <- data.frame(lon = 10, lat = 45, unc = 20000)
+  jf <- jitter_uncertainty(flat_rec, r, n = 5, uncertainty = "unc",
+                           propagate = "variable", seed = 1, verbose = FALSE)
+  expect_false(jf$records$moved)
+  expect_match(jf$records$status, "uniform")
+})
+
+test_that("uncertainty_environment() says keep, propagate or drop", {
+  r <- terra::rast(nrows = 100, ncols = 100, xmin = 9, xmax = 13,
+                   ymin = 43, ymax = 47, crs = "EPSG:4326")
+  ramp <- terra::init(r, "x")
+  rec <- data.frame(lon = c(10, 11, 12), lat = 45,
+                    unc = c(100, 15000, 100000))
+  u <- uncertainty_environment(rec, ramp, uncertainty = "unc",
+                               verbose = FALSE)
+  expect_equal(u$unc_action, c("keep", "propagate", "drop"))
+})
+
+test_that("coordinate_spread(): zero for identical replicates, matches sd", {
+  sim <- simulate_enm_data(seed = 1)
+  p <- sim$models[[1]]
+  same <- coordinate_spread(c(p, p, p))
+  expect_equal(max(terra::values(same$raster[["sd"]]), na.rm = TRUE), 0)
+  reps <- c(p, p * 0.9, p * 0.8)
+  cs <- coordinate_spread(reps, ensemble = ensemble_models(sim$models))
+  v <- terra::values(c(p, p * 0.9, p * 0.8))
+  expect_equal(as.vector(terra::values(cs$raster[["sd"]])),
+               apply(v, 1, stats::sd), tolerance = 1e-6)
+  expect_equal(as.vector(terra::values(cs$raster[["mean"]])), rowMeans(v),
+               tolerance = 1e-6)
+  expect_true(is.data.frame(cs$comparison))
+  expect_output(print(cs), "IN SHORT")
+  expect_error(coordinate_spread(p), "two")
+  f <- tempfile(fileext = ".png")
+  plot_coordinate_spread(cs, type = "spread", file = f)
+  expect_true(file.exists(f))
+})
+
+test_that("plot_jitter() and write_jitter()", {
+  sim <- simulate_enm_data(seed = 1, n_presence = 30)
+  j <- jitter_uncertainty(sim$presence, sim$env, n = 3, uncertainty = 5000,
+                          seed = 1, verbose = FALSE)
+  expect_s3_class(plot_jitter(j), "ggplot")
+  out <- write_jitter(j, tempfile())
+  expect_length(out, 4)
+  expect_equal(nrow(utils::read.csv(out[1])), 30)
+})

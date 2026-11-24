@@ -1,3 +1,46 @@
+# preENM 2.30.0
+
+Range metrics for conservation assessment (Curd et al. 2023, *Global
+Change Biology* 29, 631-647; Dauby et al. 2017, *Ecology and Evolution* 7,
+11292-11303; Omar and Elgamal 2021, *Kew Bulletin* 76, 477-496; Auffret et
+al. 2024, *Diversity and Distributions* 30, e13834):
+
+* `range_metrics()`: from binary maps, or continuous maps with the result
+  of `thresholds()`, under every threshold rule: suitable area, extent of
+  occurrence (minimum convex polygon), area of occupancy on the IUCN 2 x 2
+  km grid and the number of locations on a grid of the size of one threat
+  (both in an equal-area projection, with the grid placed to give the
+  fewest cells, as in ConR), and the landscape structure of the range:
+  number and sizes of patches, largest patch index, edge density, distance
+  to the nearest patch and mean suitability per patch. With several
+  projections, the change of every metric from the baseline. The printout
+  says when the threshold rule changes the Red List threshold met (the
+  category would then depend on the rule), notes that projected changes
+  are uncertain in both directions (Auffret et al. 2024) and that the
+  suitable area is larger than the occupied area; `occupied = TRUE` keeps
+  only the patches with records.
+* `plot_range_metrics()`: a metric under each rule with the criterion-B
+  thresholds; `write_range_metrics()` writes the tables and the plot.
+
+Requested additions:
+
+* The scale check (0-1, 0-100, 0-1000) now also covers `thresholds()`,
+  `null_model_test()` (pool divided like the data), `temporal_validation()`
+  and `transfer_bias_test()` (thresholds given on the model's scale divided
+  alike).
+* `record_ignorance()`: maps of biogeographical ignorance from occurrence
+  records (e.g. a GBIF download of the reference group), with the
+  components of Tessarolo et al. (2021): completeness of each cell's
+  inventory (from the species accumulation curve), age of the records,
+  optional taxonomic reliability weights and the precision of the
+  coordinates; the best record of the focal species per cell, and
+  interpolation of empty cells.
+* `response_check()` and the manual explain which response shapes are
+  plausible for direct, resource and indirect gradients and for a niche
+  covered on one side only, and that a curve should follow how much more
+  often the species occurs at a value than the value is available, not the
+  distribution of the raster.
+
 # preENM 2.29.0
 
 Plausibility of response curves (Fiorentino et al. 2025, *Ecological

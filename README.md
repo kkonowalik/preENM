@@ -56,11 +56,12 @@ step can be used on its own.
 | After | [19](#fossil-temporal-validation) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
 | After | [19](#ensembles-and-disagreement) | **Ensemble of the selected models and the disagreement between them** | `ensemble_models()`, `plot_ensemble()` |
 | After | [19](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
-| After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
-| After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
-| After | [22](#22-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
-| After | [23](#23-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `plot_ignorance()` |
-| After | [24](#24-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
+| After | [20](#20-range-metrics-for-conservation-assessment) | **Range metrics** (EOO, AOO, locations, patches, fragmentation) under each threshold rule, change between projections, IUCN thresholds | `range_metrics()`, `plot_range_metrics()`, `write_range_metrics()` |
+| After | [21](#21-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
+| After | [22](#22-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
+| After | [23](#23-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
+| After | [24](#24-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `plot_ignorance()` |
+| After | [25](#25-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
 Points are re-projected to each raster automatically.
@@ -1025,7 +1026,7 @@ environment_shift(env_m, list(period_2 = env_p2, period_3 = env_p3))
 The disappearing share matters as much as the new one: a model can only
 call suitable what it saw during training, so when present conditions
 disappear, most methods predict a decline for *any* species
-([section 21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design)).
+([section 22](#22-is-a-projected-change-driven-by-the-data-or-by-the-study-design)).
 
 ## After modelling
 
@@ -1424,7 +1425,8 @@ and mapping it. The subsections below follow the steps in order.
    `environmental_folds()` clusters the records in environmental space
    instead, to test transfer to new conditions. **Audit the folds** with
    `fold_report()` (see [Auditing the folds](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias)
-   below).
+   below), and `range_metrics()` the extent, occupancy and structure of the
+   range under each rule ([section 20](#20-range-metrics-for-conservation-assessment)).
 2. **Fit models** on all folds but one, for each algorithm, fold and,
    optionally, several background sets. Predict on the held-out fold.
 3. **Hold-out metrics.** `evaluate_cv()` computes AUC, MAE, bias, TSS and the
@@ -1819,7 +1821,56 @@ cells suitable under all rules are the robust core of the range, those
 suitable under at least one its widest extent. Restrict the set with
 `rules`, e.g. `thresholds(tab, rules = c("maxSSS", "p10"))`.
 
-### 20. Testing the models against sampling bias
+### 20. Range metrics for conservation assessment
+
+A suitability map is rarely the final product: an assessment needs the
+measures of the range derived from it, the quantities of the IUCN Red List
+criterion B (Omar and Elgamal 2021, *Kew Bulletin* 76, 477-496), usually
+obtained with ConR (Dauby et al. 2017, *Ecology and Evolution* 7,
+11292-11303) or by hand in a GIS, and the landscape structure of the range
+(Curd et al. 2023, *Global Change Biology* 29, 631-647). `range_metrics()`
+computes them from the binary maps under every threshold rule:
+
+```r
+th <- thresholds(tab, rules = c("maxSSS", "p10", "maxMCC"))
+rm <- range_metrics(c(present = ens_now, future = ens_2070), th,
+                    threat_km = 10, occurrences = records, occupied = TRUE)
+rm                                     # does the rule change the category?
+plot_range_metrics(rm, "AOO_km2", file = "aoo.pdf")
+write_range_metrics(rm, "range_metrics")
+```
+
+![AOO under each threshold rule, present and future](man/figures/range_metrics.png)
+
+- **EOO**: the minimum convex polygon of the suitable cells; **AOO**: the
+  2 x 2 km grid cells (IUCN standard) containing suitable area; the
+  **number of locations**: cells of a grid of the size of one threatening
+  event (`threat_km`). All three are computed in an equal-area projection
+  (a warning or message says when one is set up), and the grids are placed
+  to give the fewest cells, as ConR does. EOO is never smaller than AOO.
+- **Area and landscape structure** (Curd et al. 2023): total suitable area,
+  number and sizes of patches, largest patch index, edge density, distance
+  to the nearest other patch and, for continuous input, mean suitability
+  per patch.
+- **Threshold sensitivity**: AOO and EOO under different rules can cross a
+  Red List threshold, so the printout says when the threshold met depends
+  on the rule rather than on the species. Report the range.
+- **Occupied patches** (`occupied = TRUE`): only patches containing a
+  record, since the predicted suitable area is larger than the occupied
+  area.
+- **Change** between projections, for every metric and rule. Projected
+  changes are uncertain in both directions: over a century of climate and
+  land-use change, models foresaw fewer than a third of the observed
+  extirpations, missed many colonisations and predicted extirpations that
+  had not happened where change was largest (Auffret et al. 2024,
+  *Diversity and Distributions* 30, e13834).
+- A threshold met is not a listing: criterion B also needs two of the
+  conditions (a) to (c), and an assessment needs evidence on threats that a
+  model cannot give (IUCN 2012). For millions of cells, aggregate the map
+  first (e.g. to 1 km); a noisy map of 4 million cells takes about half a
+  minute per rule.
+
+### 21. Testing the models against sampling bias
 
 A model can reach a high AUC by predicting where people record.
 `null_model_test()` replaces the presences by random locations drawn in
@@ -1839,7 +1890,7 @@ draws are uniform. The models are not refitted, so it works with
 predictions of any software; it tests the locations, not the flexibility
 of the algorithm, unlike the null models of Raes and ter Steege (2007).
 
-### 21. Is a projected change driven by the data or by the study design?
+### 22. Is a projected change driven by the data or by the study design?
 
 A model projected to another period can predict a decline (or an increase)
 that has little to do with the species. Think of a scale that shows 2 kg
@@ -1952,7 +2003,7 @@ design-driven result is not necessarily wrong (if the whole area becomes
 unsuitable, every model says so), but it does not come from your records
 and needs other evidence. Use 99 or more null models for stable intervals.
 
-### 22. Which source of uncertainty dominates a set of projections?
+### 23. Which source of uncertainty dominates a set of projections?
 
 A realistic set of projections varies at once in climate model (GCM),
 scenario, algorithm and cross-validation run, and it is hard to see which
@@ -1990,7 +2041,7 @@ plot_partition(pu, file = "partition.pdf")
 - Large stacks are processed block by block on disk; projections on 0-100
   or 0-1000 are rescaled to 0-1.
 
-### 23. Where are the data too sparse to trust a prediction?
+### 24. Where are the data too sparse to trust a prediction?
 
 Where few records of any species have been made, the absence of records of
 your species says little, and a prediction there rests on extrapolation.
@@ -2051,7 +2102,7 @@ them for plants); `reliability` takes any 0-1 weights you can justify.
 Tessarolo et al. interpolated in a distance combining geography and
 environment; `record_ignorance()` uses geographic distance only.
 
-### 24. Reporting with ODMAP
+### 25. Reporting with ODMAP
 
 `odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
 2020) that your workflow determines, from the objects themselves, and

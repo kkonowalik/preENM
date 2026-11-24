@@ -51,7 +51,8 @@
 #' * [partition_uncertainty()], [plot_partition()]: which source (GCM,
 #'   scenario, algorithm, run) dominates the variance of projections, and
 #'   where.
-#' * [ignorance_map()], [record_ignorance()], [plot_ignorance()]:
+#' * [ignorance_map()], [record_ignorance()], [taxon_complexity()],
+#'   [plot_ignorance()]:
 #'   biogeographical ignorance from recording effort or from the records
 #'   (completeness, age, reliability, precision), and the suitability where
 #'   the data are sparse.

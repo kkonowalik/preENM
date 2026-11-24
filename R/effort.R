@@ -569,9 +569,14 @@ plot_ignorance <- function(x, type = c("both", "ignorance", "joint"),
 #' focal species informative). Cells without records are interpolated by
 #' inverse squared distance from the cells with records within
 #' `radius_km` (Tessarolo et al. used the range of spatial autocorrelation
-#' of the predictors, see [suggest_block_size()], and a distance combining
-#' geography and environment; here it is geographic only); farther cells
-#' get ignorance 1.
+#' of the predictors, see [suggest_block_size()]); farther cells get
+#' ignorance 1. The distance is geographic or, with `env`, the
+#' spatio-environmental distance of Tessarolo et al. (geographic and
+#' environmental distances, each rescaled to 0-1, combined as
+#' `space^0.5 x environment^0.5`), so that records from similar
+#' environments inform an empty cell more. As in Tessarolo et al., when a
+#' focal `species` is given, the cells with its records carry half of the
+#' weight.
 #'
 #' @param records Records of the reference group (including the focal
 #'   species): a data.frame or CSV path (e.g. a GBIF download), with
@@ -595,6 +600,11 @@ plot_ignorance <- function(x, type = c("both", "ignorance", "joint"),
 #'   ignore).
 #' @param min_records Fewest records in a cell for its completeness.
 #' @param radius_km Distance within which empty cells are interpolated.
+#' @param env Optional predictor rasters: empty cells are then interpolated
+#'   with the spatio-environmental distance of Tessarolo et al. (2021):
+#'   geographic and environmental (standardised predictors) distances, each
+#'   divided by its largest value in the area, combined as
+#'   `space^0.5 x environment^0.5`.
 #' @inheritParams ignorance_map
 #' @param coords,crs Coordinate columns and their CRS (detected by default).
 #' @return An `ignorance_map` (see [ignorance_map()]); `settings` lists the
@@ -621,7 +631,7 @@ record_ignorance <- function(records, template, species = NULL,
                              species_col = NULL, year = NULL,
                              half_life = NULL, reliability = NULL,
                              reliability_col = NULL, uncertainty = NULL,
-                             min_records = 50, radius_km = 50,
+                             min_records = 50, radius_km = 50, env = NULL,
                              suitability = NULL, threshold = 0.5,
                              suitability_threshold = 0.5, coords = NULL,
                              crs = "EPSG:4326") {
@@ -749,17 +759,36 @@ record_ignorance <- function(records, template, species = NULL,
     mean(tapply(ig_rec[i], sp[i], min))
   }, numeric(1))
 
-  # interpolation of empty cells (inverse squared distance within radius)
+  # interpolation of empty cells (Tessarolo et al. 2021, eq. 1-2): inverse
+  # squared distance to the cells with records within the radius; the
+  # distance is geographic, or spatio-environmental with `env`
   v <- rep(NA_real_, terra::ncell(r))
   v[ucell] <- cell_val
   empty <- setdiff(seq_len(terra::ncell(r)), ucell)
+  focal_cell <- if (is.null(species)) rep(FALSE, length(ucell)) else
+    vapply(ucell, function(cc) any(sp[df$.cell == cc] == species),
+           logical(1))
+  E <- NULL
+  if (!is.null(env)) {
+    er <- as_grid(env)
+    pe_all <- terra::vect(terra::xyFromCell(r, seq_len(terra::ncell(r))),
+                          crs = terra::crs(r))
+    if (!terra::same.crs(pe_all, er)) pe_all <- terra::project(pe_all, er)
+    E <- as.matrix(terra::extract(er, pe_all, ID = FALSE))
+    sdv <- apply(E, 2, stats::sd, na.rm = TRUE)
+    sdv[!is.finite(sdv) | sdv == 0] <- 1
+    E <- sweep(E, 2, sdv, "/")
+    e_max <- sqrt(sum(apply(E, 2, function(z) diff(range(z, na.rm = TRUE)))^2))
+    if (!is.finite(e_max) || e_max <= 0) e_max <- 1
+  }
   if (length(empty)) {
     pc <- terra::vect(terra::xyFromCell(r, ucell), crs = terra::crs(r))
     pe <- terra::vect(terra::xyFromCell(r, empty), crs = terra::crs(r))
     Xc <- dist_space(pc)
     Xe <- dist_space(pe)
-    if (length(ucell) > 20) {
-      nn <- dbscan::kNN(Xc$X, k = 20, query = Xe$X)
+    k <- min(50, length(ucell))
+    if (length(ucell) > k) {
+      nn <- dbscan::kNN(Xc$X, k = k, query = Xe$X)
     } else {
       # few cells with records: all distances
       dd <- outer(rowSums(Xe$X^2), rowSums(Xc$X^2), "+") -
@@ -770,7 +799,38 @@ record_ignorance <- function(records, template, species = NULL,
     }
     d <- matrix(nn$dist, nrow = length(empty))
     if (Xc$lonlat) d[] <- 2 * 6371.0088 * asin(pmin(d / (2 * 6371.0088), 1))
-    w <- (d <= radius_km) / pmax(d, 1e-9)^2
+    inside <- d <= radius_km
+    if (!is.null(E)) {
+      # both distances rescaled to 0-1 by their largest value in the area,
+      # combined as space^0.5 * environment^0.5
+      ext <- as.vector(terra::ext(r))
+      corners <- terra::vect(rbind(ext[c(1, 3)], ext[c(2, 4)]),
+                             crs = terra::crs(r))
+      cx <- dist_space(corners)
+      s_max <- nn_km(cx$X[1, , drop = FALSE], cx$X[2, , drop = FALSE],
+                     cx$lonlat)$dist
+      ec <- E[ucell, , drop = FALSE]
+      ee <- E[empty, , drop = FALSE]
+      de <- matrix(NA_real_, nrow(d), ncol(d))
+      for (j in seq_len(ncol(d))) {
+        de[, j] <- sqrt(rowSums((ee - ec[nn$id[, j], , drop = FALSE])^2))
+      }
+      h <- sqrt(d / s_max) * sqrt(de / e_max)
+      h[is.na(h)] <- Inf
+    } else {
+      h <- d
+    }
+    w <- inside / pmax(h, 1e-9)^2
+    # cells with the focal species carry half of the weight
+    if (any(focal_cell)) {
+      f <- matrix(focal_cell[nn$id], nrow = length(empty))
+      nf <- !f
+      wf <- rowSums(w * f)
+      wo <- rowSums(w * nf)
+      both <- wf > 0 & wo > 0
+      w[both, ] <- 0.5 * (w[both, ] * f[both, ]) / wf[both] +
+        0.5 * (w[both, ] * nf[both, ]) / wo[both]
+    }
     val <- matrix(cell_val[nn$id], nrow = length(empty))
     sw <- rowSums(w)
     v[empty] <- ifelse(sw > 0, rowSums(w * val) / sw, 1)

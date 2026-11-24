@@ -16,6 +16,7 @@ record_ignorance(
   uncertainty = NULL,
   min_records = 50,
   radius_km = 50,
+  env = NULL,
   suitability = NULL,
   threshold = 0.5,
   suitability_threshold = 0.5,
@@ -56,6 +57,12 @@ ignore).}
 \item{min_records}{Fewest records in a cell for its completeness.}
 
 \item{radius_km}{Distance within which empty cells are interpolated.}
+
+\item{env}{Optional predictor rasters: empty cells are then interpolated
+with the spatio-environmental distance of Tessarolo et al. (2021):
+geographic and environmental (standardised predictors) distances, each
+divided by its largest value in the area, combined as
+\verb{space^0.5 x environment^0.5}.}
 
 \item{suitability}{Optional suitability raster (or path) to annotate.}
 
@@ -111,9 +118,14 @@ their best record (records of the group there make an absence of the
 focal species informative). Cells without records are interpolated by
 inverse squared distance from the cells with records within
 \code{radius_km} (Tessarolo et al. used the range of spatial autocorrelation
-of the predictors, see \code{\link[=suggest_block_size]{suggest_block_size()}}, and a distance combining
-geography and environment; here it is geographic only); farther cells
-get ignorance 1.
+of the predictors, see \code{\link[=suggest_block_size]{suggest_block_size()}}); farther cells get
+ignorance 1. The distance is geographic or, with \code{env}, the
+spatio-environmental distance of Tessarolo et al. (geographic and
+environmental distances, each rescaled to 0-1, combined as
+\verb{space^0.5 x environment^0.5}), so that records from similar
+environments inform an empty cell more. As in Tessarolo et al., when a
+focal \code{species} is given, the cells with its records carry half of the
+weight.
 }
 \examples{
 set.seed(1)

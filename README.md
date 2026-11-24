@@ -60,7 +60,7 @@ step can be used on its own.
 | After | [21](#21-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [22](#22-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
 | After | [23](#23-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
-| After | [24](#24-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `plot_ignorance()` |
+| After | [24](#24-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `taxon_complexity()`, `plot_ignorance()` |
 | After | [25](#25-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
@@ -2096,11 +2096,26 @@ ig <- record_ignorance("gbif_group_download.csv", grid_10km,
 ```
 
 Taxonomic reliability has no standard proxy in GBIF data: identifier
-classes need expert coding, and no published weighting exists for proxies
-such as the number of synonyms of a name (World Flora Online and IPNI list
-them for plants); `reliability` takes any 0-1 weights you can justify.
-Tessarolo et al. interpolated in a distance combining geography and
-environment; `record_ignorance()` uses geographic distance only.
+classes need expert coding. As an option, `taxon_complexity()` derives one
+weight per species from the number of its synonyms and of its subspecies
+and varieties in World Flora Online (via the WorldFlora package) or another
+Darwin Core backbone: `1 / (1 + log(1 + n))`, a rule of thumb rather than a
+published weighting (difficult groups have many synonyms, but well-studied
+ones too):
+
+```r
+library(WorldFlora)
+WFO.download(); WFO.remember()           # the WFO backbone, once
+tc <- taxon_complexity(unique(gbif$species), WFO.data)
+ig <- record_ignorance(gbif, grid_10km, species = "Focal species",
+                       reliability = tc, env = predictors)
+```
+
+With `env`, empty cells are interpolated with the spatio-environmental
+distance of Tessarolo et al. (geographic and environmental distances, each
+rescaled to 0-1, combined as space^0.5 x environment^0.5), so records from
+similar environments inform an empty cell more; cells with records of the
+focal species carry half of the weight, as in Tessarolo et al.
 
 ### 25. Reporting with ODMAP
 

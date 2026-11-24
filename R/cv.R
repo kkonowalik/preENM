@@ -363,7 +363,13 @@ nn_km <- function(Q, X, lonlat) {
   X <- as.matrix(X)
   if (!nrow(Q) || !nrow(X)) return(list(dist = rep(NA_real_, nrow(Q)),
                                         id = rep(NA_integer_, nrow(Q))))
-  nn <- dbscan::kNN(X, k = 1, query = Q)
+  if (nrow(X) == 1) {
+    # a single reference point (dbscan needs at least two)
+    nn <- list(dist = sqrt(rowSums(sweep(Q, 2, X[1, ], "-")^2)),
+               id = rep(1L, nrow(Q)))
+  } else {
+    nn <- dbscan::kNN(X, k = 1, query = Q)
+  }
   d <- as.vector(nn$dist)
   if (lonlat) d <- 2 * 6371.0088 * asin(pmin(1, d / (2 * 6371.0088)))
   list(dist = d, id = as.vector(nn$id))

@@ -141,3 +141,51 @@ test_that("record_ignorance: completeness, age, focal species, interpolation", {
                  "No record of")
   expect_output(print(ig5), "from 20 records")
 })
+
+test_that("record_ignorance: spatio-environmental interpolation", {
+  grid <- terra::rast(xmin = 0, xmax = 3, ymin = 0, ymax = 1,
+                      resolution = 1, crs = "EPSG:4326")
+  # well-known cell 1, poorly known cell 3, empty cell 2 in between
+  rec <- rbind(data.frame(lon = 0.5, lat = 0.5,
+                          species = rep(c("a", "b"), 5), year = 2020),
+               data.frame(lon = 2.5, lat = 0.5,
+                          species = paste0("s", 1:10), year = 2020))
+  base <- record_ignorance(rec, grid, min_records = 5, uncertainty = FALSE,
+                           year = FALSE, radius_km = 500)
+  v0 <- terra::values(base$raster)[, 1]
+  # geographically halfway: the mean of both cells
+  expect_equal(v0[2], mean(v0[c(1, 3)]), tolerance = 1e-6)
+  # environment: cell 2 like cell 1 -> its value moves towards cell 1
+  env <- terra::rast(grid, vals = c(0, 0.1, 5))
+  e1 <- record_ignorance(rec, grid, min_records = 5, uncertainty = FALSE,
+                         year = FALSE, radius_km = 500, env = env)
+  v1 <- terra::values(e1$raster)[, 1]
+  expect_lt(abs(v1[2] - v1[1]), abs(v0[2] - v0[1]))
+  # environment like cell 3 instead -> towards cell 3
+  env3 <- terra::rast(grid, vals = c(0, 4.9, 5))
+  e3 <- record_ignorance(rec, grid, min_records = 5, uncertainty = FALSE,
+                         year = FALSE, radius_km = 500, env = env3)
+  v3 <- terra::values(e3$raster)[, 1]
+  expect_lt(abs(v3[2] - v3[3]), abs(v0[2] - v0[3]))
+})
+
+test_that("record_ignorance: focal-species cells carry half of the weight", {
+  grid <- terra::rast(xmin = 0, xmax = 4, ymin = 0, ymax = 1,
+                      resolution = 1, crs = "EPSG:4326")
+  # cell 1: species "f" (focal); cell 2: other species; cells 3, 4 empty
+  rec <- rbind(data.frame(lon = 0.5, lat = 0.5, species = "f",
+                          year = 2000:2004),
+               data.frame(lon = 1.5, lat = 0.5, species = paste0("o", 1:5),
+                          year = 2020))
+  ig <- record_ignorance(rec, grid, species = "f", min_records = 5,
+                         uncertainty = FALSE, radius_km = 1000)
+  v <- terra::values(ig$raster)[, 1]
+  # cell 3 is nearer to cell 2, but the focal cell 1 has half the weight
+  expect_equal(v[3], mean(v[1:2]), tolerance = 1e-6)
+  ig0 <- record_ignorance(rec, grid, min_records = 5, uncertainty = FALSE,
+                          radius_km = 1000)
+  v0 <- terra::values(ig0$raster)[, 1]
+  # without a focal species, inverse squared distance favours cell 2
+  w <- c(1 / 2^2, 1 / 1^2)
+  expect_equal(v0[3], sum(w * v0[1:2]) / sum(w), tolerance = 1e-3)
+})

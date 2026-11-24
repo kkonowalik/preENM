@@ -61,8 +61,10 @@ models and the disagreement between them.
 \item \code{\link[=partition_uncertainty]{partition_uncertainty()}}, \code{\link[=plot_partition]{plot_partition()}}: which source (GCM,
 scenario, algorithm, run) dominates the variance of projections, and
 where.
-\item \code{\link[=ignorance_map]{ignorance_map()}}, \code{\link[=plot_ignorance]{plot_ignorance()}}: biogeographical ignorance from
-recording effort, and the suitability where the data are sparse.
+\item \code{\link[=ignorance_map]{ignorance_map()}}, \code{\link[=record_ignorance]{record_ignorance()}}, \code{\link[=plot_ignorance]{plot_ignorance()}}:
+biogeographical ignorance from recording effort or from the records
+(completeness, age, reliability, precision), and the suitability where
+the data are sparse.
 \item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
 records are collected?
 \item \code{\link[=null_occurrences]{null_occurrences()}}, \code{\link[=transfer_bias_test]{transfer_bias_test()}}, \code{\link[=environment_shift]{environment_shift()}}:

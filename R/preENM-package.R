@@ -51,8 +51,10 @@
 #' * [partition_uncertainty()], [plot_partition()]: which source (GCM,
 #'   scenario, algorithm, run) dominates the variance of projections, and
 #'   where.
-#' * [ignorance_map()], [plot_ignorance()]: biogeographical ignorance from
-#'   recording effort, and the suitability where the data are sparse.
+#' * [ignorance_map()], [record_ignorance()], [plot_ignorance()]:
+#'   biogeographical ignorance from recording effort or from the records
+#'   (completeness, age, reliability, precision), and the suitability where
+#'   the data are sparse.
 #' * [null_model_test()]: are the models better than expected from where
 #'   records are collected?
 #' * [null_occurrences()], [transfer_bias_test()], [environment_shift()]:

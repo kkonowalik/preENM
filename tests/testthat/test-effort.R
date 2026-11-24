@@ -91,3 +91,53 @@ test_that("ignorance_map annotates a suitability raster", {
   expect_equal(vs[1], 1)
   expect_error(ignorance_map(eff, half = 0), "positive")
 })
+
+test_that("record_ignorance: completeness, age, focal species, interpolation", {
+  grid <- terra::rast(xmin = 0, xmax = 3, ymin = 0, ymax = 1,
+                      resolution = 1, crs = "EPSG:4326")
+  # cell 1: 10 records, 5 species, 2 singletons -> completeness 1 - 2/10
+  rec <- data.frame(lon = 0.5, lat = 0.5,
+                    species = c("a", "a", "b", "b", "c", "c", "c", "d", "e",
+                                "a"),
+                    year = 2020)
+  # cell 2: 10 old records of one species (completeness 1 - 0/10)
+  rec <- rbind(rec, data.frame(lon = rep(1.5, 10), lat = 0.5,
+                               species = "f", year = 1900))
+  ig <- record_ignorance(rec, grid, min_records = 5, year = FALSE,
+                         uncertainty = FALSE, radius_km = 10)
+  r <- ig$records
+  expect_equal(unique(r$completeness[r$cell == 1]), 0.8)
+  expect_equal(unique(r$completeness[r$cell == 2]), 1)
+  v <- terra::values(ig$raster)[, 1]
+  # completeness only: cell 2 best (0), cell 1 worst (1), cell 3 empty and
+  # farther than 10 km from any record: 1
+  expect_equal(v, c(1, 0, 1))
+  # with age the old cell loses
+  ig2 <- record_ignorance(rec, grid, min_records = 5, uncertainty = FALSE,
+                          radius_km = 10)
+  v2 <- terra::values(ig2$raster)[, 1]
+  expect_lt(v2[1], v2[2])
+  expect_equal(ig2$settings$components, c("completeness", "age"))
+  # focal species: a cell takes its best record of the species
+  ig3 <- record_ignorance(rec, grid, species = "c", min_records = 5,
+                          uncertainty = FALSE, radius_km = 10)
+  r3 <- ig3$records
+  expect_equal(unname(terra::values(ig3$raster)[1, 1]),
+               min(r3$ignorance[r3$cell == 1 & r3$species == "c"]))
+  # interpolation: within the radius the empty cell takes a weighted value
+  ig4 <- record_ignorance(rec, grid, min_records = 5, uncertainty = FALSE,
+                          radius_km = 500)
+  v4 <- terra::values(ig4$raster)[, 1]
+  expect_true(v4[3] < 1 && v4[3] >= min(v4[1:2]))
+  # reliability by class of identifier
+  rec$who <- rep(c("taxonomist", "amateur"), length.out = nrow(rec))
+  ig5 <- record_ignorance(rec, grid, min_records = 5, year = FALSE,
+                          uncertainty = FALSE, radius_km = 10,
+                          reliability = c(taxonomist = 1, amateur = 0.75),
+                          reliability_col = "who")
+  expect_equal(sort(unique(ig5$records$reliability)), c(0.75, 1))
+  expect_warning(record_ignorance(rec, grid, species = "zz",
+                                  min_records = 5, radius_km = 10),
+                 "No record of")
+  expect_output(print(ig5), "from 20 records")
+})

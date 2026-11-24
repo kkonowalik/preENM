@@ -296,6 +296,16 @@ ignorance_map <- function(effort, layer = "n_records",
       if (!is.finite(nmax) || nmax <= 0) N * 0 + 1 else 1 - N / nmax
     })
   names(ign) <- "ignorance"
+  ignorance_object(ign, suitability, threshold, suitability_threshold,
+                   list(method = method, half = half, index = index,
+                        radius_km = radius_km))
+}
+
+# Ignorance raster, optionally with a suitability raster, as an
+# `ignorance_map` object (internal; shared by ignorance_map() and
+# record_ignorance())
+ignorance_object <- function(ign, suitability, threshold,
+                             suitability_threshold, settings) {
   out <- ign
   suit_summary <- NULL
   if (!is.null(suitability)) {
@@ -323,14 +333,12 @@ ignorance_map <- function(effort, layer = "n_records",
   v <- terra::freq(ign > threshold)
   n_ig <- if (!is.null(v) && any(v$value == 1)) v$count[v$value == 1] else 0
   n_all <- if (!is.null(v)) sum(v$count) else 0
+  settings$threshold <- threshold
+  settings$suitability_threshold <- suitability_threshold
   structure(list(raster = out,
                  summary = list(share_ignorant = n_ig / max(1, n_all),
                                 cells = n_all, classes = suit_summary),
-                 settings = list(method = method, half = half,
-                                 index = index, radius_km = radius_km,
-                                 threshold = threshold,
-                                 suitability_threshold =
-                                   suitability_threshold)),
+                 settings = settings),
             class = "ignorance_map")
 }
 
@@ -364,10 +372,13 @@ print.ignorance_map <- function(x, ...) {
   say <- function(txt) cat(strwrap(txt, width = 76, initial = "- ",
                                    exdent = 2), sep = "\n")
   how <- switch(s$method, half = paste0("half-ignorance, O = ", s$half),
-                log = "log-normalised", linear = "normalised")
-  cat("Biogeographical ignorance (", how, if (s$index)
+                log = "log-normalised", linear = "normalised",
+                records = paste0("from ", s$n_records, " records: ",
+                                 paste(s$components, collapse = ", ")))
+  cat("Biogeographical ignorance (", how, if (isTRUE(s$index))
     "; records per species", if (!is.null(s$radius_km))
-      paste0("; effort within ", s$radius_km, " km"), ")\n\nIN SHORT\n",
+      paste0(if (s$method == "records") "; interpolated within " else
+        "; effort within ", s$radius_km, " km"), ")\n\nIN SHORT\n",
     sep = "")
   sh <- x$summary$share_ignorant
   if (sh == 0) {
@@ -380,8 +391,10 @@ print.ignorance_map <- function(x, ...) {
                "group."))
   } else {
     say(paste0(share_label(sh), " of the cells have an ignorance above ",
-               s$threshold, ": there, few records of the reference group ",
-               "were made, so missing records of the species say little."))
+               s$threshold, ": there, the records of the reference group ",
+               "are few", if (s$method == "records")
+                 ", old, imprecise or from incomplete inventories", ", so ",
+               "missing records of the species say little."))
   }
   cl <- x$summary$classes
   if (!is.null(cl)) {
@@ -399,11 +412,17 @@ print.ignorance_map <- function(x, ...) {
     }
   }
   cat("", strwrap(paste0(
-    "Ignorance 0 = well recorded, 1 = nothing recorded (Ruete 2015). The ",
-    "threshold of ", s$threshold, " (half of the ignorance removed) is a ",
-    "rule of thumb. Effort counts only: taxonomic reliability, age of ",
-    "records and completeness, used by Tessarolo et al. (2021), are not ",
-    "included."), width = 78), sep = "\n")
+    "Ignorance 0 = well recorded, 1 = nothing recorded",
+    if (s$method == "records") paste0(
+      " (Tessarolo et al. 2021: per record, the components are added and ",
+      "rescaled to 0-1 over all records; a cell takes its best record of ",
+      "the focal species, or the mean over the other species; empty cells ",
+      "are interpolated within ", s$radius_km, " km).") else
+      " (Ruete 2015).", " The threshold of ", s$threshold,
+    " is a rule of thumb.", if (s$method != "records") paste0(
+      " Effort counts only: taxonomic reliability, age of records and ",
+      "completeness (Tessarolo et al. 2021) can be added from the records ",
+      "with record_ignorance().")), width = 78), sep = "\n")
   invisible(x)
 }
 
@@ -472,8 +491,11 @@ plot_ignorance <- function(x, type = c("both", "ignorance", "joint"),
                   subtitle = paste0(switch(s$method,
                     half = paste0("Half-ignorance score, O = ", s$half),
                     log = "Log-normalised effort",
-                    linear = "Normalised effort"),
-                    "; 0 = well recorded, 1 = nothing recorded.")) +
+                    linear = "Normalised effort",
+                    records = paste0("From records (", paste(s$components,
+                                                            collapse = ", "),
+                                     ")")),
+                    ";\n0 = well recorded, 1 = nothing recorded.")) +
     theme_enm(base_size, ink, muted)
   p_j <- NULL
   if (joint) {
@@ -506,4 +528,246 @@ plot_ignorance <- function(x, type = c("both", "ignorance", "joint"),
     return(invisible(p))
   }
   p
+}
+
+#' Map of biogeographical ignorance from occurrence records
+#'
+#' Builds a map of biogeographical ignorance from the records themselves
+#' (e.g. a GBIF download of the reference group), following the components
+#' of Tessarolo et al. (2021). Each record gets a quality from the
+#' components available:
+#'
+#' * **Completeness** of the inventory of its cell, from the species
+#'   accumulation curve: `1 - f1 / N`, where `N` is the number of records of
+#'   the group in the cell and `f1` the number of species recorded only
+#'   once. `f1 / N` is the expected slope at the end of a randomised
+#'   accumulation curve, the quantity Tessarolo et al. averaged over 100
+#'   randomisations. Cells with fewer than `min_records` records have
+#'   completeness 0 (Tessarolo et al. used 50 individuals).
+#' * **Age** (`year`): a Gaussian decay with the time since the record, 1
+#'   for the most recent record; `half_life` is the age at which it falls
+#'   to 0.5 (default: half of the period spanned by the records, so the
+#'   oldest records are the least informative, as in Tessarolo et al.).
+#' * **Taxonomic reliability** (`reliability`): a value from 0 to 1 per
+#'   record, e.g. by identifier class (Tessarolo et al. used 1, 0.9 and 0.75
+#'   for taxonomists, experts and amateurs). Give a column, or a named
+#'   vector translating the values of a column (e.g. `basisOfRecord` or a
+#'   class of identifier). No published weighting exists for other proxies,
+#'   such as the number of synonyms of a name; if you use one, say how.
+#' * **Precision** (`uncertainty`, e.g. `coordinateUncertaintyInMeters`):
+#'   not in Tessarolo et al.; `min(1, (cell size / (2 x uncertainty))^2)`,
+#'   roughly the share of the uncertainty circle that falls in the cell.
+#'
+#' As in Tessarolo et al., the components of each record are added and
+#' rescaled to 0-1 over all records, and ignorance is 1 minus that. A cell
+#' with records of the focal `species` takes the ignorance of its best one;
+#' a cell with records of other species only, the mean over species of
+#' their best record (records of the group there make an absence of the
+#' focal species informative). Cells without records are interpolated by
+#' inverse squared distance from the cells with records within
+#' `radius_km` (Tessarolo et al. used the range of spatial autocorrelation
+#' of the predictors, see [suggest_block_size()], and a distance combining
+#' geography and environment; here it is geographic only); farther cells
+#' get ignorance 1.
+#'
+#' @param records Records of the reference group (including the focal
+#'   species): a data.frame or CSV path (e.g. a GBIF download), with
+#'   coordinates and the other columns named below.
+#' @param template A raster defining the grid (e.g. 10 km cells; the result
+#'   has one value per cell). Keep it coarse: every cell is interpolated.
+#' @param species Optional name of the focal species (a value of the
+#'   species column).
+#' @param species_col Column with species names (default: `species`, else
+#'   `scientificName`).
+#' @param year Column with the year of collection (default `year` if
+#'   present; `NULL` or `FALSE` to ignore age).
+#' @param half_life Age (years) at which the age component falls to 0.5.
+#' @param reliability Optional column with values 0-1, or a named vector
+#'   translating the values of `reliability_col`.
+#' @param reliability_col Column translated by a named `reliability`.
+#' @param uncertainty Column with the coordinate uncertainty in metres
+#'   (default `coordinateUncertaintyInMeters` if present; `FALSE` to
+#'   ignore).
+#' @param min_records Fewest records in a cell for its completeness.
+#' @param radius_km Distance within which empty cells are interpolated.
+#' @inheritParams ignorance_map
+#' @param coords,crs Coordinate columns and their CRS (detected by default).
+#' @return An `ignorance_map` (see [ignorance_map()]); `settings` lists the
+#'   components used, and `records` the quality of each record.
+#' @references Tessarolo, G., Ladle, R.J., Lobo, J.M., Rangel, T.F.,
+#'   Hortal, J. (2021) Using maps of biogeographical ignorance to reveal the
+#'   uncertainty in distributional data hidden in species distribution
+#'   models. *Ecography* 44, 1743-1755. \doi{10.1111/ecog.05793}
+#' @seealso [ignorance_map()], [plot_ignorance()]
+#' @export
+#' @examples
+#' set.seed(1)
+#' rec <- data.frame(lon = runif(600, 10, 12), lat = runif(600, 50, 51),
+#'                   species = sample(paste0("sp", 1:30), 600, TRUE),
+#'                   year = sample(1950:2020, 600, TRUE))
+#' rec <- rec[rec$lon < 11.5, ]                  # the east is unrecorded
+#' grid <- terra::rast(xmin = 10, xmax = 12, ymin = 50, ymax = 51,
+#'                     resolution = 0.1, crs = "EPSG:4326")
+#' ig <- record_ignorance(rec, grid, species = "sp1", min_records = 5,
+#'                        radius_km = 20)
+#' ig
+#' plot_ignorance(ig)
+record_ignorance <- function(records, template, species = NULL,
+                             species_col = NULL, year = NULL,
+                             half_life = NULL, reliability = NULL,
+                             reliability_col = NULL, uncertainty = NULL,
+                             min_records = 50, radius_km = 50,
+                             suitability = NULL, threshold = 0.5,
+                             suitability_threshold = 0.5, coords = NULL,
+                             crs = "EPSG:4326") {
+  if (is.character(records) && length(records) == 1) {
+    records <- read_any_csv(records)
+  }
+  df <- as.data.frame(records, stringsAsFactors = FALSE)
+  r <- as_grid(template)[[1]]
+  if (terra::ncell(r) > 5e6) {
+    warning("The template has ", terra::ncell(r), " cells; ignorance is ",
+            "interpolated cell by cell, so a coarser grid (e.g. 10 km) is ",
+            "faster and closer to the scale of recording.", call. = FALSE)
+  }
+  nms <- names(df)
+  sp_col <- if (is.null(species_col)) {
+    find_column(nms, c("species", "scientificName", "taxon"))
+  } else species_col
+  if (is.na(sp_col) || !sp_col %in% nms) {
+    stop("No species column; give `species_col`.", call. = FALSE)
+  }
+  xy_cols <- if (is.null(coords)) guess_coords(nms) else coords
+  lon <- as_number(df[[xy_cols[1]]])
+  lat <- as_number(df[[xy_cols[2]]])
+  ok <- !is.na(lon) & !is.na(lat) & !is.na(df[[sp_col]])
+  df <- df[ok, , drop = FALSE]
+  p <- terra::vect(cbind(lon[ok], lat[ok]), crs = crs)
+  if (!terra::same.crs(p, r)) p <- terra::project(p, r)
+  df$.cell <- terra::cellFromXY(r, terra::crds(p))
+  df <- df[!is.na(df$.cell), , drop = FALSE]
+  if (!nrow(df)) stop("No record falls on the template.", call. = FALSE)
+  sp <- as.character(df[[sp_col]])
+  comp <- list()
+
+  # completeness of each cell: 1 - f1 / N (expected final slope of the
+  # randomised species accumulation curve)
+  cell_n <- tabulate(match(df$.cell, unique(df$.cell)))
+  ucell <- unique(df$.cell)
+  f1 <- vapply(ucell, function(cc) {
+    t <- table(sp[df$.cell == cc])
+    sum(t == 1)
+  }, numeric(1))
+  compl <- ifelse(cell_n >= min_records, 1 - f1 / cell_n, 0)
+  comp$completeness <- compl[match(df$.cell, ucell)]
+
+  # age
+  yr_col <- if (is.null(year)) find_column(nms, "year") else if
+    (isFALSE(year)) NA_character_ else year
+  if (!is.na(yr_col) && yr_col %in% nms) {
+    yr <- as_number(df[[yr_col]])
+    if (any(!is.na(yr))) {
+      age <- max(yr, na.rm = TRUE) - yr
+      hl <- if (is.null(half_life)) max(1, diff(range(yr, na.rm = TRUE)) / 2)
+        else half_life
+      w <- exp(-log(2) * (age / hl)^2)
+      w[is.na(w)] <- 0
+      comp$age <- w
+    }
+  }
+
+  # taxonomic reliability
+  if (!is.null(reliability)) {
+    if (is.character(reliability) && length(reliability) == 1 &&
+        reliability %in% nms) {
+      rel <- as_number(df[[reliability]])
+    } else if (is.numeric(reliability) && !is.null(names(reliability))) {
+      if (is.null(reliability_col) || !reliability_col %in% nms) {
+        stop("A named `reliability` needs `reliability_col`.",
+             call. = FALSE)
+      }
+      rel <- unname(reliability[as.character(df[[reliability_col]])])
+    } else {
+      stop("`reliability` must be a column name or a named vector.",
+           call. = FALSE)
+    }
+    if (any(rel < 0 | rel > 1, na.rm = TRUE)) {
+      stop("Reliability values must lie between 0 and 1.", call. = FALSE)
+    }
+    rel[is.na(rel)] <- 0
+    comp$reliability <- rel
+  }
+
+  # precision of the coordinates
+  un_col <- if (is.null(uncertainty)) {
+    find_column(nms, c("coordinateUncertaintyInMeters", "uncertainty"))
+  } else if (isFALSE(uncertainty)) NA_character_ else uncertainty
+  if (!is.na(un_col) && un_col %in% nms) {
+    u <- as_number(df[[un_col]])
+    if (any(!is.na(u))) {
+      cs <- sqrt(stats::median(terra::extract(terra::cellSize(
+        terra::rast(r), unit = "m"), unique(df$.cell))[[1]], na.rm = TRUE))
+      prec <- pmin(1, (cs / (2 * u))^2)
+      prec[is.na(prec)] <- 1          # no stated uncertainty: not penalised
+      comp$precision <- prec
+    }
+  }
+
+  # record quality: components added, rescaled 0-1; ignorance = 1 - that
+  tot <- Reduce(`+`, comp)
+  rg <- range(tot)
+  q <- if (diff(rg) > 0) (tot - rg[1]) / diff(rg) else rep(1, length(tot))
+  ig_rec <- 1 - q
+
+  # one value per cell with records
+  if (!is.null(species) && !species %in% sp) {
+    warning("No record of `species` (", species, "); every cell uses the ",
+            "records of the other species.", call. = FALSE)
+  }
+  cell_val <- vapply(ucell, function(cc) {
+    i <- which(df$.cell == cc)
+    if (!is.null(species) && any(sp[i] == species)) {
+      return(min(ig_rec[i][sp[i] == species]))
+    }
+    mean(tapply(ig_rec[i], sp[i], min))
+  }, numeric(1))
+
+  # interpolation of empty cells (inverse squared distance within radius)
+  v <- rep(NA_real_, terra::ncell(r))
+  v[ucell] <- cell_val
+  empty <- setdiff(seq_len(terra::ncell(r)), ucell)
+  if (length(empty)) {
+    pc <- terra::vect(terra::xyFromCell(r, ucell), crs = terra::crs(r))
+    pe <- terra::vect(terra::xyFromCell(r, empty), crs = terra::crs(r))
+    Xc <- dist_space(pc)
+    Xe <- dist_space(pe)
+    if (length(ucell) > 20) {
+      nn <- dbscan::kNN(Xc$X, k = 20, query = Xe$X)
+    } else {
+      # few cells with records: all distances
+      dd <- outer(rowSums(Xe$X^2), rowSums(Xc$X^2), "+") -
+        2 * Xe$X %*% t(Xc$X)
+      dd[] <- sqrt(pmax(dd, 0))
+      nn <- list(dist = dd, id = matrix(seq_along(ucell), nrow(dd),
+                                        length(ucell), byrow = TRUE))
+    }
+    d <- matrix(nn$dist, nrow = length(empty))
+    if (Xc$lonlat) d[] <- 2 * 6371.0088 * asin(pmin(d / (2 * 6371.0088), 1))
+    w <- (d <= radius_km) / pmax(d, 1e-9)^2
+    val <- matrix(cell_val[nn$id], nrow = length(empty))
+    sw <- rowSums(w)
+    v[empty] <- ifelse(sw > 0, rowSums(w * val) / sw, 1)
+  }
+  ign <- terra::rast(r)
+  terra::values(ign) <- v
+  if (terra::hasValues(r)) ign <- terra::mask(ign, r)    # e.g. land only
+  names(ign) <- "ignorance"
+  out <- ignorance_object(ign, suitability, threshold, suitability_threshold,
+                          list(method = "records", components = names(comp),
+                               n_records = nrow(df), radius_km = radius_km,
+                               species = species, index = FALSE))
+  out$records <- data.frame(cell = df$.cell, species = sp,
+                            as.data.frame(comp), ignorance = ig_rec,
+                            stringsAsFactors = FALSE)
+  out
 }

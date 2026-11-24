@@ -59,7 +59,7 @@ step can be used on its own.
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
 | After | [22](#22-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
-| After | [23](#23-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `plot_ignorance()` |
+| After | [23](#23-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `plot_ignorance()` |
 | After | [24](#24-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
@@ -2022,10 +2022,34 @@ terra::writeRaster(ig$raster, "ignorance.tif")
 - With `suitability`, the result adds the suitability where ignorance is low
   (`suitability_known`) and four classes: suitable or not, known or
   ignorant.
-- **Limits**: the full maps of Tessarolo et al. also weigh each record by
-  its taxonomic reliability, age and the completeness of the cell's
-  inventory, and interpolate in geographic and environmental space; that
-  needs record-level data. Here only the effort counts are used.
+**From the records themselves.** With a records table (e.g. a GBIF
+download of the reference group), `record_ignorance()` follows the
+components of Tessarolo et al. more closely. Each record's quality combines
+the **completeness** of its cell's inventory (`1 - f1 / N`, the expected
+final slope of the species accumulation curve; cells with fewer than
+`min_records` records count as incomplete), its **age** (`year`; a Gaussian
+decay, half at `half_life` years), optionally its **taxonomic reliability**
+(a 0-1 value per record, e.g. 1 / 0.9 / 0.75 for taxonomist / expert /
+amateur identifiers, as in Tessarolo et al.) and the **precision** of its
+coordinates (`coordinateUncertaintyInMeters`, an addition). A cell takes
+its best record of the focal species, or the mean over the other species;
+empty cells are interpolated within `radius_km`.
+
+```r
+ig <- record_ignorance("gbif_group_download.csv", grid_10km,
+                       species = "Focal species", radius_km = 100,
+                       reliability = c(PRESERVED_SPECIMEN = 1,
+                                       HUMAN_OBSERVATION = 0.9),
+                       reliability_col = "basisOfRecord",   # your choice
+                       suitability = ens$raster[["ensemble"]])
+```
+
+Taxonomic reliability has no standard proxy in GBIF data: identifier
+classes need expert coding, and no published weighting exists for proxies
+such as the number of synonyms of a name (World Flora Online and IPNI list
+them for plants); `reliability` takes any 0-1 weights you can justify.
+Tessarolo et al. interpolated in a distance combining geography and
+environment; `record_ignorance()` uses geographic distance only.
 
 ### 24. Reporting with ODMAP
 

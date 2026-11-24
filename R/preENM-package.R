@@ -1,8 +1,11 @@
 #' preENM: data preparation and model selection for ENM/SDM
 #'
 #' Data preparation:
+#' * [match_names()]: scientific names matched to GBIF, ChecklistBank or a
+#'   local backbone (accepted name, rank, synonyms, fuzzy matches).
 #' * [read_gbif()], [filter_occurrences()], [filter_settings()],
-#'   [filter_layers()]: rule-based filtering of occurrence records.
+#'   [filter_layers()]: rule-based filtering of occurrence records,
+#'   including tests of the names.
 #' * [delimit_m()], [linking_distance()], [m_scenarios()], [plot_m_area()],
 #'   [write_m_area()], [crop_to_m()]: the accessible area (M).
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.

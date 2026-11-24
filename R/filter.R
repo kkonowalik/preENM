@@ -18,6 +18,18 @@
 #' [filter_layers()].
 #'
 #' @section Tests, in the order they run:
+#' **Names** (need the columns added by [match_names()]; skipped otherwise)
+#' * `name_unmatched`: the name does not resolve to the backbone, or only
+#'   to a rank above the genus (optionally also fuzzy matches and low match
+#'   confidence: reasons `fuzzy_name`, `low_name_confidence`).
+#' * `name_synonym_conflict`: the record resolves to an accepted name other
+#'   than `target_taxon` (e.g. a synonym that now belongs to another
+#'   species), or is a hybrid name (`hybrid_name`).
+#' * `rank_conflict`: identified only to a rank coarser than `target_rank`
+#'   (e.g. the genus), or to an infraspecific taxon out of scope
+#'   (`infraspecific_excluded`), or, with `aggregates_in_scope = FALSE`, an
+#'   aggregate (`aggregate_name`).
+#'
 #' **Records and metadata**
 #' * `invalid_coordinates` (always): missing or impossible coordinates.
 #' * `duplicate`: same species at the same location (rounded to
@@ -216,6 +228,16 @@ filter_occurrences <- function(x, settings = filter_settings(),
                                     st)
     out$lattice_dataset <- ds_stats$lattice[match(ds_key, ds_stats$dataset)]
     out$stacked_dataset <- ds_stats$stacked[match(ds_key, ds_stats$dataset)]
+  }
+
+  # --- 0. names (columns from match_names()) ---------------------------------
+  name_tests <- c("name_unmatched", "name_synonym_conflict", "rank_conflict")
+  if (any(name_tests %in% st$tests)) {
+    if (!"name_match_type" %in% names(x)) {
+      for (tt in name_tests) skip(tt, "no name columns: run match_names()")
+    } else {
+      name_filter(x, st, on, flag, skip)
+    }
   }
 
   # --- 1. duplicates ----------------------------------------------------------
@@ -497,6 +519,70 @@ filter_occurrences <- function(x, settings = filter_settings(),
   class(res) <- "occ_filter"
   say("Kept ", sum(is.na(reason)), " of ", n, " records")
   res
+}
+
+# The three name tests on the columns of match_names() (internal)
+name_filter <- function(x, st, on, flag, skip) {
+  canon <- function(v) {
+    out <- rep(NA_character_, length(v))
+    ok <- !is.na(v)
+    out[ok] <- tolower(parse_names(v[ok])$canonical)
+    out
+  }
+  lv <- rank_level(x$name_rank)
+  mt <- as.character(x$name_match_type)
+  if (on("name_unmatched")) {
+    # not resolved, or only to a rank above the genus
+    flag(mt %in% c("none", NA) | (!is.na(lv) & lv < 7), "name_unmatched")
+    if (!isTRUE(st$accept_fuzzy)) {
+      flag(x$name_fuzzy %in% TRUE, "fuzzy_name", "name_unmatched")
+    }
+    if (st$min_name_confidence > 0) {
+      flag(!is.na(x$name_confidence) &
+             x$name_confidence < st$min_name_confidence,
+           "low_name_confidence", "name_unmatched")
+    }
+  }
+  if (on("name_synonym_conflict")) {
+    if (all(is.na(st$target_taxon))) {
+      skip("name_synonym_conflict", "target_taxon is NA")
+    } else {
+      tgt <- canon(st$target_taxon)
+      sp <- canon(x$name_accepted_species)
+      acc <- canon(x$name_accepted)
+      # a record of species rank or finer whose accepted name (or its
+      # species) is not the target
+      fine <- !is.na(lv) & lv >= 8
+      other <- fine & !(sp %in% tgt | acc %in% tgt)
+      if (!isTRUE(st$hybrids_in_scope)) {
+        flag(x$name_hybrid %in% TRUE, "hybrid_name", "name_synonym_conflict")
+      }
+      flag(other, "name_synonym_conflict")
+    }
+  }
+  if (on("rank_conflict")) {
+    want <- rank_level(st$target_rank)
+    if (is.na(want)) stop("Unknown target_rank: ", st$target_rank,
+                          call. = FALSE)
+    flag(!is.na(lv) & lv < want, "rank_conflict")
+    infra <- !is.na(lv) & lv > 8
+    names_rec <- cbind(canon(x$name_matched), canon(x$name_accepted))
+    listed <- function(set) {
+      set <- canon(set[!is.na(set)])
+      names_rec[, 1] %in% set | names_rec[, 2] %in% set
+    }
+    if (length(st$infraspecific_exclude)) {
+      flag(infra & listed(st$infraspecific_exclude),
+           "infraspecific_excluded", "rank_conflict")
+    }
+    if (!all(is.na(st$infraspecific_include))) {
+      flag(infra & !listed(st$infraspecific_include),
+           "infraspecific_excluded", "rank_conflict")
+    }
+    if (!isTRUE(st$aggregates_in_scope)) {
+      flag(x$name_aggregate %in% TRUE, "aggregate_name", "rank_conflict")
+    }
+  }
 }
 
 # GBIF default column names and user overrides -> actual column names

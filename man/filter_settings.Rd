@@ -53,6 +53,30 @@ C), the strict values used were \code{climate_limit = 22},
 \section{Settings}{
 
 \describe{
+\item{\code{target_taxon}}{Accepted name(s) of the taxon being modelled,
+e.g. \code{"Dryas octopetala"} (several for a group of species). Used by
+\code{name_synonym_conflict}; \code{NA} switches that test off. The name tests
+need the columns added by \code{\link[=match_names]{match_names()}}.}
+\item{\code{target_rank}}{Finest rank a record must reach (default
+\code{"species"}): records identified only to a coarser rank, e.g. the
+genus, fail \code{rank_conflict}.}
+\item{\code{infraspecific_include}, \code{infraspecific_exclude}}{Which
+infraspecific taxa of the target are in scope: names of subspecies,
+varieties or forms (as matched or accepted, e.g. \code{"Dryas octopetala subsp. hookeriana"}). \code{infraspecific_include = NA} (default) accepts
+all; otherwise only those listed. Listed in \code{infraspecific_exclude}:
+always removed (\code{rank_conflict}, reason \code{infraspecific_excluded}).
+In polyploid complexes, where cytotypes are often recorded under an
+aggregate or a species name, declare here which taxa belong to the
+unit you model.}
+\item{\code{aggregates_in_scope}}{Keep records named as an aggregate
+(\emph{agg.}, \emph{s.l.}) of the target (default \code{TRUE}); with \code{FALSE} they
+fail \code{rank_conflict} (reason \code{aggregate_name}).}
+\item{\code{hybrids_in_scope}}{Keep hybrid names (default \code{FALSE}: they
+fail \code{name_synonym_conflict}, reason \code{hybrid_name}).}
+\item{\code{accept_fuzzy}, \code{min_name_confidence}}{Whether names matched
+only fuzzily (misspelled) count as matched, and the lowest accepted
+match confidence (0-100); otherwise they fail \code{name_unmatched}
+(reasons \code{fuzzy_name} and \code{low_name_confidence}).}
 \item{\code{dedup_digits}}{Records of one species at the same location rounded
 to this many decimals are duplicates (default 4, about 10 m). \code{NA} = off.}
 \item{\code{grid_cell_sizes_m}}{Atlas grid squares (m). An uncertainty equal to

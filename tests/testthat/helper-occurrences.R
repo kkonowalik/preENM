@@ -74,3 +74,20 @@ make_fake_layers <- function() {
   built[terra::cellFromXY(built, cbind(14.12345, 47.42345))] <- 0.5  # 50 %
   list(land = land, range = range, climate = clim, built = built)
 }
+
+# A small Darwin Core backbone: genus Aus with species, a synonym and two
+# subspecies, and the genus Cus
+name_backbone <- function() {
+  data.frame(
+    taxonID = as.character(1:8),
+    scientificName = c("Aus bus L.", "Aus cus Mill.", "Aus dus Sm.",
+                       "Aus bus subsp. eus Hook.", "Aus",
+                       "Aus bus subsp. fus Hook.", "Cus", "Cus gus L."),
+    taxonRank = c("species", "species", "species", "subspecies", "genus",
+                  "subspecies", "genus", "species"),
+    taxonomicStatus = c("accepted", "accepted", "synonym", "accepted",
+                        "accepted", "accepted", "accepted", "accepted"),
+    acceptedNameUsageID = c("", "", "1", "", "", "", "", ""),
+    parentNameUsageID = c("5", "5", "", "1", "", "1", "", "7"),
+    stringsAsFactors = FALSE)
+}

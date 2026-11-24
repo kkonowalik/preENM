@@ -33,7 +33,7 @@ step can be used on its own.
 
 | | Section | Step | Functions |
 |---|---|---|---|
-| Before | [1](#1-point-filtering) | **Point filtering** (especially GBIF) | `read_gbif()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
+| Before | [1](#1-point-filtering) | **Name matching and point filtering** (especially GBIF) | `read_gbif()`, `match_names()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
 | Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
 | Before | [4](#4-computing-derived-climate-variables) | **Derived climate variables** (25 indices of water balance, heat, cold, season and light; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
@@ -90,6 +90,7 @@ it passes every active test, so every decision can be checked.
 
 | Group | Tests (in order) | Needs |
 |---|---|---|
+| Names | `name_unmatched` (not resolved, or only above the genus), `name_synonym_conflict` (resolves to an accepted name other than the target; hybrid names), `rank_conflict` (only the genus, or an infraspecific taxon out of scope) | the columns of `match_names()`, `target_taxon` |
 | Records and metadata | `invalid_coordinates`, `duplicate`, `grid_cell_centre` (atlas cell centres recognised from the uncertainty), `gbif_issue`, `basis_of_record`, `establishment_means`, `coord_uncertainty`, `coarse_decimals`, `garden_text`, `settlement_text`, `locality_is_country`, `too_old`, `manual_exclude`, `excluded_dataset` | GBIF columns |
 | Gridded datasets | `grid_uncertainty_block`, `lattice_dataset`, `stacked_dataset` (atlas or grid data recognised per dataset) | `datasetKey` |
 | CoordinateCleaner | `country_mismatch`, `coordinatecleaner` (centroids, institutions, zeros, GBIF HQ, urban areas) | the CoordinateCleaner package |
@@ -111,6 +112,7 @@ settings <- filter_settings(
   max_coord_unc_m = 1000,
   climate_limit = 22, climate_soft_limit = 16,         # deg C, warmest quarter
   refuge_limit = 11, refuge_radius_km = 10,            # e.g. an arctic-alpine plant
+  target_taxon = "Dryas octopetala",                   # accepted name
   drop_tests = "too_old")                              # switch tests off/on
 
 layers <- filter_layers(
@@ -119,6 +121,8 @@ layers <- filter_layers(
   climate  = "CHELSA_bio10_1981-2010_V.2.1.tif",
   built    = download_landcover("built", "data"),      # ESA WorldCover ~1 km
   cropland = download_landcover("cropland", "data"))
+
+occ <- match_names(occ, kingdom = "Plantae")          # names against GBIF
 
 res <- filter_occurrences(occ, settings, layers,
                           exclude_ids = c("1701093660"),   # gbifID lists
@@ -136,6 +140,43 @@ skipped. Optional helpers download the layers: `download_shoreline()`,
 `download_landcover()` and `aggregate_ghs()` (GHS-BUILT-S settlement layers).
 See `?filter_occurrences` and `?filter_settings` for every test and
 threshold.
+
+**Is the name right?** Records arrive under synonyms, outdated names,
+misspellings, genus-only, aggregate and hybrid names. Cleaning pipelines
+differ most in how they treat them, and none found misidentified specimens
+without expert knowledge (Fuehrding-Potschkat et al. 2022, *Ecology and
+Evolution* 12, e9168); records that could not be confidently assigned to
+the accepted taxon are best excluded and the losses documented (Lipinski
+2026, *Conservation* 6, 40). `match_names()` resolves each distinct name
+once against a backbone and adds the matched and accepted name, the
+accepted species, rank, status, match type (exact, fuzzy, higher rank,
+none), confidence and flags for synonyms, hybrids, aggregates, higher-rank
+and fuzzy matches:
+
+- `backbone = "gbif"` (default; rgbif), `"checklistbank"` (a ChecklistBank
+  dataset, by default the Catalogue of Life) or a Darwin Core taxon table
+  such as the World Flora Online backbone, matched locally without
+  internet;
+- results are cached for the session and, with `cache_file`, across
+  sessions, so a large download is looked up only once;
+- for GBIF downloads the verbatim name is matched by default, so you see
+  what GBIF's own interpretation did.
+
+The three name tests then come first in `filter_occurrences()`. Which
+infraspecific taxa belong to the unit you model is yours to declare, not a
+fixed rule: in polyploid complexes cytotypes are often recorded under an
+aggregate or a species name.
+
+```r
+settings <- filter_settings(
+  "strict",
+  target_taxon = "Aus bus",                           # accepted name(s)
+  infraspecific_include = c("Aus bus subsp. bus",     # in scope
+                            "Aus bus subsp. cus"),
+  infraspecific_exclude = "Aus bus subsp. dus",       # always out
+  aggregates_in_scope = TRUE,                         # "Aus bus agg." kept
+  accept_fuzzy = FALSE)                               # misspelled: removed
+```
 
 **Relation to CoordinateCleaner.** Its standard tests are called, not
 re-implemented, so please also cite Zizka et al. (2019), *Methods in Ecology

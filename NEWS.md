@@ -1,3 +1,30 @@
+# preENM 2.34.0
+
+Taxonomic name matching (Fuehrding-Potschkat et al. 2022, *Ecology and
+Evolution* 12, e9168; Van Eupen et al. 2021, *Ecological Modelling* 444,
+109453; Lipinski 2026, *Conservation* 6, 40):
+
+* `match_names()`: resolves the scientific names of occurrence records
+  against GBIF (rgbif), a ChecklistBank dataset (by default the Catalogue
+  of Life) or a local Darwin Core table (e.g. the World Flora Online
+  backbone, without internet). Adds the matched and accepted name, the
+  accepted species, rank, status, match type (exact, fuzzy, higher rank,
+  none), confidence and flags for synonyms, hybrids, aggregates,
+  higher-rank and fuzzy matches. Each distinct name is looked up once;
+  results are cached for the session and optionally in a file.
+* Three name tests run first in `filter_occurrences()`: `name_unmatched`
+  (not resolved, or only above the genus; optionally fuzzy matches and low
+  confidence), `name_synonym_conflict` (resolves to an accepted name other
+  than `target_taxon`; hybrid names) and `rank_conflict` (identified only
+  to a coarser rank than `target_rank`, an infraspecific taxon out of
+  scope, or optionally an aggregate). New settings: `target_taxon`,
+  `target_rank`, `infraspecific_include`, `infraspecific_exclude`,
+  `aggregates_in_scope`, `hybrids_in_scope`, `accept_fuzzy`,
+  `min_name_confidence`. Without the columns of `match_names()` the tests
+  are skipped and reported as such.
+* `record_fate()` shows the queried and accepted name, match type and rank.
+* jsonlite added to Suggests (for ChecklistBank).
+
 # preENM 2.33.0
 
 * `niche_overlap()`: new `truncate` option computes D, I and breadth from

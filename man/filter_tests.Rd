@@ -11,7 +11,8 @@ Character vector of test names.
 }
 \description{
 Each record keeps the reason of the \emph{first} test it fails, so the order
-matters: cheap, unambiguous metadata tests come first and the climate tests
+matters: the name tests come first (is the record of the target taxon at
+all?), then cheap, unambiguous metadata tests, and the climate tests
 last. Returned by \code{filter_tests()}; see \code{\link[=filter_occurrences]{filter_occurrences()}} for what each
 test does.
 }

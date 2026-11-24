@@ -273,3 +273,63 @@ test_that("locality names in other languages are recognised", {
                     nm))
   expect_false("rocky slope" %in% nm)
 })
+
+test_that("name tests come first in filter_tests()", {
+  ft <- filter_tests()
+  expect_equal(ft[1:4], c("name_unmatched", "name_synonym_conflict",
+                          "rank_conflict", "duplicate"))
+})
+
+test_that("name tests remove the right records and are reported", {
+  occ <- data.frame(
+    gbifID = as.character(1:9),
+    decimalLongitude = c("10.1234", "10.2234", "10.3234", "10.4234",
+                         "10.5234", "10.6234", "10.7234", "10.8234",
+                         "10.9234"),
+    decimalLatitude = "46.1234",
+    scientificName = c("Aus bus", "Aus dus", "Aus buss", "Aus sp.",
+                       "Aus bus subsp. eus", "Zus bus", "Aus cus",
+                       "Aus bus subsp. fus", "Aus bus x cus"))
+  m <- match_names(occ, backbone = name_backbone(), verbose = FALSE)
+  st <- filter_settings(cc_tests = "zeros", target_taxon = "Aus bus",
+                        infraspecific_exclude = "Aus bus subsp. fus",
+                        drop_tests = "small_isolated_cluster")
+  r <- filter_occurrences(m, st, verbose = FALSE)
+  fate <- record_fate(r, as.character(1:9))
+  expect_equal(fate$fate, c("KEPT", "KEPT", "KEPT", "rank_conflict", "KEPT",
+                            "name_unmatched", "name_synonym_conflict",
+                            "infraspecific_excluded", "hybrid_name"))
+  expect_true(all(c("name_accepted", "name_match_type") %in% names(fate)))
+  rep <- filter_report(r)
+  # reported in the order of the tests
+  expect_equal(rep$outcome, c("KEPT", "name_unmatched", "hybrid_name",
+                              "name_synonym_conflict", "rank_conflict",
+                              "infraspecific_excluded"))
+  expect_equal(rep$n, c(4, 1, 1, 1, 1, 1))
+  # in scope: only the listed infraspecific taxa
+  st2 <- filter_settings(cc_tests = "zeros", target_taxon = "Aus bus",
+                         infraspecific_include = "Aus bus subsp. fus",
+                         hybrids_in_scope = TRUE, accept_fuzzy = FALSE,
+                         drop_tests = "small_isolated_cluster")
+  f2 <- record_fate(filter_occurrences(m, st2, verbose = FALSE),
+                    as.character(1:9))$fate
+  expect_equal(f2[c(3, 5, 8)], c("fuzzy_name", "infraspecific_excluded",
+                                 "KEPT"))
+  # a coarser target rank keeps genus-only records
+  st3 <- filter_settings(cc_tests = "zeros", target_rank = "genus",
+                         drop_tests = "small_isolated_cluster")
+  expect_equal(record_fate(filter_occurrences(m, st3, verbose = FALSE),
+                           "4")$fate, "KEPT")
+})
+
+test_that("name tests are skipped without match_names() columns", {
+  occ <- data.frame(decimalLongitude = c(10.1234, 11.1234),
+                    decimalLatitude = c(46.1234, 47.1234))
+  r <- filter_occurrences(occ, filter_settings(cc_tests = "zeros",
+                                               target_taxon = "Aus bus"),
+                          verbose = FALSE)
+  sk <- r$log[r$log$status == "skipped", ]
+  expect_true(all(c("name_unmatched", "name_synonym_conflict",
+                    "rank_conflict") %in% sk$test))
+  expect_match(sk$note[sk$test == "name_unmatched"], "match_names")
+})

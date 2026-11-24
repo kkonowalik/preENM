@@ -197,7 +197,9 @@ record_fate <- function(x, ids) {
   if (is.na(idc)) stop("No id column in the data.", call. = FALSE)
   d <- x$data
   i <- which(as.character(d[[idc]]) %in% as.character(ids))
-  diag_cols <- intersect(c("reason_overridden", "climate", "climate_near",
+  diag_cols <- intersect(c("reason_overridden", "name_query",
+                           "name_accepted", "name_match_type", "name_rank",
+                           "climate", "climate_near",
                            "built_pct", "crop_pct", "ghs_mean_pct",
                            "ghs_max_m2", "land_near_pct", "dist_land_m",
                            "grid_centre", "in_range"), names(d))

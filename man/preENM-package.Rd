@@ -8,8 +8,11 @@
 \description{
 Data preparation:
 \itemize{
+\item \code{\link[=match_names]{match_names()}}: scientific names matched to GBIF, ChecklistBank or a
+local backbone (accepted name, rank, synonyms, fuzzy matches).
 \item \code{\link[=read_gbif]{read_gbif()}}, \code{\link[=filter_occurrences]{filter_occurrences()}}, \code{\link[=filter_settings]{filter_settings()}},
-\code{\link[=filter_layers]{filter_layers()}}: rule-based filtering of occurrence records.
+\code{\link[=filter_layers]{filter_layers()}}: rule-based filtering of occurrence records,
+including tests of the names.
 \item \code{\link[=delimit_m]{delimit_m()}}, \code{\link[=linking_distance]{linking_distance()}}, \code{\link[=m_scenarios]{m_scenarios()}}, \code{\link[=plot_m_area]{plot_m_area()}},
 \code{\link[=write_m_area]{write_m_area()}}, \code{\link[=crop_to_m]{crop_to_m()}}: the accessible area (M).
 \item \code{\link[=crop_rasters]{crop_rasters()}}: cut folders of raster files to M, keeping values exact.

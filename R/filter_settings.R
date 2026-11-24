@@ -3,7 +3,8 @@
 #' All filtering tests, in the order they are run
 #'
 #' Each record keeps the reason of the *first* test it fails, so the order
-#' matters: cheap, unambiguous metadata tests come first and the climate tests
+#' matters: the name tests come first (is the record of the target taxon at
+#' all?), then cheap, unambiguous metadata tests, and the climate tests
 #' last. Returned by `filter_tests()`; see [filter_occurrences()] for what each
 #' test does.
 #'
@@ -12,7 +13,8 @@
 #' @examples
 #' filter_tests()
 filter_tests <- function() {
-  c("duplicate", "grid_cell_centre", "gbif_issue", "basis_of_record",
+  c("name_unmatched", "name_synonym_conflict", "rank_conflict",
+    "duplicate", "grid_cell_centre", "gbif_issue", "basis_of_record",
     "establishment_means", "coord_uncertainty", "coarse_decimals",
     "garden_text", "settlement_text", "locality_is_country", "too_old",
     "manual_exclude", "excluded_dataset", "grid_uncertainty_block",
@@ -55,6 +57,31 @@ filter_tests <- function() {
 #'   remove from the preset's list of tests.
 #' @section Settings:
 #' \describe{
+#'   \item{`target_taxon`}{Accepted name(s) of the taxon being modelled,
+#'     e.g. `"Dryas octopetala"` (several for a group of species). Used by
+#'     `name_synonym_conflict`; `NA` switches that test off. The name tests
+#'     need the columns added by [match_names()].}
+#'   \item{`target_rank`}{Finest rank a record must reach (default
+#'     `"species"`): records identified only to a coarser rank, e.g. the
+#'     genus, fail `rank_conflict`.}
+#'   \item{`infraspecific_include`, `infraspecific_exclude`}{Which
+#'     infraspecific taxa of the target are in scope: names of subspecies,
+#'     varieties or forms (as matched or accepted, e.g. `"Dryas octopetala
+#'     subsp. hookeriana"`). `infraspecific_include = NA` (default) accepts
+#'     all; otherwise only those listed. Listed in `infraspecific_exclude`:
+#'     always removed (`rank_conflict`, reason `infraspecific_excluded`).
+#'     In polyploid complexes, where cytotypes are often recorded under an
+#'     aggregate or a species name, declare here which taxa belong to the
+#'     unit you model.}
+#'   \item{`aggregates_in_scope`}{Keep records named as an aggregate
+#'     (*agg.*, *s.l.*) of the target (default `TRUE`); with `FALSE` they
+#'     fail `rank_conflict` (reason `aggregate_name`).}
+#'   \item{`hybrids_in_scope`}{Keep hybrid names (default `FALSE`: they
+#'     fail `name_synonym_conflict`, reason `hybrid_name`).}
+#'   \item{`accept_fuzzy`, `min_name_confidence`}{Whether names matched
+#'     only fuzzily (misspelled) count as matched, and the lowest accepted
+#'     match confidence (0-100); otherwise they fail `name_unmatched`
+#'     (reasons `fuzzy_name` and `low_name_confidence`).}
 #'   \item{`dedup_digits`}{Records of one species at the same location rounded
 #'     to this many decimals are duplicates (default 4, about 10 m). `NA` = off.}
 #'   \item{`grid_cell_sizes_m`}{Atlas grid squares (m). An uncertainty equal to
@@ -166,7 +193,12 @@ filter_settings <- function(preset = c("strict", "lenient"), ...,
     climate_limit = NA, climate_soft_limit = NA, refuge_limit = NA,
     isolation_climate = NA,
     drop_na_climate = TRUE,
-    min_cluster_n = 3
+    min_cluster_n = 3,
+    target_taxon = NA_character_, target_rank = "species",
+    infraspecific_include = NA_character_,
+    infraspecific_exclude = character(0),
+    aggregates_in_scope = TRUE, hybrids_in_scope = FALSE,
+    accept_fuzzy = TRUE, min_name_confidence = 0
   )
   presets <- list(
     strict = list(

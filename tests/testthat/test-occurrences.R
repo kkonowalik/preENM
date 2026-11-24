@@ -49,3 +49,94 @@ test_that("invalid UTF-8 text is repaired", {
   expect_true(validUTF8(m$place))
   expect_equal(m$place, "Kraków")
 })
+
+test_that("parse_names() strips authors and markers, flags hybrids", {
+  p <- parse_names(c("Aus bus L.", "Aus bus subsp. eus (Hook.) Sm.",
+                     "Aus bus x cus", "Aus x hybridus", "Aus bus agg.",
+                     "Aus sp.", "Aus bus L. ex Sm."))
+  expect_equal(p$canonical, c("Aus bus", "Aus bus eus", "Aus bus",
+                              "Aus hybridus", "Aus bus", "Aus", "Aus bus"))
+  expect_equal(p$hybrid, c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE))
+  expect_equal(p$aggregate, c(FALSE, FALSE, FALSE, FALSE, TRUE, FALSE,
+                              FALSE))
+})
+
+test_that("match_names(): synonym, fuzzy, genus-only and unmatched names", {
+  occ <- data.frame(lon = 1:7, lat = 50,
+                    scientificName = c("Aus bus", "Aus dus Sm.", "Aus buss",
+                                       "Aus sp.", "Aus bus subsp. eus",
+                                       "Zus bus", NA))
+  m <- match_names(occ, backbone = name_backbone(), verbose = FALSE)
+  expect_equal(nrow(m), 7)
+  # a known synonym resolves to its accepted name
+  expect_equal(m$name_accepted[2], "Aus bus")
+  expect_true(m$name_synonym[2])
+  expect_equal(m$name_status[2], "synonym")
+  # a misspelled name is flagged as fuzzy
+  expect_equal(m$name_match_type[3], "fuzzy")
+  expect_true(m$name_fuzzy[3])
+  expect_equal(m$name_accepted[3], "Aus bus")
+  expect_lt(m$name_confidence[3], 100)
+  # genus only
+  expect_equal(m$name_rank[4], "genus")
+  expect_true(is.na(m$name_accepted_species[4]))
+  # infraspecific: its species
+  expect_equal(m$name_rank[5], "subspecies")
+  expect_equal(m$name_accepted_species[5], "Aus bus")
+  # unknown genus and missing name
+  expect_equal(m$name_match_type[6:7], c("none", "none"))
+  expect_true(all(m$name_unmatched[6:7]))
+  expect_equal(nrow(attr(m, "names_matched")), 6)
+  # a species of a known genus that is not in the backbone: higher rank
+  h <- match_names(data.frame(species = "Aus novus"),
+                   backbone = name_backbone(), verbose = FALSE)
+  expect_equal(h$name_match_type, "higherrank")
+  expect_equal(h$name_rank, "genus")
+})
+
+test_that("online look-ups are cached", {
+  calls <- 0
+  local_mocked_bindings(match_gbif = function(u, kingdom, checklist) {
+    calls <<- calls + length(u)
+    match_rows(u, name_matched = u, name_accepted = u,
+               name_accepted_species = u, name_rank = "SPECIES",
+               name_status = "ACCEPTED", name_match_type = "EXACT",
+               name_confidence = 99)
+  })
+  rm(list = ls(.name_cache), envir = .name_cache)
+  f <- tempfile(fileext = ".rds")
+  d <- data.frame(species = c("Qus aus", "Qus bus", "Qus aus"))
+  a <- match_names(d, cache_file = f, verbose = FALSE)
+  expect_equal(calls, 2)
+  b <- match_names(d, cache_file = f, verbose = FALSE)
+  expect_equal(calls, 2)
+  expect_equal(a$name_accepted, b$name_accepted)
+  expect_true(file.exists(f))
+  # a new session reads the file
+  rm(list = ls(.name_cache), envir = .name_cache)
+  attr(.name_cache, "loaded_from") <- NULL
+  match_names(d, cache_file = f, verbose = FALSE)
+  expect_equal(calls, 2)
+  rm(list = ls(.name_cache), envir = .name_cache)
+  attr(.name_cache, "loaded_from") <- NULL
+})
+
+test_that("match_names() against GBIF", {
+  skip_if_not_installed("rgbif")
+  skip_on_cran()
+  skip_on_ci()
+  skip_if_offline()
+  m <- match_names(data.frame(species = c("Potentilla tabernaemontani",
+                                          "Leontodn hispidus", "Dryas")),
+                   kingdom = "Plantae", cache = FALSE, verbose = FALSE)
+  expect_equal(m$name_accepted[1], "Potentilla verna")
+  expect_true(m$name_synonym[1])
+  expect_true(m$name_fuzzy[2])
+  expect_equal(m$name_rank[3], "genus")
+})
+
+test_that("the multiplication sign marks a hybrid", {
+  p <- parse_names(c("Salix × rubens", "×Festulolium loliaceum"))
+  expect_equal(p$canonical, c("Salix rubens", "Festulolium loliaceum"))
+  expect_equal(p$hybrid, c(TRUE, TRUE))
+})

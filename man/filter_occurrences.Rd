@@ -71,6 +71,20 @@ shoreline, climate, land cover) run only when the layer is supplied through
 }
 \section{Tests, in the order they run}{
 
+\strong{Names} (need the columns added by \code{\link[=match_names]{match_names()}}; skipped otherwise)
+\itemize{
+\item \code{name_unmatched}: the name does not resolve to the backbone, or only
+to a rank above the genus (optionally also fuzzy matches and low match
+confidence: reasons \code{fuzzy_name}, \code{low_name_confidence}).
+\item \code{name_synonym_conflict}: the record resolves to an accepted name other
+than \code{target_taxon} (e.g. a synonym that now belongs to another
+species), or is a hybrid name (\code{hybrid_name}).
+\item \code{rank_conflict}: identified only to a rank coarser than \code{target_rank}
+(e.g. the genus), or to an infraspecific taxon out of scope
+(\code{infraspecific_excluded}), or, with \code{aggregates_in_scope = FALSE}, an
+aggregate (\code{aggregate_name}).
+}
+
 \strong{Records and metadata}
 \itemize{
 \item \code{invalid_coordinates} (always): missing or impossible coordinates.

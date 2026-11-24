@@ -49,6 +49,7 @@ step can be used on its own.
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 | After | [14](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
 | After | [14](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
+| After | [17](#prediction-scales-0-1-0-100-0-1000) | **Prediction scales** checked per model, 0-100 and 0-1000 rescaled to 0-1 | `rescale = TRUE` in `evaluate_models()`, `ensemble_models()`, ... |
 | After | [18](#18-how-the-selection-works) | **How the selection works** (Pareto front, compromise distance, bootstrap robustness) | `pareto_rank()` |
 | After | [19](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
 | After | [19](#fossil-temporal-validation) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
@@ -56,7 +57,9 @@ step can be used on its own.
 | After | [19](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
 | After | [20](#20-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
 | After | [21](#21-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
-| After | [22](#22-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
+| After | [22](#22-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
+| After | [23](#23-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `plot_ignorance()` |
+| After | [24](#24-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
 Points are re-projected to each raster automatically.
@@ -1247,7 +1250,8 @@ You need three things:
 
 1. **Model output rasters**, from Maxent, biomod2, ENMeval, `predicts`,
    `dismo`, or any other software, even outside R. Values should be on a 0–1
-   scale (e.g. Maxent *cloglog* or *logistic* output).
+   scale (e.g. Maxent *cloglog* or *logistic* output); see
+   [Prediction scales](#prediction-scales-0-1-0-100-0-1000) below.
 2. **Presence points.**
 3. **Absence points.** If you have no true absences, use background or
    pseudo-absence points.
@@ -1288,6 +1292,22 @@ tab <- data.frame(obs = c(1, 1, 0, 0, ...),   # 1 = presence, 0 = absence
                   maxent = c(...), glm = c(...))
 evaluate_models(data = tab, n_boot = 1000)
 ```
+
+#### Prediction scales (0-1, 0-100, 0-1000)
+
+Algorithms write their predictions on different scales: 0-1 (probability,
+Maxent cloglog), 0-100 or 0-1000 (biomod2 stores integers to save space).
+AUC does not care, but MAE, bias, calibration, thresholds and ensembles are
+only comparable on one scale. Every function that takes several models
+(`extract_predictions()`, `evaluate_models()`, `evaluate_cv()`,
+`calibration_curve()`, `ensemble_models()`, `partition_uncertainty()`)
+therefore **checks the scale of each model** from its largest value and,
+with `rescale = TRUE` (the default), divides models on 0-100 or 0-1000 by
+100 or 1000, with a message naming them. `rescale = FALSE` keeps the values
+and warns. Models whose scale cannot be recognised (negative values, or
+values above 1000 such as raw Maxent output) are left as they are, with a
+warning: use probability-like output instead. A model on 0-100 that never
+exceeds 1 cannot be recognised, so check the message.
 
 ### 18. How the selection works
 
@@ -1653,7 +1673,7 @@ SpatRaster or files/folders, from any software) and the result of
 with the disagreement between the models in every cell:
 
 ```r
-ens <- ensemble_models(sim$models, sel)          # median of the selected models
+ens <- ensemble_models(sim$models, sel)          # PCAm of the selected models
 ens                                              # where do the models disagree?
 plot_ensemble(ens, file = "ensemble.pdf")        # ensemble and SD side by side
 ensemble_models(prediction_folder, sel, method = "pcam",
@@ -1665,11 +1685,13 @@ ensemble_models(prediction_folder, sel, method = "pcam",
 - **Which models:** only the selected models of `select_models()`, or the
   Pareto front of `evaluate_models()`; dominated or unselected models are
   left out (`use = "all"` keeps them all).
-- **How they are combined:** `"median"` (default), `"mean"`, `"pcam"`
-  (the median of the half of the models closest to their common trend, the
-  first principal component of the predictions) or `"weighted"` (weights
-  `1 - distance`, the compromise score of the evaluation, or your own
-  `weights`).
+- **How they are combined:** `"pcam"` (default: the median of the half of
+  the models closest to their common trend, the first principal component
+  of the predictions; with fewer than three models the median), `"median"`,
+  `"mean"` or `"weighted"` (weights `1 - distance`, the compromise score of
+  the evaluation, or your own `weights`). Models on 0-100 or 0-1000 are
+  brought to 0-1 first (see
+  [Prediction scales](#prediction-scales-0-1-0-100-0-1000)).
 - **Why weighting is not the default:** weights based on the evaluation
   reward predicting the data the models were evaluated on, which is not
   the same as predicting new areas or periods. In transfers across
@@ -1865,7 +1887,82 @@ design-driven result is not necessarily wrong (if the whole area becomes
 unsuitable, every model says so), but it does not come from your records
 and needs other evidence. Use 99 or more null models for stable intervals.
 
-### 22. Reporting with ODMAP
+### 22. Which source of uncertainty dominates a set of projections?
+
+A realistic set of projections varies at once in climate model (GCM),
+scenario, algorithm and cross-validation run, and it is hard to see which
+choice matters most, and where. `partition_uncertainty()` splits, in every
+cell, the variance of the projected suitability among these factors, as in
+an analysis of variance with the factors as main effects (the partitioning
+used for climate projections by Hawkins and Sutton 2009 and for their
+ecological consequences by Wilson et al. 2024, *Ecological Informatics* 80,
+102537):
+
+```r
+design <- data.frame(layer = names(projections),          # one row per raster
+                     gcm = ..., scenario = ..., algorithm = ..., run = ...)
+pu <- partition_uncertainty(projections, design, region = alps)
+pu                                       # which source dominates, overall and in the region
+plot_partition(pu, file = "partition.pdf")
+```
+
+![Dominant source of variance and the pooled shares](man/figures/partition.png)
+
+- **Shares**: the variance explained by each factor divided by the total
+  variance between projections; what the main effects do not explain
+  (interactions, replicate noise) is `interactions/residual`. They sum to 1
+  in every cell. The result holds one share map per factor, the total
+  variance and the **dominant source** of each cell.
+- **Pooled shares** for the whole area and an optional `region` (as in
+  `transfer_bias_test()`): each cell weighted by its variance, so places
+  where the projections agree count little.
+- **Balance**: with every combination of levels equally often the shares do
+  not depend on the order of the factors; otherwise a warning says that
+  they do (sequential sums of squares).
+- **Scenario is a choice, not an error**: its share depends on which
+  scenarios are included and is not directly comparable with the share of
+  climate models (Wilson et al. 2024).
+- Large stacks are processed block by block on disk; projections on 0-100
+  or 0-1000 are rescaled to 0-1.
+
+### 23. Where are the data too sparse to trust a prediction?
+
+Where few records of any species have been made, the absence of records of
+your species says little, and a prediction there rests on extrapolation.
+Maps of biogeographical ignorance show this next to the prediction
+(Tessarolo et al. 2021, *Ecography* 44, 1743-1755). `ignorance_map()`
+turns a recording-effort raster (e.g. from `gbif_effort_rasters()`,
+[section 9](#9-background-strategies-and-recording-effort)) into an
+ignorance score from 0 (well recorded) to 1 (nothing recorded), and
+annotates a suitability raster with it:
+
+```r
+eff <- gbif_effort_rasters("effort_table.csv", extent)
+ig <- ignorance_map(eff, half = 10, radius_km = 50, suitability = ens$raster[["ensemble"]])
+ig                                        # share of the suitable area that is poorly known
+plot_ignorance(ig, file = "ignorance.pdf")
+terra::writeRaster(ig$raster, "ignorance.tif")
+```
+
+![Ignorance and the joint map of suitability and ignorance](man/figures/ignorance.png)
+
+- **Scores** (Ruete 2015, *Biodiversity Data Journal* 3, e5361):
+  `"half"` (default), `I = O / (N + O)` with `O` (`half`) the effort that
+  halves ignorance, independent of the most recorded cell; `"log"` and
+  `"linear"`, relative to the most recorded cell. `index = TRUE` uses
+  records per species, less inflated by a few very common species.
+- `radius_km` lets effort count for the neighbouring cells within that
+  distance (information decays with distance; the range from
+  `suggest_block_size()` is a natural choice).
+- With `suitability`, the result adds the suitability where ignorance is low
+  (`suitability_known`) and four classes: suitable or not, known or
+  ignorant.
+- **Limits**: the full maps of Tessarolo et al. also weigh each record by
+  its taxonomic reliability, age and the completeness of the cell's
+  inventory, and interpolate in geographic and environmental space; that
+  needs record-level data. Here only the effort counts are used.
+
+### 24. Reporting with ODMAP
 
 `odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
 2020) that your workflow determines, from the objects themselves, and

@@ -1,3 +1,47 @@
+# preENM 2.28.0
+
+Projection uncertainty and maps of ignorance (Wilson et al. 2024,
+*Ecological Informatics* 80, 102537; Tessarolo et al. 2021, *Ecography* 44,
+1743-1755):
+
+* `partition_uncertainty()`: splits, in every cell, the variance of a set of
+  projections among factors such as GCM, scenario, algorithm and run (an
+  analysis of variance with the factors as main effects; interactions and
+  residual as the rest). Returns a share map per factor, the total variance
+  and the dominant source of each cell, and the shares pooled over the area
+  and an optional `region`, each cell weighted by its variance. Warns when
+  the design is unbalanced (shares then depend on the order of the
+  factors) and notes that the share of scenarios depends on which
+  scenarios were chosen. Rasters are processed block by block on disk.
+* `plot_partition()`: the dominant-source map next to a stacked bar of the
+  pooled shares; `file` saves it.
+* `ignorance_map()`: turns a recording-effort raster (e.g. from
+  `gbif_effort_rasters()`) into a score of biogeographical ignorance from 0
+  (well recorded) to 1 (nothing recorded), with the half-ignorance,
+  log-normalised or normalised algorithms of Ruete (2015), optionally from
+  records per species and with effort counting within a radius. With a
+  suitability raster it adds the suitability where ignorance is low and a
+  joint map (suitable or not, known or ignorant). `plot_ignorance()` draws
+  both.
+
+Prediction scales and ensembles:
+
+* Algorithms write predictions on different scales (0-1, 0-100, 0-1000).
+  `extract_predictions()`, `evaluate_models()`, `evaluate_cv()`,
+  `calibration_curve()`, `ensemble_models()` and `partition_uncertainty()`
+  now recognise the scale of each model from its largest value and, with
+  `rescale = TRUE` (default), divide models on 0-100 or 0-1000 by 100 or
+  1000, with a message naming them; `rescale = FALSE` keeps the values and
+  warns. Unrecognised scales (negative values or above 1000, e.g. raw
+  Maxent output) are left as they are, with a warning. Before, only a
+  pooled warning about values outside 0-1 was given.
+* `ensemble_models()` now uses PCAm by default (the median of the models
+  closest to their common trend; Zhu et al. 2021); with fewer than three
+  models it falls back to the median, with a message. **Results of
+  `ensemble_models()` with the default method change.**
+* The figures of the manual (README) are no longer built into the package,
+  which kept the installed size above 5 MB; they stay on GitHub.
+
 # preENM 2.27.1
 
 The manual is reordered to follow the workflow:

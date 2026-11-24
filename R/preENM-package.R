@@ -48,6 +48,11 @@
 #'   spatial and environmental separation and spatial sorting bias.
 #' * [ensemble_models()], [plot_ensemble()]: ensemble of the selected
 #'   models and the disagreement between them.
+#' * [partition_uncertainty()], [plot_partition()]: which source (GCM,
+#'   scenario, algorithm, run) dominates the variance of projections, and
+#'   where.
+#' * [ignorance_map()], [plot_ignorance()]: biogeographical ignorance from
+#'   recording effort, and the suitability where the data are sparse.
 #' * [null_model_test()]: are the models better than expected from where
 #'   records are collected?
 #' * [null_occurrences()], [transfer_bias_test()], [environment_shift()]:

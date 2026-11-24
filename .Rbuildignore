@@ -6,3 +6,4 @@
 ^man/figures/README-.*\.R$
 ^Rplots\.pdf$
 ^CLAUDE\.md$
+^man/figures/(?!logo\.png$).*$

@@ -1,3 +1,39 @@
+# preENM 2.31.0
+
+Niche overlap between groups (Broennimann et al. 2012, *Global Ecology and
+Biogeography* 21, 481-497; Warren et al. 2008, *Evolution* 62, 2868-2883;
+Warren et al. 2021, *Ecography* 44, 504-511; Rodder and Engler 2011, *Global
+Ecology and Biogeography* 20, 915-927; Guisan et al. 2014, *Trends in
+Ecology & Evolution* 29, 260-269; Lo Parrino et al. 2023, *Ecography*
+e06432):
+
+* `niche_overlap()`: two or more groups of records (a grouping column, e.g.
+  lineages or cytotypes, or a named list) in a shared PCA (or raw)
+  environmental space built from their pooled backgrounds; kernel densities
+  of records and environments; Schoener's D and the corrected Hellinger I,
+  graded with the classes of Rodder and Engler; Levins' breadth;
+  expansion, stability and unfilling; equivalency and similarity tests (in
+  both directions) with null distributions, p-values and standardised
+  effect sizes; with `predictions`, D, I and rank correlation of model
+  predictions in geographic space.
+* `overlap_scenarios()`: the same over a grid of choices (background,
+  space, thinning, grid size), saying whether each verdict holds in every
+  scenario or which choice changes it.
+* `plot_niche_overlap()`: the niches of a pair in the shared space with
+  the available environments; `prediction_overlap()`: overlap of
+  suitability rasters (ENMTools).
+
+Ignorance maps (requested):
+
+* `taxon_complexity()`: the number of synonyms and of subspecies and
+  varieties of each species in World Flora Online (WorldFlora package, now
+  in Suggests) or another Darwin Core backbone, as a reliability weight for
+  `record_ignorance()`; a rule of thumb, not a published weighting.
+* `record_ignorance(env = )`: empty cells interpolated with the
+  spatio-environmental distance of Tessarolo et al. (2021); cells with
+  records of the focal species carry half of the weight, as in their
+  method.
+
 # preENM 2.30.0
 
 Range metrics for conservation assessment (Curd et al. 2023, *Global

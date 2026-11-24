@@ -61,7 +61,8 @@ step can be used on its own.
 | After | [22](#22-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
 | After | [23](#23-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
 | After | [24](#24-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `taxon_complexity()`, `plot_ignorance()` |
-| After | [25](#25-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
+| After | [25](#25-how-different-are-the-niches-of-two-groups) | **Niche overlap** between species, lineages or cytotypes (D, I, breadth, expansion/unfilling, equivalency and similarity tests) and its sensitivity to methodological choices | `niche_overlap()`, `overlap_scenarios()`, `plot_niche_overlap()`, `prediction_overlap()` |
+| After | [26](#26-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
 Points are re-projected to each raster automatically.
@@ -2117,7 +2118,65 @@ rescaled to 0-1, combined as space^0.5 x environment^0.5), so records from
 similar environments inform an empty cell more; cells with records of the
 focal species carry half of the weight, as in Tessarolo et al.
 
-### 25. Reporting with ODMAP
+### 25. How different are the niches of two groups?
+
+Comparing the niches of species, lineages, cytotypes or native and
+introduced ranges follows Broennimann et al. (2012, *Global Ecology and
+Biogeography* 21, 481-497), as in ecospat and ENMTools (Warren et al. 2021,
+*Ecography* 44, 504-511). `niche_overlap()` takes the records with a
+grouping column (or a named list of tables) and the shared predictors:
+
+```r
+no <- niche_overlap(records, env, group = "cytotype",
+                    background = list(diploid = m_2x, tetraploid = m_4x),
+                    n_rep = 100, seed = 1)
+no                                     # overlap, tests, in plain words
+plot_niche_overlap(no, file = "niche_overlap.pdf")
+```
+
+![Niches of two groups in the shared PCA environmental space](man/figures/niche_overlap.png)
+
+- **Space**: a PCA of the pooled backgrounds of all groups (the same PCA
+  as `thin_environment()`), or two raw predictors (`space = "raw"`).
+- **Densities**: records and available environments are smoothed with a
+  Gaussian kernel on a `grid` x `grid` lattice; the occupancy is the record
+  density divided by the environment density, so that common environments
+  do not look preferred.
+- **Overlap**: Schoener's D and the corrected Hellinger I (Rodder and
+  Engler 2011, *Global Ecology and Biogeography* 20, 915-927; the form used
+  by ecospat and ENMTools), 0 = none, 1 = identical, graded with Rodder and
+  Engler's classes (below 0.2 no or very limited, ..., above 0.8 very high);
+  Levins' breadth of each group.
+- **Niche dynamics** (Guisan et al. 2014, *Trends in Ecology & Evolution*
+  29, 260-269): expansion, stability and unfilling of the second group
+  relative to the first, within environments available to both; the
+  occupied envelope holds 95% of the records (`marginal_records`), rare
+  environments can be left out with `marginal_env`.
+- **Tests** with null distributions, p-values and standardised effect
+  sizes: equivalency (records pooled and re-split) and similarity in both
+  directions (one group against random points of the other's background).
+- **Geographic space**: `predictions` (one suitability raster per group)
+  adds D, I and the rank correlation of the model predictions, as the
+  first ENMTools did (`prediction_overlap()`); they depend on the area
+  mapped, so niches are better compared in environmental space.
+
+**Is the conclusion robust?** Background, variables, space and thinning can
+decide whether a niche shift is found at all (Lo Parrino et al. 2023,
+*Ecography* 2023, e06432). `overlap_scenarios()` repeats the analysis over a
+grid of such choices and says whether each verdict holds in every scenario
+or which choice changes it:
+
+```r
+os <- overlap_scenarios(records, env, group = "cytotype",
+                        backgrounds = list(M = list(diploid = m_2x,
+                                                    tetraploid = m_4x),
+                                           whole = NULL),
+                        spaces = c("pca", "raw"), thin_km = c(0, 10),
+                        grids = c(50, 100), n_rep = 100, seed = 1)
+os                                     # robust, or which choice flips it
+```
+
+### 26. Reporting with ODMAP
 
 `odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
 2020) that your workflow determines, from the objects themselves, and

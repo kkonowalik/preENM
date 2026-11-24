@@ -59,6 +59,9 @@
 #' * [range_metrics()], [plot_range_metrics()], [write_range_metrics()]:
 #'   EOO, AOO, locations and the patch structure of the range under each
 #'   threshold rule, and their change between projections.
+#' * [niche_overlap()], [overlap_scenarios()], [plot_niche_overlap()],
+#'   [prediction_overlap()]: niche overlap between groups of records, its
+#'   tests and its sensitivity to methodological choices.
 #' * [null_model_test()]: are the models better than expected from where
 #'   records are collected?
 #' * [null_occurrences()], [transfer_bias_test()], [environment_shift()]:

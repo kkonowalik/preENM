@@ -49,6 +49,7 @@ step can be used on its own.
 | After | [14](#14-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
 | After | [14](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
 | After | [14](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
+| After | [14](#response-curves-are-they-ecologically-plausible) | **Plausibility of response curves** (shape, turning points, rising edges, agreement with records) | `response_check()`, `plot_response_check()` |
 | After | [17](#prediction-scales-0-1-0-100-0-1000) | **Prediction scales** checked per model, 0-100 and 0-1000 rescaled to 0-1 | `rescale = TRUE` in `evaluate_models()`, `ensemble_models()`, ... |
 | After | [18](#18-how-the-selection-works) | **How the selection works** (Pareto front, compromise distance, bootstrap robustness) | `pareto_rank()` |
 | After | [19](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
@@ -1056,6 +1057,7 @@ On top of this, the package offers:
   the Pareto front;
 - **spatial block cross-validation** across folds and background sets;
 - **temporal validation** of hindcasts against fossil or other dated records;
+- a **check of the response curves** for ecological plausibility;
 - ready-to-publish `ggplot2` figures.
 
 #### Calibration: can the predictions be read as probabilities?
@@ -1161,6 +1163,51 @@ window). The printout therefore tests the smoothed curve against a flat one
 and says when the index cannot be read. Use the smoothed index with few
 presences, together with its bootstrap interval, and compare models with
 the same estimator.
+
+#### Response curves: are they ecologically plausible?
+
+Performance metrics do not tell whether a model responds to the
+environment in a plausible way. Models selected by the usual metrics can
+have implausible responses that extrapolate badly under climate change
+(Fiorentino et al. 2025, *Ecological Modelling* 508, 111207), and
+machine-learning models overfit into irregular responses that the metrics
+do not reveal (Chollet Ramampiandra et al. 2023, *Ecological Modelling* 481,
+110353). The shape also decides how a model behaves under new conditions:
+predictions hold where new conditions fall near the optimum and fail in the
+tails (Allyn et al. 2025, *Diversity and Distributions* 31, e70036), and a
+truncated niche worsens extrapolation (Yau et al. 2026, *Ecological
+Informatics* 99, 104008).
+
+`response_check()` takes the response curves your modelling software
+exports (a long table of `variable`, `value`, `suitability`, optionally by
+`model` and `run`), or raw predictions with the predictor values (then the
+mean prediction in classes of each predictor, a marginal response):
+
+```r
+rc <- response_check(curves, occurrences = env_at_presences,
+                     background = env_at_background,
+                     projection = future_env)       # data.frame or rasters
+rc                                    # implausible shapes, rising edges
+plot_response_check(rc, file = "responses.pdf")
+```
+
+![Response curves of two models with their shapes and the density of records](man/figures/response_check.png)
+
+For each variable and model it reports the **shape** (increasing,
+decreasing, unimodal, U-shaped, irregular or flat), the number of
+**turning points** (reversals larger than 5% of the curve's range), the
+**wiggliness** (total variation / range: 1 for a monotonic curve, up to 2
+for one peak; above 3 irregular), the **optimum** and its position in the
+calibrated range, and whether the curve is **still rising at an edge** of
+the calibrated range, where the optimum may lie beyond the data and
+predictions beyond depend on how the algorithm extrapolates. With
+`occurrences` (and `background`) it says whether the curve follows the
+records along the gradient, and with `projection` how much of the projected
+area lies beyond a rising edge (compare `extrapolation_risk()` and
+`environment_shift()`). The limits are rules of thumb. Background drawn
+evenly in environmental space (`sample_background(method = "envstrat")`)
+gives response curves closer to the species' true response (Broussin et al.
+2024, *Ecological Modelling* 498, 110865).
 
 ### 15. Quick start: model selection with example data
 

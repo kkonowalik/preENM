@@ -64,6 +64,8 @@
 #' * [plot_pareto()]: publication-ready AUC-MAE plot with the Pareto front.
 #' * [boyce_index()], [plot_boyce()]: the continuous Boyce index by moving
 #'   window or smoothed P/E curve, with bootstrap interval.
+#' * [response_check()], [plot_response_check()]: are the response curves
+#'   ecologically plausible (shape, turning points, rising edges)?
 #' * [calibration_curve()], [brier_decompose()], [plot_calibration()]:
 #'   calibration of the predictions (reliability diagram, calibration slope
 #'   and intercept, Brier score decomposition).

@@ -74,6 +74,8 @@ ranking and bootstrap robustness.
 \item \code{\link[=plot_pareto]{plot_pareto()}}: publication-ready AUC-MAE plot with the Pareto front.
 \item \code{\link[=boyce_index]{boyce_index()}}, \code{\link[=plot_boyce]{plot_boyce()}}: the continuous Boyce index by moving
 window or smoothed P/E curve, with bootstrap interval.
+\item \code{\link[=response_check]{response_check()}}, \code{\link[=plot_response_check]{plot_response_check()}}: are the response curves
+ecologically plausible (shape, turning points, rising edges)?
 \item \code{\link[=calibration_curve]{calibration_curve()}}, \code{\link[=brier_decompose]{brier_decompose()}}, \code{\link[=plot_calibration]{plot_calibration()}}:
 calibration of the predictions (reliability diagram, calibration slope
 and intercept, Brier score decomposition).

@@ -88,7 +88,9 @@ points (one column per predictor and a \code{pred} column): the response is
 then the mean prediction in \code{n_bins} classes of each predictor. That is
 a marginal response, which mixes in the effects of correlated
 predictors; partial-dependence or "evaluation strip" curves from the
-modelling software are better.
+modelling software are better. Bin means carry sampling noise, so for
+them a turning point must also exceed 3 x sqrt(2) median standard errors
+of the bin means.
 
 \strong{Per curve} (variable x model x run):
 \itemize{

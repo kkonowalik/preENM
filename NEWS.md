@@ -1,3 +1,24 @@
+# preENM 2.29.0
+
+Plausibility of response curves (Fiorentino et al. 2025, *Ecological
+Modelling* 508, 111207; Chollet Ramampiandra et al. 2023, *Ecological
+Modelling* 481, 110353; Allyn et al. 2025, *Diversity and Distributions* 31,
+e70036; Yau et al. 2026, *Ecological Informatics* 99, 104008; Broussin et
+al. 2024, *Ecological Modelling* 498, 110865):
+
+* `response_check()`: for the response curves exported by any modelling
+  software (or binned from raw predictions), per variable, model and run:
+  the shape (increasing, decreasing, unimodal, U-shaped, irregular, flat),
+  the number of turning points, a wiggliness measure, the optimum and its
+  position in the calibrated range, and whether the curve is still rising
+  at an edge of that range. With records (and background) it says whether
+  each curve follows the records along the gradient; with a projection, how
+  much of it lies beyond a rising edge. For binned curves, reversals within
+  the sampling noise of the bins are not counted. The printout names the
+  implausible curves first.
+* `plot_response_check()`: the curves with their shapes, the calibrated
+  range and the density of records beneath; `file` saves it.
+
 # preENM 2.28.0
 
 Projection uncertainty and maps of ignorance (Wilson et al. 2024,

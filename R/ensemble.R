@@ -343,7 +343,7 @@ sample_complete <- function(x, n) {
 }
 
 # Prediction rasters as one stack with model names (internal)
-ensemble_stack <- function(models, pattern, recursive) {
+ensemble_stack <- function(models, pattern, recursive, unique_names = TRUE) {
   if (inherits(models, "SpatRaster")) {
     x <- models
   } else if (is.character(models)) {
@@ -369,7 +369,9 @@ ensemble_stack <- function(models, pattern, recursive) {
     stop("`models` must be a SpatRaster or raster files/folders.",
          call. = FALSE)
   }
-  if (anyDuplicated(names(x))) {
+  if (!unique_names) {
+    names(x) <- make.unique(names(x), sep = "_")
+  } else if (anyDuplicated(names(x))) {
     stop("Model names must be unique: ",
          paste(unique(names(x)[duplicated(names(x))]), collapse = ", "),
          call. = FALSE)

@@ -44,3 +44,50 @@ test_that("download_gbif_effort asks for credentials and re-uses tables", {
   Sys.unsetenv(c("GBIF_USER", "GBIF_PWD", "GBIF_EMAIL"))
   expect_error(download_gbif_effort("SELECT", tempfile()), "Renviron")
 })
+
+test_that("ignorance_map is monotone decreasing in effort", {
+  r <- terra::rast(nrows = 1, ncols = 6, xmin = 0, xmax = 6, ymin = 0,
+                   ymax = 1, crs = "EPSG:4326")
+  eff <- terra::rast(r, vals = c(0, 1, 5, 10, 50, 100))
+  names(eff) <- "n_records"
+  for (m in c("half", "log", "linear")) {
+    v <- terra::values(ignorance_map(eff, method = m, half = 10)$raster)[, 1]
+    expect_true(all(diff(v) < 0), info = m)
+    expect_equal(v[1], 1, info = m)
+  }
+  # known values: O / (N + O); log and linear end at 0 for the maximum
+  v <- terra::values(ignorance_map(eff, half = 10)$raster)[, 1]
+  expect_equal(v, 10 / (c(0, 1, 5, 10, 50, 100) + 10))
+  expect_equal(v[4], 0.5)
+  vl <- terra::values(ignorance_map(eff, method = "log")$raster)[, 1]
+  expect_equal(vl, 1 - log(c(0, 1, 5, 10, 50, 100) + 1) / log(101))
+  # species observation index: records per species
+  e2 <- c(eff, terra::rast(r, vals = c(0, 1, 5, 5, 5, 10)))
+  names(e2) <- c("n_records", "n_species")
+  vi <- terra::values(ignorance_map(e2, index = TRUE, half = 1)$raster)[, 1]
+  expect_equal(vi, 1 / (c(0, 1, 1, 2, 10, 10) + 1))
+})
+
+test_that("ignorance_map annotates a suitability raster", {
+  r <- terra::rast(nrows = 2, ncols = 2, xmin = 0, xmax = 2, ymin = 0,
+                   ymax = 2, crs = "EPSG:4326")
+  eff <- terra::rast(r, vals = c(0, 100, 0, 100))
+  suit <- terra::rast(r, vals = c(0.9, 0.9, 0.1, 0.1))
+  ig <- ignorance_map(eff, half = 1, suitability = suit)
+  v <- terra::values(ig$raster)
+  expect_equal(v[, "suitability_known"], c(NA, 0.9, NA, 0.1))
+  expect_equal(as.vector(v[, "class"]), c(4, 3, 2, 1))
+  expect_equal(ig$summary$classes$cells, c(1, 1, 1, 1))
+  expect_output(print(ig), "50% lie where")
+  expect_true(is.list(plot_ignorance(ig)))
+  expect_s3_class(plot_ignorance(ig, type = "ignorance"), "ggplot")
+  # effort within a radius: a zero cell next to recorded cells gains
+  big <- terra::rast(nrows = 5, ncols = 5, xmin = 0, xmax = 0.5, ymin = 45,
+                     ymax = 45.5, crs = "EPSG:4326", vals = 0)
+  big[13] <- 100
+  s <- ignorance_map(big, half = 1, radius_km = 12)
+  vs <- terra::values(s$raster)[, 1]
+  expect_lt(vs[12], 1)
+  expect_equal(vs[1], 1)
+  expect_error(ignorance_map(eff, half = 0), "positive")
+})

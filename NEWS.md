@@ -1,3 +1,9 @@
+# preENM 2.31.1
+
+* `plot_niche_overlap()` uses the ColorBrewer diverging palette RdYlBu: the
+  niche of the first group only in blue, of the second only in red, the
+  shared niche in yellow, and the legend in that order.
+
 # preENM 2.31.0
 
 Niche overlap between groups (Broennimann et al. 2012, *Global Ecology and

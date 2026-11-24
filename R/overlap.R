@@ -948,13 +948,15 @@ plot_niche_overlap <- function(x, pair = 1, base_size = 11, file = NULL,
   d$avail <- as.vector(avail)
   d$cat <- as.vector(cat_v)
   occ <- d[!is.na(d$cat), , drop = FALSE]
-  lv <- c("Stability", paste0("Unfilling (only ", p$group1, ")"),
+  lv <- c(paste0("Unfilling (only ", p$group1, ")"), "Stability",
           paste0("Expansion (only ", p$group2, ")"))
   cnt <- table(factor(occ$cat, lv))
   lab <- paste0(lv, ": ", as.vector(cnt), " cells (",
                 share_label(as.vector(cnt) / max(1, sum(cnt))), ")")
   occ$cat <- factor(occ$cat, lv, lab)
-  pal <- stats::setNames(c("#7570b3", "#1b9e77", "#d95f02"), lab)
+  # ColorBrewer RdYlBu (diverging): the first group's niche blue, the
+  # second's red, the shared niche in the middle (yellow)
+  pal <- stats::setNames(c("#4575b4", "#fee090", "#d73027"), lab)
   dc <- d
   dc$z1 <- as.vector(a$z_uncor)
   dc$z2 <- as.vector(b$z_uncor)
@@ -975,11 +977,11 @@ plot_niche_overlap <- function(x, pair = 1, base_size = 11, file = NULL,
     ggplot2::scale_fill_manual(values = pal, name = NULL) +
     ggplot2::geom_contour(data = dc, ggplot2::aes(.data$x, .data$y,
                                                   z = .data$z1),
-                          breaks = 0.5, colour = "#1b9e77",
+                          breaks = 0.5, colour = "#313695",
                           linewidth = 0.6) +
     ggplot2::geom_contour(data = dc, ggplot2::aes(.data$x, .data$y,
                                                   z = .data$z2),
-                          breaks = 0.5, colour = "#d95f02",
+                          breaks = 0.5, colour = "#a50026",
                           linewidth = 0.6, linetype = "dashed") +
     ggplot2::labs(x = axl[1], y = axl[2],
                   title = paste0("Niches of ", p$group1, " and ", p$group2),

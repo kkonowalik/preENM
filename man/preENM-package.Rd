@@ -65,6 +65,9 @@ where.
 biogeographical ignorance from recording effort or from the records
 (completeness, age, reliability, precision), and the suitability where
 the data are sparse.
+\item \code{\link[=range_metrics]{range_metrics()}}, \code{\link[=plot_range_metrics]{plot_range_metrics()}}, \code{\link[=write_range_metrics]{write_range_metrics()}}:
+EOO, AOO, locations and the patch structure of the range under each
+threshold rule, and their change between projections.
 \item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
 records are collected?
 \item \code{\link[=null_occurrences]{null_occurrences()}}, \code{\link[=transfer_bias_test]{transfer_bias_test()}}, \code{\link[=environment_shift]{environment_shift()}}:

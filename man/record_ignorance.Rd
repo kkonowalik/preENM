@@ -42,8 +42,10 @@ present; \code{NULL} or \code{FALSE} to ignore age).}
 
 \item{half_life}{Age (years) at which the age component falls to 0.5.}
 
-\item{reliability}{Optional column with values 0-1, or a named vector
-translating the values of \code{reliability_col}.}
+\item{reliability}{Optional taxonomic reliability: a column with values
+0-1, a named vector translating the values of \code{reliability_col}, or a
+\code{\link[=taxon_complexity]{taxon_complexity()}} result (one weight per species, from its number of
+synonyms and infraspecific taxa).}
 
 \item{reliability_col}{Column translated by a named \code{reliability}.}
 
@@ -91,8 +93,11 @@ oldest records are the least informative, as in Tessarolo et al.).
 record, e.g. by identifier class (Tessarolo et al. used 1, 0.9 and 0.75
 for taxonomists, experts and amateurs). Give a column, or a named
 vector translating the values of a column (e.g. \code{basisOfRecord} or a
-class of identifier). No published weighting exists for other proxies,
-such as the number of synonyms of a name; if you use one, say how.
+class of identifier), or one weight per species from the taxonomic
+complexity of its name (\code{\link[=taxon_complexity]{taxon_complexity()}}: the number of synonyms
+and of subspecies and varieties in World Flora Online or another
+backbone). That proxy is not published or validated; if you use it,
+say so.
 \item \strong{Precision} (\code{uncertainty}, e.g. \code{coordinateUncertaintyInMeters}):
 not in Tessarolo et al.; \verb{min(1, (cell size / (2 x uncertainty))^2)},
 roughly the share of the uncertainty circle that falls in the cell.

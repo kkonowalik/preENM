@@ -552,8 +552,11 @@ plot_ignorance <- function(x, type = c("both", "ignorance", "joint"),
 #'   record, e.g. by identifier class (Tessarolo et al. used 1, 0.9 and 0.75
 #'   for taxonomists, experts and amateurs). Give a column, or a named
 #'   vector translating the values of a column (e.g. `basisOfRecord` or a
-#'   class of identifier). No published weighting exists for other proxies,
-#'   such as the number of synonyms of a name; if you use one, say how.
+#'   class of identifier), or one weight per species from the taxonomic
+#'   complexity of its name ([taxon_complexity()]: the number of synonyms
+#'   and of subspecies and varieties in World Flora Online or another
+#'   backbone). That proxy is not published or validated; if you use it,
+#'   say so.
 #' * **Precision** (`uncertainty`, e.g. `coordinateUncertaintyInMeters`):
 #'   not in Tessarolo et al.; `min(1, (cell size / (2 x uncertainty))^2)`,
 #'   roughly the share of the uncertainty circle that falls in the cell.
@@ -582,8 +585,10 @@ plot_ignorance <- function(x, type = c("both", "ignorance", "joint"),
 #' @param year Column with the year of collection (default `year` if
 #'   present; `NULL` or `FALSE` to ignore age).
 #' @param half_life Age (years) at which the age component falls to 0.5.
-#' @param reliability Optional column with values 0-1, or a named vector
-#'   translating the values of `reliability_col`.
+#' @param reliability Optional taxonomic reliability: a column with values
+#'   0-1, a named vector translating the values of `reliability_col`, or a
+#'   [taxon_complexity()] result (one weight per species, from its number of
+#'   synonyms and infraspecific taxa).
 #' @param reliability_col Column translated by a named `reliability`.
 #' @param uncertainty Column with the coordinate uncertainty in metres
 #'   (default `coordinateUncertaintyInMeters` if present; `FALSE` to
@@ -678,7 +683,19 @@ record_ignorance <- function(records, template, species = NULL,
 
   # taxonomic reliability
   if (!is.null(reliability)) {
-    if (is.character(reliability) && length(reliability) == 1 &&
+    if (is.data.frame(reliability)) {
+      # taxon_complexity(): one weight per species name
+      if (!all(c("name", "reliability") %in% names(reliability))) {
+        stop("A data.frame `reliability` needs columns name and ",
+             "reliability (see taxon_complexity()).", call. = FALSE)
+      }
+      rel <- reliability$reliability[match(sp, reliability$name)]
+      if (any(is.na(rel))) {
+        message(sum(is.na(rel)), " record(s) of species not found in the ",
+                "backbone get reliability 1.")
+        rel[is.na(rel)] <- 1
+      }
+    } else if (is.character(reliability) && length(reliability) == 1 &&
         reliability %in% nms) {
       rel <- as_number(df[[reliability]])
     } else if (is.numeric(reliability) && !is.null(names(reliability))) {

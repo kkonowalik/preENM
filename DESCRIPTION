@@ -79,6 +79,7 @@ Suggests:
     htmlwidgets,
     Metrics,
     mgcv,
+    WorldFlora,
     neotoma2,
     plotly,
     readr,

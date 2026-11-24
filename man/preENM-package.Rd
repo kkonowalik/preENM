@@ -69,6 +69,9 @@ the data are sparse.
 \item \code{\link[=range_metrics]{range_metrics()}}, \code{\link[=plot_range_metrics]{plot_range_metrics()}}, \code{\link[=write_range_metrics]{write_range_metrics()}}:
 EOO, AOO, locations and the patch structure of the range under each
 threshold rule, and their change between projections.
+\item \code{\link[=niche_overlap]{niche_overlap()}}, \code{\link[=overlap_scenarios]{overlap_scenarios()}}, \code{\link[=plot_niche_overlap]{plot_niche_overlap()}},
+\code{\link[=prediction_overlap]{prediction_overlap()}}: niche overlap between groups of records, its
+tests and its sensitivity to methodological choices.
 \item \code{\link[=null_model_test]{null_model_test()}}: are the models better than expected from where
 records are collected?
 \item \code{\link[=null_occurrences]{null_occurrences()}}, \code{\link[=transfer_bias_test]{transfer_bias_test()}}, \code{\link[=environment_shift]{environment_shift()}}:

@@ -374,20 +374,26 @@ removed.env_thinning <- function(x) {
 
 # --- helpers -------------------------------------------------------------------------
 
-# Environmental space shared by thin_environment() and environmental_folds()
+# Environmental space shared by thin_environment(), environmental_folds() and
+# niche_overlap()
 # (internal): a PCA of the standardised layers (precipitation amounts
 # log-transformed) on a sample of `pca_n` cells, read cell by cell rather
 # than as a whole raster; the axes explaining `pc_cumvar` of the variance
 # (at least `pc_min`) are kept.
 env_pca <- function(r, log_vars = NULL, pca_n = 2e5, pc_cumvar = 0.95,
-                    pc_min = 2, axes = "pca", seed = NULL) {
-  vars <- names(r)
+                    pc_min = 2, axes = "pca", seed = NULL, values = NULL) {
+  vars <- if (is.null(values)) names(r) else colnames(values)
   lv <- if (is.null(log_vars)) default_log_vars(vars) else
     intersect(log_vars, vars)
-  valid <- valid_cells(r)
-  smp <- with_seed(seed, sort(valid[sample.int(length(valid),
-                                               min(length(valid), pca_n))]))
-  M <- read_cells(r, smp)
+  if (is.null(values)) {
+    valid <- valid_cells(r)
+    smp <- with_seed(seed, sort(valid[sample.int(length(valid),
+                                                 min(length(valid), pca_n))]))
+    M <- read_cells(r, smp)
+  } else {
+    # values already sampled (e.g. the pooled backgrounds of niche_overlap())
+    M <- as.matrix(values)
+  }
   colnames(M) <- vars
   M <- M[stats::complete.cases(M), , drop = FALSE]
   if (length(lv) && any(M[, lv] < 0)) {

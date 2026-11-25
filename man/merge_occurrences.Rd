@@ -4,7 +4,13 @@
 \alias{merge_occurrences}
 \title{Merge occurrence records from several sources}
 \usage{
-merge_occurrences(..., species = NULL, encoding = "latin1")
+merge_occurrences(
+  ...,
+  species = NULL,
+  data_type = NULL,
+  response = NULL,
+  encoding = "latin1"
+)
 }
 \arguments{
 \item{...}{Named data.frames or paths to CSV files (comma-separated, or
@@ -13,14 +19,20 @@ semicolon-separated with decimal commas), e.g. \code{merge_occurrences(sNMF = "s
 \item{species}{Optional single species name written to every record. If
 \code{NULL}, the species column of each table is used when found.}
 
+\item{data_type}{The kind of data of each source: one value for all,
+or a vector named by source, e.g. \code{c(GBIF = "presence_only", survey = "presence_absence")}. Sources not named are \code{"presence_only"}.}
+
+\item{response}{Optional name of the response column of each source (a
+vector named by source, or one name for all); see Data types.}
+
 \item{encoding}{Encoding assumed for text that is not valid UTF-8 (common
 in CSV files exported from Excel or some databases); such text is
 converted to UTF-8. Try \code{"CP1250"} for Central European files if the
 repaired characters look wrong.}
 }
 \value{
-A data.frame with \code{species}, \code{lon}, \code{lat}, \code{source} and the other
-columns of the inputs.
+A data.frame with \code{species}, \code{lon}, \code{lat}, \code{source}, \code{data_type},
+\code{response} and the other columns of the inputs.
 }
 \description{
 Combines occurrence tables that use different column names (e.g. a GBIF
@@ -33,10 +45,44 @@ automatically; records without valid coordinates are dropped.
 The order of the inputs matters for \code{\link[=thin_by_cell]{thin_by_cell()}}: when two records fall
 in the same raster cell, the record from the source listed first is kept
 (use \code{priority} there to change this).
+
+\strong{Data types.} Integrated species distribution models combine data
+collected in different ways, each with its own observation model:
+presence-only records (opportunistic observations, herbarium specimens),
+presence-absence data from structured surveys and counts or abundances
+(Morera-Pujol et al. 2023; Zulian et al. 2021). \code{data_type} records, per
+source, which kind each record is (\code{"presence_only"}, the default,
+\code{"presence_absence"}, \code{"abundance"} or a label of your own), and
+\code{response} the observed value: 1 for presence-only records, 1/0 for
+presence-absence, the count or abundance otherwise (for a label of your
+own, the values of its \code{response} column as given, or 1 without one).
+Both columns survive
+\code{\link[=filter_occurrences]{filter_occurrences()}}, which can apply different settings to each data
+type, and are used by \code{\link[=export_integrated]{export_integrated()}}.
+
+The response is read from the column named in \code{response}, or found
+automatically: \code{occurrenceStatus} (Darwin Core: \code{PRESENT}/\code{ABSENT}),
+\code{present}, \code{presence} or \code{pa} for presence-absence; \code{individualCount},
+\code{count}, \code{counts} or \code{abundance} for abundance. Presence-only records
+whose \code{occurrenceStatus} is \code{ABSENT} (GBIF downloads contain some) get
+response 0 and are reported.
 }
 \examples{
 a <- data.frame(Longitude = c(10.1, 10.2), Latitude = c(46.1, 46.2))
 b <- data.frame(decimalLongitude = c(10.1, 11), decimalLatitude = c(46.1, 47),
                 species = "Dryas octopetala", gbifID = c("1", "2"))
 merge_occurrences(own = a, GBIF = b, species = "Dryas octopetala")
+}
+\references{
+Morera-Pujol, V., Mostert, P.S., Murphy, K.J., Burkitt, T.,
+Coad, B., McMahon, B.J., Nieuwenhuis, M., Morelle, K., Ward, A.I.,
+Ciuti, S. (2023) Bayesian species distribution models integrate
+presence-only and presence-absence data to predict deer distribution
+and relative abundance. \emph{Ecography} 2023, e06451.
+\doi{10.1111/ecog.06451}
+
+Zulian, V., Miller, D.A.W., Ferraz, G. (2021) Integrating
+citizen-science and planned-survey data improves species distribution
+estimates. \emph{Diversity and Distributions} 27, 2498-2509.
+\doi{10.1111/ddi.13416}
 }

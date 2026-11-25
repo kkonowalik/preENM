@@ -57,29 +57,81 @@ read_gbif <- function(file) {
 #' in the same raster cell, the record from the source listed first is kept
 #' (use `priority` there to change this).
 #'
+#' **Data types.** Integrated species distribution models combine data
+#' collected in different ways, each with its own observation model:
+#' presence-only records (opportunistic observations, herbarium specimens),
+#' presence-absence data from structured surveys and counts or abundances
+#' (Morera-Pujol et al. 2023; Zulian et al. 2021). `data_type` records, per
+#' source, which kind each record is (`"presence_only"`, the default,
+#' `"presence_absence"`, `"abundance"` or a label of your own), and
+#' `response` the observed value: 1 for presence-only records, 1/0 for
+#' presence-absence, the count or abundance otherwise (for a label of your
+#' own, the values of its `response` column as given, or 1 without one).
+#' Both columns survive
+#' [filter_occurrences()], which can apply different settings to each data
+#' type, and are used by [export_integrated()].
+#'
+#' The response is read from the column named in `response`, or found
+#' automatically: `occurrenceStatus` (Darwin Core: `PRESENT`/`ABSENT`),
+#' `present`, `presence` or `pa` for presence-absence; `individualCount`,
+#' `count`, `counts` or `abundance` for abundance. Presence-only records
+#' whose `occurrenceStatus` is `ABSENT` (GBIF downloads contain some) get
+#' response 0 and are reported.
+#'
 #' @param ... Named data.frames or paths to CSV files (comma-separated, or
 #'   semicolon-separated with decimal commas), e.g. `merge_occurrences(sNMF = "samples.csv",
 #'   GBIF = cleaned)`. Names become the `source` column.
 #' @param species Optional single species name written to every record. If
 #'   `NULL`, the species column of each table is used when found.
+#' @param data_type The kind of data of each source: one value for all,
+#'   or a vector named by source, e.g. `c(GBIF = "presence_only", survey =
+#'   "presence_absence")`. Sources not named are `"presence_only"`.
+#' @param response Optional name of the response column of each source (a
+#'   vector named by source, or one name for all); see Data types.
 #' @param encoding Encoding assumed for text that is not valid UTF-8 (common
 #'   in CSV files exported from Excel or some databases); such text is
 #'   converted to UTF-8. Try `"CP1250"` for Central European files if the
 #'   repaired characters look wrong.
-#' @return A data.frame with `species`, `lon`, `lat`, `source` and the other
-#'   columns of the inputs.
+#' @return A data.frame with `species`, `lon`, `lat`, `source`, `data_type`,
+#'   `response` and the other columns of the inputs.
+#' @references Morera-Pujol, V., Mostert, P.S., Murphy, K.J., Burkitt, T.,
+#'   Coad, B., McMahon, B.J., Nieuwenhuis, M., Morelle, K., Ward, A.I.,
+#'   Ciuti, S. (2023) Bayesian species distribution models integrate
+#'   presence-only and presence-absence data to predict deer distribution
+#'   and relative abundance. *Ecography* 2023, e06451.
+#'   \doi{10.1111/ecog.06451}
+#'
+#'   Zulian, V., Miller, D.A.W., Ferraz, G. (2021) Integrating
+#'   citizen-science and planned-survey data improves species distribution
+#'   estimates. *Diversity and Distributions* 27, 2498-2509.
+#'   \doi{10.1111/ddi.13416}
 #' @export
 #' @examples
 #' a <- data.frame(Longitude = c(10.1, 10.2), Latitude = c(46.1, 46.2))
 #' b <- data.frame(decimalLongitude = c(10.1, 11), decimalLatitude = c(46.1, 47),
 #'                 species = "Dryas octopetala", gbifID = c("1", "2"))
 #' merge_occurrences(own = a, GBIF = b, species = "Dryas octopetala")
-merge_occurrences <- function(..., species = NULL, encoding = "latin1") {
+merge_occurrences <- function(..., species = NULL, data_type = NULL,
+                              response = NULL, encoding = "latin1") {
   inputs <- list(...)
   if (!length(inputs) || is.null(names(inputs)) || any(names(inputs) == "")) {
     stop("Give every input a name, e.g. merge_occurrences(own = a, GBIF = b).",
          call. = FALSE)
   }
+  per_source <- function(v, what) {
+    if (is.null(v)) return(NULL)
+    if (is.null(names(v))) {
+      if (length(v) != 1) stop("`", what, "` must be one value or named by ",
+                               "source.", call. = FALSE)
+      return(stats::setNames(rep(v, length(inputs)), names(inputs)))
+    }
+    bad <- setdiff(names(v), names(inputs))
+    if (length(bad)) stop("`", what, "` names unknown source(s): ",
+                          paste(bad, collapse = ", "), call. = FALSE)
+    v
+  }
+  data_type <- per_source(data_type, "data_type")
+  response <- per_source(response, "response")
   parts <- lapply(names(inputs), function(src) {
     x <- inputs[[src]]
     if (is.character(x) && length(x) == 1) x <- read_any_csv(x)
@@ -99,13 +151,20 @@ merge_occurrences <- function(..., species = NULL, encoding = "latin1") {
       message(src, ": ", n_fixed, " text value(s) with invalid UTF-8 ",
               "repaired (read as ", encoding, ")")
     }
+    dt <- if (!is.null(data_type) && src %in% names(data_type))
+      unname(data_type[[src]]) else "presence_only"
+    resp_col <- if (!is.null(response) && src %in% names(response))
+      unname(response[[src]]) else NULL
     out <- data.frame(
       species = if (!is.null(species)) species else if (!is.na(sp)) x[[sp]]
       else NA_character_,
       lon = as_number(x[[xy[1]]]),
       lat = as_number(x[[xy[2]]]),
-      source = src, stringsAsFactors = FALSE)
-    rest <- x[setdiff(names(x), c("species", "lon", "lat", "source"))]
+      source = src, data_type = dt,
+      response = source_response(x, dt, resp_col, src),
+      stringsAsFactors = FALSE)
+    rest <- x[setdiff(names(x), c("species", "lon", "lat", "source",
+                                  "data_type", "response"))]
     cbind(out, rest)
   })
   all_cols <- unique(unlist(lapply(parts, names)))
@@ -124,7 +183,65 @@ merge_occurrences <- function(..., species = NULL, encoding = "latin1") {
   rownames(out) <- NULL
   message("Merged records: ", paste(names(table(out$source)), table(out$source),
                                     sep = " = ", collapse = ", "))
+  if (length(unique(out$data_type)) > 1) {
+    t <- table(out$data_type)
+    message("Data types: ", paste(names(t), t, sep = " = ", collapse = ", "))
+  }
   out
+}
+
+# The response of one source (internal): 1 for presence-only records (0 for
+# Darwin Core ABSENT records), 1/0 for presence-absence, numbers for
+# abundance
+source_response <- function(x, dt, col, src) {
+  n <- nrow(x)
+  status_to01 <- function(v) {
+    v <- toupper(trimws(as.character(v)))
+    out <- suppressWarnings(as.numeric(v))
+    out[v %in% c("PRESENT", "PRESENCE", "TRUE", "YES", "P")] <- 1
+    out[v %in% c("ABSENT", "ABSENCE", "FALSE", "NO", "A")] <- 0
+    out
+  }
+  if (!is.null(col) && !col %in% names(x)) {
+    stop(src, ": response column `", col, "` not found.", call. = FALSE)
+  }
+  if (dt == "presence_only" || (is.null(col) && !dt %in%
+                                c("presence_absence", "abundance"))) {
+    r <- rep(1, n)
+    st <- if (!is.null(col)) col else
+      find_column(names(x), "occurrenceStatus")
+    if (!is.na(st)) {
+      v <- status_to01(x[[st]])
+      ab <- !is.na(v) & v == 0
+      if (any(ab)) {
+        message(src, ": ", sum(ab), " record(s) with status ABSENT in ",
+                "presence-only data (response 0)")
+        r[ab] <- 0
+      }
+    }
+    return(r)
+  }
+  if (is.null(col)) {
+    col <- find_column(names(x), if (dt == "presence_absence") {
+      c("occurrenceStatus", "present", "presence", "pa", "response")
+    } else c("individualCount", "count", "counts", "abundance", "response"))
+    if (is.na(col)) {
+      stop(src, ": no response column found for ", dt, " data; name it ",
+           "with `response`.", call. = FALSE)
+    }
+  }
+  r <- if (dt == "presence_absence") status_to01(x[[col]]) else
+    as_number(x[[col]])
+  if (dt == "presence_absence" && any(!is.na(r) & !r %in% c(0, 1))) {
+    stop(src, ": presence-absence response must be 0/1 (or PRESENT/",
+         "ABSENT).", call. = FALSE)
+  }
+  if (dt == "abundance" && any(!is.na(r) & r < 0)) {
+    stop(src, ": negative abundance.", call. = FALSE)
+  }
+  if (anyNA(r)) message(src, ": ", sum(is.na(r)), " record(s) without a ",
+                        "response value")
+  r
 }
 
 # Read a CSV that may be comma- or semicolon-separated (internal)

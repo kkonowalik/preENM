@@ -84,12 +84,26 @@
 #'   `refuge_limit` in `refuge_radius_km` (e.g. a warm valley floor is kept
 #'   when cold mountains are nearby; a lowland park is not).
 #'
+#' **Absences.** With a `response` column (from [merge_occurrences()]),
+#' records with response 0 (survey sites where the species was not found)
+#' are exempt from the tests that judge whether a presence is plausible
+#' (`outside_range`, the isolation and the climate tests), and do not
+#' count as support or cluster members for presences; a presence and an
+#' absence at the same place are not duplicates.
+#'
 #' Finally, records in `keep_ids` are kept whatever they failed (the reason is
 #' moved to `reason_overridden`).
 #'
 #' @param x A data.frame of occurrences (e.g. from [read_gbif()]) or a path to
 #'   a GBIF download.
-#' @param settings A [filter_settings()] object (default: the strict preset).
+#' @param settings A [filter_settings()] object (default: the strict
+#'   preset), or a list of them named by data type (the `data_type` column
+#'   of [merge_occurrences()]), e.g. `list(presence_only =
+#'   filter_settings("strict"), presence_absence =
+#'   filter_settings("lenient", drop_tests = "coarse_decimals"))`; an
+#'   element `default` applies to the types not named. Each data type is
+#'   then filtered on its own: a structured survey need not pass the
+#'   coordinate-precision tests of a herbarium record.
 #' @param layers A [filter_layers()] object with the optional spatial layers.
 #' @param exclude_ids,keep_ids Record IDs (values of the `id` column, GBIF
 #'   `gbifID`) to remove or to keep regardless of any test.
@@ -138,8 +152,16 @@ filter_occurrences <- function(x, settings = filter_settings(),
                                exclude_datasets = NULL,
                                exclude_label_regex = NULL,
                                cols = NULL, verbose = TRUE) {
+  if (!inherits(settings, "filter_settings") && is.list(settings) &&
+      length(settings) && !is.null(names(settings)) &&
+      all(vapply(settings, inherits, logical(1), "filter_settings"))) {
+    return(filter_by_type(x, settings, layers, exclude_ids, keep_ids,
+                          exclude_datasets, exclude_label_regex, cols,
+                          verbose))
+  }
   if (!inherits(settings, "filter_settings")) {
-    stop("`settings` must come from filter_settings().", call. = FALSE)
+    stop("`settings` must come from filter_settings(), or be a list of ",
+         "them named by data type.", call. = FALSE)
   }
   if (!inherits(layers, "filter_layers")) {
     stop("`layers` must come from filter_layers().", call. = FALSE)
@@ -160,6 +182,16 @@ filter_occurrences <- function(x, settings = filter_settings(),
 
   # --- bookkeeping ----------------------------------------------------------
   reason <- rep(NA_character_, n)
+  # absences (response 0, e.g. survey sites where the species was not
+  # found) are exempt from the tests that judge whether a presence is
+  # ecologically plausible
+  resp <- if ("response" %in% names(x)) {
+    suppressWarnings(as.numeric(x$response))
+  } else rep(NA_real_, n)
+  absent <- !is.na(resp) & resp == 0
+  presence_tests <- c("outside_range", "isolated_climate_outlier",
+                      "small_isolated_cluster", "climate_limit",
+                      "climate_soft_limit")
   log <- list()
   add_log <- function(test, rsn, k, status, note = "") {
     log[[length(log) + 1]] <<- data.frame(test = test, reason = rsn,
@@ -169,6 +201,7 @@ filter_occurrences <- function(x, settings = filter_settings(),
   }
   flag <- function(bad, rsn, test = rsn) {
     bad <- !is.na(bad) & bad
+    if (test %in% presence_tests) bad <- bad & !absent
     new <- is.na(reason) & bad
     reason[new] <<- rsn
     add_log(test, rsn, sum(new), "run")
@@ -246,7 +279,7 @@ filter_occurrences <- function(x, settings = filter_settings(),
       skip("duplicate", "dedup_digits is NA")
     } else {
       sp <- get_chr("species")
-      key <- paste(if (is.null(sp)) "" else sp, lat_r, lon_r)
+      key <- paste(if (is.null(sp)) "" else sp, lat_r, lon_r, resp)
       dup <- rep(FALSE, n)
       dup[valid] <- duplicated(key[valid])
       flag(dup, "duplicate")
@@ -450,7 +483,7 @@ filter_occurrences <- function(x, settings = filter_settings(),
     } else if (is.na(st$isolation_climate)) {
       skip("isolated_climate_outlier", "isolation_climate is NA")
     } else {
-      a <- which(alive() & valid)
+      a <- which(alive() & valid & !absent)
       nb <- neighbour_counts(lon[a], lat[a], st$support_radius_km)
       bad <- rep(FALSE, n)
       bad[a] <- !is.na(clim[a]) & sgn * clim[a] > sgn * st$isolation_climate &
@@ -459,7 +492,7 @@ filter_occurrences <- function(x, settings = filter_settings(),
     }
   }
   if (on("small_isolated_cluster")) {
-    a <- which(alive() & valid)
+    a <- which(alive() & valid & !absent)
     if (length(a)) {
       sz <- cluster_sizes(lon[a], lat[a], st$cluster_eps_km)
       bad <- rep(FALSE, n)
@@ -518,6 +551,71 @@ filter_occurrences <- function(x, settings = filter_settings(),
               settings = st, columns = cn)
   class(res) <- "occ_filter"
   say("Kept ", sum(is.na(reason)), " of ", n, " records")
+  res
+}
+
+# filter_occurrences() with different settings per data type (internal):
+# each data type is filtered on its own and the results are combined in the
+# original order of the records
+filter_by_type <- function(x, settings, layers, exclude_ids, keep_ids,
+                           exclude_datasets, exclude_label_regex, cols,
+                           verbose) {
+  if (is.character(x) && length(x) == 1) x <- read_gbif(x)
+  x <- as.data.frame(x, stringsAsFactors = FALSE)
+  if (!"data_type" %in% names(x)) {
+    stop("Settings per data type need a `data_type` column (see ",
+         "merge_occurrences()).", call. = FALSE)
+  }
+  dt <- ifelse(is.na(x$data_type), "presence_only", x$data_type)
+  types <- unique(dt)
+  unknown <- setdiff(names(settings), c(types, "default"))
+  if (length(unknown)) {
+    warning("Settings for data type(s) not in the data: ",
+            paste(unknown, collapse = ", "), call. = FALSE)
+  }
+  x$.row <- seq_len(nrow(x))
+  parts <- lapply(types, function(k) {
+    st <- if (k %in% names(settings)) settings[[k]] else
+      if ("default" %in% names(settings)) settings[["default"]] else
+        filter_settings()
+    if (verbose) message("--- data type: ", k)
+    filter_occurrences(x[dt == k, , drop = FALSE], st, layers,
+                       exclude_ids = exclude_ids, keep_ids = keep_ids,
+                       exclude_datasets = exclude_datasets,
+                       exclude_label_regex = exclude_label_regex,
+                       cols = cols, verbose = verbose)
+  })
+  names(parts) <- types
+  bind <- function(lst) {
+    lst <- Filter(Negate(is.null), lst)
+    if (!length(lst)) return(NULL)
+    all_cols <- unique(unlist(lapply(lst, names)))
+    lst <- lapply(lst, function(d) {
+      d[setdiff(all_cols, names(d))] <- NA
+      d[all_cols]
+    })
+    do.call(rbind, lst)
+  }
+  d <- bind(lapply(parts, `[[`, "data"))
+  d <- d[order(d$.row), , drop = FALSE]
+  d$.row <- NULL
+  rownames(d) <- NULL
+  lg <- bind(lapply(types, function(k) {
+    l <- parts[[k]]$log
+    if (is.null(l)) NULL else cbind(data_type = k, l,
+                                    stringsAsFactors = FALSE)
+  }))
+  ds <- bind(lapply(types, function(k) {
+    l <- parts[[k]]$datasets
+    if (is.null(l)) NULL else cbind(data_type = k, l,
+                                    stringsAsFactors = FALSE)
+  }))
+  st <- lapply(parts, `[[`, "settings")
+  res <- list(data = d, log = lg, datasets = ds, settings = st,
+              columns = parts[[1]]$columns)
+  class(res) <- "occ_filter"
+  if (verbose) message("Kept ", sum(is.na(d$reason)), " of ", nrow(d),
+                       " records")
   res
 }
 

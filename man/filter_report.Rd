@@ -12,8 +12,9 @@ filter_report(x, by = NULL)
 \item{by}{Optional column name to split by (e.g. \code{"countryCode"}).}
 }
 \value{
-A data.frame: with \code{by = NULL}, columns \code{outcome} and \code{n};
-otherwise one row per group and one column per outcome.
+A data.frame: with \code{by = NULL}, columns \code{outcome} and \code{n}
+(and, when the records have several data types, one column per data
+type); otherwise one row per group and one column per outcome.
 }
 \description{
 Counts records per outcome (the reason of removal, or \code{KEPT}), optionally

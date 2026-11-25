@@ -140,3 +140,33 @@ test_that("the multiplication sign marks a hybrid", {
   expect_equal(p$canonical, c("Salix rubens", "Festulolium loliaceum"))
   expect_equal(p$hybrid, c(TRUE, TRUE))
 })
+
+test_that("merge_occurrences() records data type and response per source", {
+  a <- data.frame(lon = 1:3, lat = 50,
+                  occurrenceStatus = c("PRESENT", "ABSENT", "PRESENT"))
+  b <- data.frame(x = 4:6, y = 50, present = c(1, 0, 1))
+  cc <- data.frame(lon = 7:8, lat = 50, individualCount = c("3", "0"))
+  m <- suppressMessages(merge_occurrences(
+    GBIF = a, survey = b, counts = cc,
+    data_type = c(survey = "presence_absence", counts = "abundance")))
+  expect_equal(names(m)[1:6], c("species", "lon", "lat", "source",
+                                "data_type", "response"))
+  expect_equal(m$data_type, rep(c("presence_only", "presence_absence",
+                                  "abundance"), c(3, 3, 2)))
+  expect_equal(m$response, c(1, 0, 1, 1, 0, 1, 3, 0))
+  # one type for all, a named response column, a user label
+  m2 <- suppressMessages(merge_occurrences(
+    s1 = b, data_type = "atlas", response = c(s1 = "present")))
+  expect_equal(unique(m2$data_type), "atlas")
+  expect_equal(m2$response, c(1, 0, 1))     # user label: values as given
+  m3 <- suppressMessages(merge_occurrences(s1 = b, data_type = "atlas"))
+  expect_equal(m3$response, c(1, 1, 1))     # no column: presences
+  expect_error(merge_occurrences(s = data.frame(lon = 1, lat = 2),
+                                 data_type = c(s = "presence_absence")),
+               "no response column")
+  expect_error(merge_occurrences(s = data.frame(lon = 1, lat = 2, pa = 3),
+                                 data_type = c(s = "presence_absence")),
+               "0/1")
+  expect_error(merge_occurrences(s = b, data_type = c(other = "abundance")),
+               "unknown source")
+})

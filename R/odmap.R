@@ -85,8 +85,9 @@ odmap_table <- function(filter = NULL, uncertainty = NULL, m = NULL,
         " records before cleaning, ", sum(is.na(d$reason)), " after.")
     add("Biodiversity data", "Cleaning",
         "Rule-based filtering (preENM::filter_occurrences); records removed ",
-        "per test: ", if (nrow(run)) paste0(run$reason, " (", run$removed, ")",
-                                            collapse = ", ") else "none",
+        "per test: ", if (nrow(run)) paste0(
+          if ("data_type" %in% names(run)) paste0(run$data_type, ": "),
+          run$reason, " (", run$removed, ")", collapse = ", ") else "none",
         ". Tests run without removals: ",
         paste(lg$test[lg$status == "run" & !is.na(lg$removed) &
                         lg$removed == 0], collapse = ", "),

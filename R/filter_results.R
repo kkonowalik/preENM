@@ -5,16 +5,31 @@ print.occ_filter <- function(x, ...) {
   d <- x$data
   n <- nrow(d)
   k <- sum(is.na(d$reason))
-  cat("Occurrence filtering (preset: ", x$settings$preset, "): ", n,
-      " records -> ", k, " kept (", round(100 * k / max(n, 1), 1), "%)\n\n",
-      sep = "")
+  by_type <- "data_type" %in% names(x$log)
+  preset <- if (by_type) {
+    paste(names(x$settings), vapply(x$settings, `[[`, "", "preset"),
+          sep = ": ", collapse = "; ")
+  } else x$settings$preset
+  cat("Occurrence filtering (preset", if (by_type) "s", ": ", preset, "): ",
+      n, " records -> ", k, " kept (", round(100 * k / max(n, 1), 1),
+      "%)\n\n", sep = "")
+  if ("data_type" %in% names(d) && length(unique(d$data_type)) > 1) {
+    t <- table(d$data_type, ifelse(is.na(d$reason), "kept", "removed"))
+    cat("By data type:\n")
+    print(data.frame(data_type = rownames(t), records = rowSums(t),
+                     kept = if ("kept" %in% colnames(t)) t[, "kept"] else 0,
+                     row.names = NULL), row.names = FALSE)
+    cat("\n")
+  }
   lg <- x$log
-  run <- lg[lg$status == "run" & lg$removed > 0, c("reason", "removed")]
+  keep_cols <- c(if (by_type) "data_type", "reason", "removed")
+  run <- lg[lg$status == "run" & lg$removed > 0, keep_cols, drop = FALSE]
   if (nrow(run)) {
     cat("Removed, by the first test failed (in test order):\n")
     print(run, row.names = FALSE)
   }
-  sk <- lg[lg$status == "skipped", c("test", "note")]
+  sk <- lg[lg$status == "skipped", c(if (by_type) "data_type", "test",
+                                     "note"), drop = FALSE]
   if (nrow(sk)) {
     cat("\nSkipped tests:\n")
     print(sk, row.names = FALSE, right = FALSE)
@@ -84,8 +99,9 @@ check_filter <- function(x) {
 #'
 #' @param x An `occ_filter` object.
 #' @param by Optional column name to split by (e.g. `"countryCode"`).
-#' @return A data.frame: with `by = NULL`, columns `outcome` and `n`;
-#'   otherwise one row per group and one column per outcome.
+#' @return A data.frame: with `by = NULL`, columns `outcome` and `n`
+#'   (and, when the records have several data types, one column per data
+#'   type); otherwise one row per group and one column per outcome.
 #' @export
 #' @examples
 #' occ <- data.frame(decimalLongitude = c(10.123, 10.123, 0, 11.456),
@@ -103,8 +119,14 @@ filter_report <- function(x, by = NULL) {
   outcome <- factor(outcome, levels = unique(c(lev, outcome)))
   if (is.null(by)) {
     t <- table(outcome)
-    return(data.frame(outcome = names(t), n = as.integer(t),
-                      stringsAsFactors = FALSE))
+    out <- data.frame(outcome = names(t), n = as.integer(t),
+                      stringsAsFactors = FALSE)
+    # one column per data type when there are several
+    if ("data_type" %in% names(d) && length(unique(d$data_type)) > 1) {
+      tt <- table(outcome, d$data_type)
+      for (k in colnames(tt)) out[[k]] <- as.integer(tt[out$outcome, k])
+    }
+    return(out)
   }
   if (!by %in% names(d)) stop("Column not found: ", by, call. = FALSE)
   t <- table(d[[by]], outcome, useNA = "ifany")
@@ -197,7 +219,8 @@ record_fate <- function(x, ids) {
   if (is.na(idc)) stop("No id column in the data.", call. = FALSE)
   d <- x$data
   i <- which(as.character(d[[idc]]) %in% as.character(ids))
-  diag_cols <- intersect(c("reason_overridden", "name_query",
+  diag_cols <- intersect(c("data_type", "response", "reason_overridden",
+                           "name_query",
                            "name_accepted", "name_match_type", "name_rank",
                            "climate", "climate_near",
                            "built_pct", "crop_pct", "ghs_mean_pct",

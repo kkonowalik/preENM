@@ -333,3 +333,61 @@ test_that("name tests are skipped without match_names() columns", {
                     "rank_conflict") %in% sk$test))
   expect_match(sk$note[sk$test == "name_unmatched"], "match_names")
 })
+
+test_that("data_type survives filtering; per-type settings hit the right records", {
+  gb <- data.frame(lon = c(10.12, 10.52, 11.2), lat = c(46.1, 46.52, 46.9),
+                   gbifID = c("g1", "g2", "g3"))       # 2 decimals: coarse
+  sv <- data.frame(lon = c(10.12, 10.5234, 10.6234, 10.7234),
+                   lat = c(46.1, 46.5234, 46.6234, 46.7234),
+                   present = c(1, 0, 1, 0), gbifID = c("s1", "s2", "s3", "s4"))
+  m <- suppressMessages(merge_occurrences(
+    GBIF = gb, survey = sv, data_type = c(survey = "presence_absence")))
+  st <- list(presence_only = filter_settings(cc_tests = "zeros",
+                                             drop_tests = "small_isolated_cluster"),
+             presence_absence = filter_settings(
+               cc_tests = "zeros", drop_tests = c("coarse_decimals",
+                                                  "small_isolated_cluster")))
+  r <- filter_occurrences(m, st, verbose = FALSE)
+  expect_s3_class(r, "occ_filter")
+  expect_equal(nrow(r$data), 7)
+  expect_equal(r$data$gbifID, m$gbifID)                 # original order
+  expect_equal(r$data$data_type, m$data_type)
+  f <- record_fate(r, c("g1", "s1", "s2"))
+  # the coarse-decimal test removes GBIF records, not the survey site
+  # with the same coarse coordinates
+  expect_equal(f$fate, c("coarse_decimals", "KEPT", "KEPT"))
+  expect_equal(f$data_type, c("presence_only", "presence_absence",
+                              "presence_absence"))
+  expect_equal(f$response, c(1, 1, 0))
+  rep <- filter_report(r)
+  expect_true(all(c("presence_only", "presence_absence") %in% names(rep)))
+  expect_equal(rep$presence_only[rep$outcome == "coarse_decimals"], 3)
+  expect_equal(rep$presence_absence[rep$outcome == "KEPT"], 4)
+  expect_equal(unique(r$log$data_type), c("presence_only",
+                                          "presence_absence"))
+  expect_output(print(r), "By data type")
+  expect_true(all(kept(r)$data_type == "presence_absence"))
+  # one settings object: data_type still carried through
+  r1 <- filter_occurrences(m, filter_settings(cc_tests = "zeros"),
+                           verbose = FALSE)
+  expect_equal(r1$data$data_type, m$data_type)
+  # a default for types not named
+  r2 <- filter_occurrences(m, list(default = filter_settings(
+    cc_tests = "zeros", drop_tests = "coarse_decimals")), verbose = FALSE)
+  expect_equal(sum(r2$data$reason %in% "coarse_decimals"), 0)
+  expect_error(filter_occurrences(gb, st, verbose = FALSE), "data_type")
+})
+
+test_that("absences are exempt from the presence-plausibility tests", {
+  # an isolated absence must not be removed as a small cluster, and a
+  # presence and an absence at one place are not duplicates
+  sv <- data.frame(lon = c(10.1234, 10.1334, 10.1434, 20.1234, 10.1234),
+                   lat = c(46.1234, 46.1334, 46.1434, 50.1234, 46.1234),
+                   present = c(1, 1, 1, 0, 0), gbifID = paste0("s", 1:5))
+  m <- suppressMessages(merge_occurrences(
+    survey = sv, data_type = "presence_absence"))
+  r <- filter_occurrences(m, filter_settings(cc_tests = "zeros",
+                                             min_cluster_n = 3),
+                          verbose = FALSE)
+  expect_equal(record_fate(r, paste0("s", 1:5))$fate, rep("KEPT", 5))
+})

@@ -39,7 +39,11 @@
 #'   [write_grain_sensitivity()]: how records kept, records too uncertain,
 #'   correlation structure and the selected variable set change at coarser
 #'   grains, and up to which grain the selection is stable.
-#' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell.
+#' * [merge_occurrences()], [thin_by_cell()]: one record per raster cell;
+#'   the data type of each source (presence-only, presence-absence,
+#'   abundance) is kept through filtering.
+#' * [export_integrated()], [write_integrated()]: input for integrated SDMs
+#'   (intSDM, PointedSDMs, biomod2), one dataset per data type.
 #' * [thin_environment()], [plot_env_thinning()], [write_env_thinning()]:
 #'   thinning in environmental space without truncating the niche.
 #' * [sample_background()]: background points, uniform, stratified in

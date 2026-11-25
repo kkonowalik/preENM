@@ -46,7 +46,11 @@ modelling and inside the models?
 \code{\link[=write_grain_sensitivity]{write_grain_sensitivity()}}: how records kept, records too uncertain,
 correlation structure and the selected variable set change at coarser
 grains, and up to which grain the selection is stable.
-\item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell.
+\item \code{\link[=merge_occurrences]{merge_occurrences()}}, \code{\link[=thin_by_cell]{thin_by_cell()}}: one record per raster cell;
+the data type of each source (presence-only, presence-absence,
+abundance) is kept through filtering.
+\item \code{\link[=export_integrated]{export_integrated()}}, \code{\link[=write_integrated]{write_integrated()}}: input for integrated SDMs
+(intSDM, PointedSDMs, biomod2), one dataset per data type.
 \item \code{\link[=thin_environment]{thin_environment()}}, \code{\link[=plot_env_thinning]{plot_env_thinning()}}, \code{\link[=write_env_thinning]{write_env_thinning()}}:
 thinning in environmental space without truncating the niche.
 \item \code{\link[=sample_background]{sample_background()}}: background points, uniform, stratified in

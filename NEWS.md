@@ -1,3 +1,32 @@
+# preENM 2.36.0
+
+Preparing data for integrated species distribution models (Zulian et al.
+2021, *Diversity and Distributions* 27, 2498-2509; Morera-Pujol et al.
+2023, *Ecography* e06451; Mostert et al. 2025, *Ecology and Evolution* 15,
+e71029; Gueguen et al. 2026, *Ecography* e08588; Makinen et al. 2026,
+*Diversity and Distributions* e70157):
+
+* `merge_occurrences()` gains `data_type` (per source: `"presence_only"`,
+  `"presence_absence"`, `"abundance"` or a label of your own) and
+  `response`; the new columns `data_type` and `response` are read from
+  `occurrenceStatus`, `present`, `individualCount` or a named column.
+  Presence-only records with status `ABSENT` are reported.
+* `filter_occurrences()` accepts a list of settings named by data type (and
+  `default`), filtering each type with its own tests and thresholds.
+  Absences are exempt from the presence-plausibility tests (range,
+  isolation, climate limits) and are not duplicates of presences at the
+  same place.
+* `filter_report()` gives one column per data type, `record_fate()` the
+  data type and response, the printout a summary per type, and
+  `odmap_table()` the removals per type.
+* `export_integrated()`: one dataset per data type (or source) in the input
+  structure of intSDM (`$addStructured()` arguments), PointedSDMs (`sf`
+  datasets with `present` / `counts`, and the matching `startISDM()`
+  arguments) or biomod2 (`BIOMOD_FormatingData()` arguments with
+  `data.type`), without depending on those packages; warns about
+  presence-absence data without absences, extreme prevalence and small
+  datasets. `write_integrated()` writes them to CSV.
+
 # preENM 2.35.0
 
 Propagating coordinate uncertainty (Gabor et al. 2023, *Ecography*

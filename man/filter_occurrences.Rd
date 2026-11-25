@@ -20,7 +20,12 @@ filter_occurrences(
 \item{x}{A data.frame of occurrences (e.g. from \code{\link[=read_gbif]{read_gbif()}}) or a path to
 a GBIF download.}
 
-\item{settings}{A \code{\link[=filter_settings]{filter_settings()}} object (default: the strict preset).}
+\item{settings}{A \code{\link[=filter_settings]{filter_settings()}} object (default: the strict
+preset), or a list of them named by data type (the \code{data_type} column
+of \code{\link[=merge_occurrences]{merge_occurrences()}}), e.g. \code{list(presence_only = filter_settings("strict"), presence_absence = filter_settings("lenient", drop_tests = "coarse_decimals"))}; an
+element \code{default} applies to the types not named. Each data type is
+then filtered on its own: a structured survey need not pass the
+coordinate-precision tests of a herbarium record.}
 
 \item{layers}{A \code{\link[=filter_layers]{filter_layers()}} object with the optional spatial layers.}
 
@@ -148,6 +153,13 @@ records (chained closer than \code{cluster_eps_km}).
 \code{refuge_limit} in \code{refuge_radius_km} (e.g. a warm valley floor is kept
 when cold mountains are nearby; a lowland park is not).
 }
+
+\strong{Absences.} With a \code{response} column (from \code{\link[=merge_occurrences]{merge_occurrences()}}),
+records with response 0 (survey sites where the species was not found)
+are exempt from the tests that judge whether a presence is plausible
+(\code{outside_range}, the isolation and the climate tests), and do not
+count as support or cluster members for presences; a presence and an
+absence at the same place are not duplicates.
 
 Finally, records in \code{keep_ids} are kept whatever they failed (the reason is
 moved to \code{reason_overridden}).

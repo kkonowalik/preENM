@@ -189,3 +189,23 @@ test_that("record_ignorance: focal-species cells carry half of the weight", {
   w <- c(1 / 2^2, 1 / 1^2)
   expect_equal(v0[3], sum(w * v0[1:2]) / sum(w), tolerance = 1e-3)
 })
+
+test_that("gbif_target_group_sql() builds record and cell queries", {
+  q <- gbif_target_group_sql(c(5, 17, 43, 48), c(genus = "Dryas",
+                                                  genus = "Geum"),
+                             exclude_species = "Dryas octopetala",
+                             years = c(1980, 2025))
+  expect_match(q, "genus IN \\('Dryas', 'Geum'\\)")
+  expect_match(q, "NOT IN \\('Dryas octopetala'\\)")
+  expect_match(q, "recordedBy")
+  expect_match(q, "\"year\" >= 1980")
+  expect_false(grepl("GROUP BY", q))
+  q2 <- gbif_target_group_sql(c(5, 17, 43, 48), c(order = "Rosales"),
+                              cell = 0.1)
+  expect_match(q2, "\"order\" IN \\('Rosales'\\)")
+  expect_match(q2, "GROUP BY")
+  q3 <- gbif_target_group_sql(c(5, 17, 43, 48), c(familyKey = 5015))
+  expect_match(q3, "familyKey IN \\(5015\\)")
+  expect_error(gbif_target_group_sql(c(5, 17, 43, 48), c(tribe = "X")),
+               "Unknown rank")
+})

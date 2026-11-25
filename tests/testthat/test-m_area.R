@@ -204,3 +204,26 @@ test_that("reports, class shares, clipping, plots and files", {
   expect_true(file.exists(f2[["comparison"]]))
   expect_error(m_report(1), "delimit_m")
 })
+
+test_that("adaptive M: clusters reach by their spread, singletons stay small", {
+  set.seed(1)
+  # a dense cluster of 60 records (about 1 x 1 degree) and one lone record
+  # far away
+  cl <- data.frame(lon = 20 + stats::runif(60), lat = 50 + stats::runif(60))
+  pts <- rbind(cl, data.frame(lon = 26, lat = 54))
+  m <- suppressMessages(delimit_m(pts, method = "adaptive", link_km = 150,
+                                  thin_km = 1, close_km = 0,
+                                  closing_km = 0, adaptive_min_km = 5))
+  parts <- sf::st_cast(sf::st_geometry(m$m), "POLYGON")
+  a <- sort(as.numeric(sf::st_area(parts)) / 1e6)
+  expect_length(a, 2)
+  # the lone record keeps a circle of 5 km
+  expect_equal(a[1], pi * 5^2, tolerance = 0.05)
+  # the cluster reaches about its mean pairwise distance (~55 km) beyond
+  # its records
+  expect_gt(a[2], 2 * 1e4)
+  mw <- suppressMessages(delimit_m(pts, method = "adaptive", link_km = 150,
+                                   thin_km = 1, close_km = 0,
+                                   closing_km = 0, adaptive_mult = 0.5))
+  expect_lt(as.numeric(sf::st_area(mw$m)), as.numeric(sf::st_area(m$m)))
+})

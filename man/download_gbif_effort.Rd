@@ -7,7 +7,7 @@
 download_gbif_effort(sql, path, wait = TRUE)
 }
 \arguments{
-\item{sql}{Query from \code{\link[=gbif_effort_sql]{gbif_effort_sql()}}.}
+\item{sql}{Query from \code{\link[=gbif_effort_sql]{gbif_effort_sql()}} or \code{\link[=gbif_target_group_sql]{gbif_target_group_sql()}}.}
 
 \item{path}{Folder for the download and the table (re-used: an existing
 \code{effort_table.csv} is returned without downloading again).}

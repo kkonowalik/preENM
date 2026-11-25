@@ -54,9 +54,13 @@ abundance) is kept through filtering.
 \item \code{\link[=thin_environment]{thin_environment()}}, \code{\link[=plot_env_thinning]{plot_env_thinning()}}, \code{\link[=write_env_thinning]{write_env_thinning()}}:
 thinning in environmental space without truncating the niche.
 \item \code{\link[=sample_background]{sample_background()}}: background points, uniform, stratified in
-environmental space, by recording effort, or both; effort layers from
-GBIF with \code{\link[=gbif_effort_sql]{gbif_effort_sql()}}, \code{\link[=download_gbif_effort]{download_gbif_effort()}} and
+environmental space, by recording effort, or both, or a target-group
+background (raw, kernel-smoothed, observer-weighted); effort layers
+and target-group records from GBIF with \code{\link[=gbif_effort_sql]{gbif_effort_sql()}},
+\code{\link[=gbif_target_group_sql]{gbif_target_group_sql()}}, \code{\link[=download_gbif_effort]{download_gbif_effort()}} and
 \code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}.
+\item \code{\link[=background_sufficiency]{background_sufficiency()}}, \code{\link[=plot_background_sufficiency]{plot_background_sufficiency()}}: how many
+background points represent the environment of M.
 \item \code{\link[=download_neotoma]{download_neotoma()}}, \code{\link[=neotoma_records]{neotoma_records()}}, \code{\link[=fossil_site_bins]{fossil_site_bins()}},
 \code{\link[=site_bin_slices]{site_bin_slices()}}: dated fossil records for \code{\link[=temporal_validation]{temporal_validation()}}.
 }

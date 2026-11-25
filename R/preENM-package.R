@@ -47,9 +47,13 @@
 #' * [thin_environment()], [plot_env_thinning()], [write_env_thinning()]:
 #'   thinning in environmental space without truncating the niche.
 #' * [sample_background()]: background points, uniform, stratified in
-#'   environmental space, by recording effort, or both; effort layers from
-#'   GBIF with [gbif_effort_sql()], [download_gbif_effort()] and
+#'   environmental space, by recording effort, or both, or a target-group
+#'   background (raw, kernel-smoothed, observer-weighted); effort layers
+#'   and target-group records from GBIF with [gbif_effort_sql()],
+#'   [gbif_target_group_sql()], [download_gbif_effort()] and
 #'   [gbif_effort_rasters()].
+#' * [background_sufficiency()], [plot_background_sufficiency()]: how many
+#'   background points represent the environment of M.
 #' * [download_neotoma()], [neotoma_records()], [fossil_site_bins()],
 #'   [site_bin_slices()]: dated fossil records for [temporal_validation()].
 #'

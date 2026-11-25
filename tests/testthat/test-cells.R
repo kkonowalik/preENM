@@ -127,3 +127,66 @@ test_that("effort and enveffort backgrounds follow recording effort", {
   expect_error(suppressMessages(sample_background(sim$env, method = "effort")),
                "needs an `effort`")
 })
+
+test_that("target-group background reproduces the density of the records", {
+  r <- terra::rast(nrows = 100, ncols = 100, xmin = 0, xmax = 10, ymin = 40,
+                   ymax = 50, vals = 1)
+  set.seed(1)
+  tg <- data.frame(lon = 10 * stats::rbeta(3000, 1, 3),
+                   lat = stats::runif(3000, 40, 50))
+  bands <- function(v) as.vector(table(cut(v, 0:10)))
+  bg <- suppressMessages(sample_background(r, n = 2000, seed = 1,
+                                           method = "target_group",
+                                           target = tg))
+  expect_gt(stats::cor(bands(bg$lon), bands(tg$lon)), 0.95)
+  # cells without target records are never drawn (bandwidth 0, floor 0)
+  tc <- unique(terra::cellFromXY(r, as.matrix(tg)))
+  expect_true(all(bg$cell %in% tc))
+  # kernel smoothing keeps the gradient but reaches empty cells
+  bg2 <- suppressMessages(sample_background(
+    r, n = 2000, seed = 1, method = "target_group", target = tg,
+    target_bandwidth_km = 30))
+  expect_gt(stats::cor(bands(bg2$lon), bands(tg$lon)), 0.9)
+  expect_equal(attr(bg2, "background")$target$bandwidth_km, 30)
+  # a raster of counts works like records
+  cnt <- terra::rasterize(as.matrix(tg), r, fun = "length", background = 0)
+  bg3 <- suppressMessages(sample_background(
+    r, n = 2000, seed = 1, method = "target_group", target = cnt))
+  expect_gt(stats::cor(bands(bg3$lon), bands(tg$lon)), 0.95)
+  expect_error(sample_background(r, n = 100, method = "target_group"),
+               "target")
+})
+
+test_that("observer weighting follows the observers of the focal species", {
+  r <- terra::rast(nrows = 50, ncols = 100, xmin = 0, xmax = 10, ymin = 45,
+                   ymax = 50, vals = 1)
+  set.seed(2)
+  # observer A records only in the west, observer B only in the east
+  tg <- data.frame(lon = c(stats::runif(500, 0, 5), stats::runif(500, 5, 10)),
+                   lat = stats::runif(1000, 45, 50),
+                   recordedBy = rep(c("A", "B"), each = 500))
+  # the focal species was reported only by A
+  pres <- data.frame(lon = stats::runif(20, 0, 5),
+                     lat = stats::runif(20, 45, 50), recordedBy = "A")
+  bg <- suppressMessages(sample_background(
+    r, n = 500, seed = 1, method = "target_group", target = tg,
+    target_observer = "recordedBy", presences = pres,
+    target_bandwidth_km = 20))
+  expect_gt(mean(bg$lon < 5.5), 0.95)
+  expect_equal(attr(bg, "background")$target$observers, 1)
+  expect_error(sample_background(r, n = 100, method = "target_group",
+                                 target = tg, target_observer = "recordedBy"),
+               "presences")
+})
+
+test_that("target density can be stratified by environment", {
+  sim <- simulate_enm_data(seed = 1)
+  set.seed(3)
+  tg <- data.frame(lon = stats::runif(2000, 14, 24),
+                   lat = stats::runif(2000, 49, 55))
+  bg <- suppressMessages(sample_background(
+    sim$env, n = 500, seed = 1, method = "target_group", target = tg,
+    target_stratify = TRUE, env_total_bins = 100))
+  expect_true("bin" %in% names(bg))
+  expect_true(attr(bg, "background")$target$stratify)
+})

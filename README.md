@@ -34,14 +34,14 @@ step can be used on its own.
 | | Section | Step | Functions |
 |---|---|---|---|
 | Before | [1](#1-point-filtering) | **Name matching and point filtering** (especially GBIF) | `read_gbif()`, `match_names()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
-| Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()`, `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
+| Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()` (incl. spatially adaptive buffers), `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
 | Before | [4](#4-computing-derived-climate-variables) | **Derived climate variables** (25 indices of water balance, heat, cold, season and light; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
 | Before | [5](#5-checks-before-modelling) | **Checks** (sample size, record years vs climate period) | `check_sample_size()`, `match_climate_period()` |
 | Before | [6](#6-imprecise-records-keep-propagate-or-drop) | **Coordinate uncertainty in environmental terms**: keep, propagate (replicate datasets jittered within each record's uncertainty) or drop | `uncertainty_environment()`, `jitter_uncertainty()`, `plot_jitter()`, `write_jitter()` |
 | Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()` (with `data_type` per source), `thin_by_cell()`, `sample_background()` |
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
-| Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort** | `sample_background(method = ...)`, `gbif_effort_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()` |
+| Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort**, target-group background, how many background points | `sample_background(method = ...)`, `gbif_effort_sql()`, `gbif_target_group_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()`, `background_sufficiency()`, `plot_background_sufficiency()` |
 | Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()`, `classify_points()`, `unfilled_records()` |
 | Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
@@ -211,6 +211,7 @@ patch.
 | `"cluster_hull"` | convex (or concave, `hull_ratio < 1`) hull of each cluster linked at L: fills hollows inside a cluster automatically |
 | `"convex_hull"` | one convex hull around all records: the most generous M |
 | `"buffer"` | buffers of fixed radius (`buffer_km`), e.g. as a reference |
+| `"adaptive"` | spatially adaptive buffers for unevenly surveyed areas (Barbosa 2026, *Biodiversity Informatics* 20): each cluster linked at L buffered by the mean distance between its records, isolated records by a small circle (`adaptive_min_km`), so unsurveyed land is not pulled into M; generous for one large, well-surveyed cluster |
 
 **Room for expert judgement.** The automatic M can leave out areas the
 species could have crossed, e.g. a hollow between two mountain chains. You
@@ -609,7 +610,7 @@ subset (e.g. one lineage) in exactly the same space.
 
 ### 9. Background strategies and recording effort
 
-`sample_background(method = ...)` offers four ways to draw background
+`sample_background(method = ...)` offers five ways to draw background
 points (each with `n_sets` reproducible sets):
 
 | `method` | Background | Use |
@@ -618,6 +619,7 @@ points (each with `n_sets` reproducible sets):
 | `"envstrat"` | even coverage of environmental bins (PCA of the layers) | common climates no longer dominate the background |
 | `"effort"` | cells weighted by recording effort | like a target-group background: corrects the sampling bias of presences |
 | `"enveffort"` | environmental bins with equal weight, effort-weighted cells within each bin | both corrections at once |
+| `"target_group"` | cells weighted by the records of a target group (genus, family, ... recorded by the same people), raw or kernel-smoothed, optionally weighted by observer and stratified by environment | the dominant bias correction; see below |
 
 No strategy is best for every species: which one gives the most
 transferable models depends on how biased the records are and on how the
@@ -656,6 +658,64 @@ GBIF_EMAIL=your_email
 
 save, and restart R. Cite the download DOI written to
 `gbif_effort/effort_download_DOI.txt`.
+
+**Target-group background.** Background drawn where related species were
+recorded carries the same sampling bias as the presences. Among four
+common corrections it emulated known sampling effort best, though it
+sometimes overcompensated, so check the maps for realism (Barber et al.
+2021, *Diversity and Distributions* 28, 128-141). `gbif_target_group_sql()`
+builds the GBIF download of a genus, family or other group without your
+species, record by record (with `recordedBy`) or counted per cell:
+
+```r
+q  <- gbif_target_group_sql(extent = c(5, 17, 43, 48),
+                            group = c(family = "Rosaceae"),
+                            exclude_species = "Genus species",
+                            years = c(1980, 2025))
+tg <- download_gbif_effort(q, "target_group")
+bg <- sample_background(env, n = 10000, method = "target_group",
+                        target = tg, target_bandwidth_km = 5,   # kernel (km)
+                        exclude = pres, seed = 123)
+```
+
+- `target_bandwidth_km = 0` uses the records per cell (the classic
+  target-group background); a bandwidth smooths them with a Gaussian
+  kernel. Balej et al. (2025, *Ecography* e08202) recommend this smoothed
+  version ("TGOB+") when no independent data are available; no single
+  bandwidth was best, so try a few (e.g. 1, 2 and 4 cell widths).
+- `target_observer = "recordedBy"` with `presences` weights each observer's
+  normalised density by their share of the records of your species (their
+  PW-OOA method, the best when checked against independent data).
+- `target_stratify = TRUE` combines the target density with the
+  environmental bins of `"enveffort"`.
+
+**How many background points?** The number and the spread of background
+points change presence-background models in a species-dependent way
+(Whitford et al. 2024, *Ecological Modelling* 488, 110604).
+`background_sufficiency()` answers the part that does not depend on the
+model: how many points represent the environment of M. It draws the
+background (with your method and arguments) at an increasing series of `n`
+and returns the saturation curve: the share of the environmental bins of M
+holding a background point, the share of its area, and the largest
+Kolmogorov-Smirnov distance of the marginal distributions. The printout
+gives the `n` at which coverage saturates and says whether the usual 10 000
+is enough:
+
+```r
+bs <- background_sufficiency(env, ns = c(1000, 2500, 5000, 10000, 25000),
+                             method = "target_group", target = tg,
+                             n_presences = nrow(pres))
+bs
+plot_background_sufficiency(bs, file = "background_sufficiency")
+```
+
+![Coverage of the environment of M and the Kolmogorov-Smirnov distance against the number of background points](man/figures/background_sufficiency.png)
+
+This is a lower bound for representing M, not the best number for a model:
+in simulations the most accurate current predictions came from about
+0.5-1 background points per presence or about 5% of the cells, and the
+number mattered little for projections to future climates
+(Rausell-Moreno et al. 2025, *Ecological Modelling* 507, 111177).
 
 ### 10. Checking that the niche is not truncated by M
 

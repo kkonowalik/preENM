@@ -1,3 +1,34 @@
+# preENM 2.37.0
+
+Target-group background, background sufficiency and adaptive M (Barber et
+al. 2021, *Diversity and Distributions* 28, 128-141; Balej et al. 2025,
+*Ecography* e08202; Whitford et al. 2024, *Ecological Modelling* 488,
+110604; Rausell-Moreno et al. 2025, *Ecological Modelling* 507, 111177;
+Barbosa 2026, *Biodiversity Informatics* 20, 81-88):
+
+* `sample_background(method = "target_group")`: background weighted by the
+  records of a target group (`target`: records or a raster of counts),
+  per cell (`target_bandwidth_km = 0`, the classic target-group
+  background) or smoothed by a Gaussian kernel (TGOB+ of Balej et al.);
+  with `target_observer` and `presences`, each observer's normalised
+  density weighted by their share of the focal species' records (PW-OOA);
+  `target_stratify = TRUE` combines it with the environmental bins of
+  `"enveffort"`. Densities are computed only at a random pool of cells, so
+  global layers stay within memory.
+* `gbif_target_group_sql()`: the GBIF SQL download of a genus, family or
+  other group without the focal species, record by record (with
+  `recordedBy`) or counted per cell; run with `download_gbif_effort()`.
+* `background_sufficiency()`: draws the background (any method) at an
+  increasing series of `n` and returns the saturation curve of the
+  coverage of the environmental space of M (bins and area) and of the
+  largest Kolmogorov-Smirnov distance of the marginal distributions; the
+  printout recommends the `n` at which coverage saturates and says whether
+  the curve saturated within the range tested.
+  `plot_background_sufficiency()`.
+* `delimit_m(method = "adaptive")`: spatially adaptive buffers for unevenly
+  surveyed areas (Barbosa's cluster mean distance), with `adaptive_mult`,
+  `adaptive_weight` and `adaptive_min_km`.
+
 # preENM 2.36.0
 
 Preparing data for integrated species distribution models (Zulian et al.

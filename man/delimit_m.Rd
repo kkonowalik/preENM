@@ -6,12 +6,15 @@
 \usage{
 delimit_m(
   points,
-  method = c("delaunay", "buffer", "cluster_hull", "convex_hull"),
+  method = c("delaunay", "buffer", "cluster_hull", "convex_hull", "adaptive"),
   link_km = NULL,
   link_search = c(100, 600),
   link2_max_km = 1000,
   link_mult = 1,
   buffer_km = NULL,
+  adaptive_mult = 1,
+  adaptive_weight = FALSE,
+  adaptive_min_km = 1,
   hull_ratio = 1,
   corridors = FALSE,
   closing_km = NULL,
@@ -38,8 +41,8 @@ detected column names), a CSV path, an \code{sf} object or a
 \link[terra:SpatVector-class]{terra::SpatVector}. Combine modern and fossil records beforehand if both
 should shape M (e.g. with \code{\link[=merge_occurrences]{merge_occurrences()}}).}
 
-\item{method}{\code{"delaunay"}, \code{"buffer"}, \code{"cluster_hull"} or
-\code{"convex_hull"}.}
+\item{method}{\code{"delaunay"}, \code{"buffer"}, \code{"cluster_hull"},
+\code{"convex_hull"} or \code{"adaptive"}.}
 
 \item{link_km}{Linking distance L in km; \code{NULL} (default) = derived from the
 data.}
@@ -52,6 +55,10 @@ data.}
 0.5 or 2).}
 
 \item{buffer_km}{Buffer radius for \code{method = "buffer"} (default L/2).}
+
+\item{adaptive_mult, adaptive_weight, adaptive_min_km}{For \code{"adaptive"}:
+multiplier of the cluster radii, scaling by cluster size, and the
+radius (km) of single-record clusters.}
 
 \item{hull_ratio}{For \code{"cluster_hull"}: 1 = convex, smaller = more concave
 (needs GEOS >= 3.11).}
@@ -137,6 +144,17 @@ hull (\code{hull_ratio = 1}) or a concave hull (\code{hull_ratio < 1}) of the
 buffers. Fills gaps inside each cluster automatically.
 \item \code{"convex_hull"}: one convex hull around all buffers (the simplest and
 most generous M).
+\item \code{"adaptive"}: spatially adaptive buffers for unevenly surveyed areas
+(Barbosa 2026, "cluster mean distance"): around each cluster of records
+linked at L, a buffer whose radius is the mean distance between the
+records of that cluster (times \code{adaptive_mult}), so well-surveyed,
+extensive clusters reach further and isolated records keep only a
+small circle (\code{adaptive_min_km}) instead of pulling unsurveyed land
+into M. With \code{adaptive_weight = TRUE} each radius is further scaled by
+the cluster's number of records relative to the largest cluster.
+One large, extensive cluster gets a wide buffer (its mean distance can
+be several times L), so this method is generous for well-surveyed
+ranges and conservative for scattered records.
 }
 
 \strong{Steps after the method}, in order: corridors between clusters
@@ -167,4 +185,10 @@ extra <- sf::st_sfc(sf::st_polygon(list(rbind(c(22, 50), c(24, 50),
   c(24, 51), c(22, 51), c(22, 50)))), crs = 4326)
 m2 <- delimit_m(sim$presence, link_km = 120, thin_km = 5, add = extra)
 m_report(m2)
+}
+\references{
+Barbosa, A.M. (2026) Spatially adaptive background
+delimitation strategies for species distribution models with unevenly
+surveyed occurrences. \emph{Biodiversity Informatics} 20, 81-88.
+\doi{10.17161/bi.v20i1.25045}
 }

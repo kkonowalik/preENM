@@ -65,6 +65,113 @@ gbif_effort_sql <- function(extent, cell = 0.1,
                   "FLOOR(decimalLongitude * %d)"), k, k))
 }
 
+#' SQL query for a GBIF target-group download
+#'
+#' A target-group background draws background points where records of a
+#' group of related or similarly recorded species were made, so that the
+#' background has the same sampling bias as the presences (Barber et al.
+#' 2021). `gbif_target_group_sql()` builds the GBIF SQL download of such a
+#' group: e.g. the other species of the genus or the family, without your
+#' own species. Run it with [download_gbif_effort()] and give the result as
+#' `target` in [sample_background()] (`method = "target_group"`).
+#'
+#' * `cell = NULL` (default): one row per record, with coordinates, year
+#'   and `recordedBy` (GBIF stores observers as a list; the text is kept
+#'   as written), for kernel smoothing and observer weighting in
+#'   [sample_background()].
+#' * `cell` given: records counted per grid cell (like
+#'   [gbif_effort_sql()]); turn the table into a raster with
+#'   [gbif_effort_rasters()] and give its `n_records` layer as `target`.
+#'
+#' @param extent Study extent `c(xmin, xmax, ymin, ymax)` in degrees.
+#' @param group The target group: a named value such as `c(genus = "Dryas")`
+#'   or `c(family = "Rosaceae")` (any of `kingdom`, `phylum`, `class`,
+#'   `order`, `family`, `genus`, or their `...Key`), several values for one
+#'   rank (`c(genus = "Salix", genus = "Betula")`), or an SQL condition.
+#' @param exclude_species Species names to leave out (your own species).
+#' @param cell Optional cell size (degrees) to count records per cell.
+#' @param years Optional range of years, e.g. `c(1980, 2025)`.
+#' @inheritParams gbif_effort_sql
+#' @return The SQL query (a single string).
+#' @references Barber, R.A., Ball, S.G., Morris, R.K.A., Gilbert, F. (2021)
+#'   Target-group backgrounds prove effective at correcting sampling bias in
+#'   Maxent models. *Diversity and Distributions* 28, 128-141.
+#'   \doi{10.1111/ddi.13442}
+#' @seealso [sample_background()], [gbif_effort_sql()]
+#' @export
+#' @examples
+#' cat(gbif_target_group_sql(c(5, 17, 43, 48), c(genus = "Dryas"),
+#'                           exclude_species = "Dryas octopetala"))
+#' cat(gbif_target_group_sql(c(5, 17, 43, 48), c(family = "Rosaceae"),
+#'                           cell = 0.1, years = c(1980, 2025)))
+gbif_target_group_sql <- function(extent, group, exclude_species = NULL,
+                                  cell = NULL, years = NULL,
+                                  max_uncertainty_m = 10000,
+                                  basis = c("HUMAN_OBSERVATION",
+                                            "PRESERVED_SPECIMEN",
+                                            "OBSERVATION", "OCCURRENCE",
+                                            "MATERIAL_SAMPLE")) {
+  e <- unname(extent)
+  if (length(e) != 4 || e[1] >= e[2] || e[3] >= e[4]) {
+    stop("`extent` must be c(xmin, xmax, ymin, ymax).", call. = FALSE)
+  }
+  quote_sql <- function(x) paste0("'", gsub("'", "''", x), "'",
+                                  collapse = ", ")
+  ranks <- c("kingdom", "phylum", "class", "order", "family", "genus",
+             "species")
+  cond <- if (is.null(names(group))) {
+    if (length(group) != 1) stop("Give `group` as a named value, e.g. ",
+                                 "c(genus = \"Dryas\"), or one SQL ",
+                                 "condition.", call. = FALSE)
+    paste0("(", group, ")")
+  } else {
+    nm <- names(group)
+    base <- sub("key$", "", tolower(nm))
+    if (!all(base %in% ranks)) {
+      stop("Unknown rank(s) in `group`: ",
+           paste(nm[!base %in% ranks], collapse = ", "), call. = FALSE)
+    }
+    parts <- vapply(unique(nm), function(k) {
+      v <- unname(group[nm == k])
+      col <- if (grepl("key$", tolower(k))) paste0(sub("key$", "",
+                                                       tolower(k)), "Key")
+      else tolower(k)
+      if (col == "order") col <- "\"order\""
+      if (grepl("Key$", col)) {
+        sprintf("%s IN (%s)", col, paste(as.integer(v), collapse = ", "))
+      } else sprintf("%s IN (%s)", col, quote_sql(v))
+    }, character(1))
+    paste0("(", paste(parts, collapse = " OR "), ")")
+  }
+  if (length(exclude_species)) {
+    cond <- paste0(cond, " AND (species IS NULL OR species NOT IN (",
+                   quote_sql(exclude_species), "))")
+  }
+  if (!is.null(years)) {
+    cond <- paste0(cond, sprintf(" AND \"year\" >= %d AND \"year\" <= %d",
+                                 as.integer(years[1]), as.integer(years[2])))
+  }
+  if (!is.null(cell)) {
+    return(gbif_effort_sql(extent, cell = cell, taxon_filter = cond,
+                           max_uncertainty_m = max_uncertainty_m,
+                           basis = basis))
+  }
+  paste(
+    "SELECT gbifID, species, decimalLongitude, decimalLatitude,",
+    "coordinateUncertaintyInMeters, \"year\", basisOfRecord, recordedBy",
+    "FROM occurrence",
+    "WHERE", cond,
+    "AND hasCoordinate = TRUE AND hasGeospatialIssues = FALSE",
+    "AND occurrenceStatus = 'PRESENT'",
+    sprintf("AND basisOfRecord IN (%s)", quote_sql(basis)),
+    sprintf(paste("AND (coordinateUncertaintyInMeters IS NULL OR",
+                  "coordinateUncertaintyInMeters <= %d)"),
+            as.integer(max_uncertainty_m)),
+    sprintf(paste("AND decimalLatitude >= %s AND decimalLatitude < %s",
+                  "AND decimalLongitude >= %s AND decimalLongitude < %s"),
+            num_arg(e[3]), num_arg(e[4]), num_arg(e[1]), num_arg(e[2])))
+}
+
 #' Download a GBIF recording-effort table
 #'
 #' Runs the SQL query of [gbif_effort_sql()] as a GBIF download (package
@@ -82,7 +189,7 @@ gbif_effort_sql <- function(extent, cell = 0.1,
 #' records per cell instead. Large extents can take an hour or more. **Cite
 #' the DOI** written to `effort_download_DOI.txt`.
 #'
-#' @param sql Query from [gbif_effort_sql()].
+#' @param sql Query from [gbif_effort_sql()] or [gbif_target_group_sql()].
 #' @param path Folder for the download and the table (re-used: an existing
 #'   `effort_table.csv` is returned without downloading again).
 #' @param wait Wait for GBIF to finish (status checked every minute).

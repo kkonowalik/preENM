@@ -30,6 +30,17 @@
 #'   buffers. Fills gaps inside each cluster automatically.
 #' * `"convex_hull"`: one convex hull around all buffers (the simplest and
 #'   most generous M).
+#' * `"adaptive"`: spatially adaptive buffers for unevenly surveyed areas
+#'   (Barbosa 2026, "cluster mean distance"): around each cluster of records
+#'   linked at L, a buffer whose radius is the mean distance between the
+#'   records of that cluster (times `adaptive_mult`), so well-surveyed,
+#'   extensive clusters reach further and isolated records keep only a
+#'   small circle (`adaptive_min_km`) instead of pulling unsurveyed land
+#'   into M. With `adaptive_weight = TRUE` each radius is further scaled by
+#'   the cluster's number of records relative to the largest cluster.
+#'   One large, extensive cluster gets a wide buffer (its mean distance can
+#'   be several times L), so this method is generous for well-surveyed
+#'   ranges and conservative for scattered records.
 #'
 #' **Steps after the method**, in order: corridors between clusters
 #' (`corridors = TRUE`: the spanning-tree links between L and L2, buffered by
@@ -53,8 +64,8 @@
 #'   detected column names), a CSV path, an `sf` object or a
 #'   [terra::SpatVector]. Combine modern and fossil records beforehand if both
 #'   should shape M (e.g. with [merge_occurrences()]).
-#' @param method `"delaunay"`, `"buffer"`, `"cluster_hull"` or
-#'   `"convex_hull"`.
+#' @param method `"delaunay"`, `"buffer"`, `"cluster_hull"`,
+#'   `"convex_hull"` or `"adaptive"`.
 #' @param link_km Linking distance L in km; `NULL` (default) = derived from the
 #'   data.
 #' @param link_search Range (km) in which the automatic L is searched.
@@ -62,6 +73,9 @@
 #' @param link_mult Multiplier of L for the method (sensitivity analyses, e.g.
 #'   0.5 or 2).
 #' @param buffer_km Buffer radius for `method = "buffer"` (default L/2).
+#' @param adaptive_mult,adaptive_weight,adaptive_min_km For `"adaptive"`:
+#'   multiplier of the cluster radii, scaling by cluster size, and the
+#'   radius (km) of single-record clusters.
 #' @param hull_ratio For `"cluster_hull"`: 1 = convex, smaller = more concave
 #'   (needs GEOS >= 3.11).
 #' @param corridors Join clusters lying within L2 of each other by corridors.
@@ -97,6 +111,10 @@
 #'   (thinned records with their cluster), `all_points` (all records used),
 #'   `linking` (see [linking_distance()]), `report` and `settings`. Use
 #'   [plot_m_area()], [m_report()], [write_m_area()] and [crop_to_m()].
+#' @references Barbosa, A.M. (2026) Spatially adaptive background
+#'   delimitation strategies for species distribution models with unevenly
+#'   surveyed occurrences. *Biodiversity Informatics* 20, 81-88.
+#'   \doi{10.17161/bi.v20i1.25045}
 #' @export
 #' @examples
 #' sim <- simulate_enm_data(seed = 1, n_presence = 150)
@@ -109,9 +127,11 @@
 #' m2 <- delimit_m(sim$presence, link_km = 120, thin_km = 5, add = extra)
 #' m_report(m2)
 delimit_m <- function(points, method = c("delaunay", "buffer", "cluster_hull",
-                                         "convex_hull"),
+                                         "convex_hull", "adaptive"),
                       link_km = NULL, link_search = c(100, 600),
                       link2_max_km = 1000, link_mult = 1, buffer_km = NULL,
+                      adaptive_mult = 1, adaptive_weight = FALSE,
+                      adaptive_min_km = 1,
                       hull_ratio = 1, corridors = FALSE, closing_km = NULL,
                       close_km = 25, fill_holes = TRUE, add = NULL,
                       add_sites = NULL, seal_km = 5, exclude = NULL,
@@ -127,7 +147,9 @@ delimit_m <- function(points, method = c("delaunay", "buffer", "cluster_hull",
   lk <- m_linking(prep, link_km = link_km, link_search = link_search,
                   link2_max_km = link2_max_km)
   m_build(prep, lk, method = method, link_mult = link_mult,
-          buffer_km = buffer_km, hull_ratio = hull_ratio,
+          buffer_km = buffer_km, adaptive = list(
+            mult = adaptive_mult, weight = adaptive_weight,
+            min_km = adaptive_min_km), hull_ratio = hull_ratio,
           corridors = corridors, closing_km = closing_km,
           close_km = close_km, fill_holes = fill_holes, add = add,
           add_sites = add_sites, seal_km = seal_km, land = land)
@@ -536,11 +558,13 @@ print.m_linking <- function(x, ...) {
 # --- building M -------------------------------------------------------------------
 
 m_build <- function(prep, lk, method = "delaunay", link_mult = 1,
-                    buffer_km = NULL, hull_ratio = 1, corridors = FALSE,
+                    buffer_km = NULL, adaptive = list(mult = 1, weight = FALSE,
+                                                      min_km = 1),
+                    hull_ratio = 1, corridors = FALSE,
                     closing_km = NULL, close_km = 25, fill_holes = TRUE,
                     add = NULL, add_sites = NULL, seal_km = 5, land = NULL) {
   method <- match.arg(method, c("delaunay", "buffer", "cluster_hull",
-                                "convex_hull"))
+                                "convex_hull", "adaptive"))
   crs <- prep$crs
   th <- lk$points
   L <- lk$L * link_mult
@@ -608,7 +632,26 @@ m_build <- function(prep, lk, method = "delaunay", link_mult = 1,
       union_geom(do.call(c, hulls))
     },
     convex_hull = buffer_geom(sf::st_convex_hull(union_geom(pts_of(all_i))),
-                              r))
+                              r),
+    adaptive = {
+      cl <- if (link_mult == 1) th$cluster else
+        link_components(nrow(th), lk$links, L)
+      ids <- sort(unique(cl))
+      size <- vapply(ids, function(i) sum(cl == i), numeric(1))
+      rad <- vapply(ids, function(i) {
+        idx <- which(cl == i)
+        if (length(idx) < 2) return(0)
+        # mean pairwise distance (a sample of 2000 records for large ones)
+        if (length(idx) > 2000) idx <- idx[seq(1, length(idx),
+                                               length.out = 2000)]
+        mean(stats::dist(cbind(th$x[idx], th$y[idx])))
+      }, numeric(1)) * adaptive$mult
+      if (isTRUE(adaptive$weight)) rad <- rad * size / max(size)
+      rad <- pmax(rad, adaptive$min_km * 1000)
+      union_geom(do.call(c, lapply(seq_along(ids), function(k) {
+        buffer_points(which(cl == ids[k]), rad[k])
+      })))
+    })
   base <- union_geom(base)
 
   corr <- sf::st_sfc(crs = crs)

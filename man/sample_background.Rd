@@ -11,10 +11,16 @@ sample_background(
   exclude = NULL,
   seed = NULL,
   crs = "EPSG:4326",
-  method = c("uniform", "envstrat", "effort", "enveffort"),
+  method = c("uniform", "envstrat", "effort", "enveffort", "target_group"),
   effort = NULL,
   effort_floor = 1,
   effort_power = 1,
+  target = NULL,
+  target_bandwidth_km = 0,
+  target_floor = 0,
+  target_observer = NULL,
+  presences = NULL,
+  target_stratify = FALSE,
   env_pool = 1e+06,
   env_cumvar = 0.95,
   env_axes = NULL,
@@ -52,6 +58,27 @@ keep a small chance.}
 
 \item{effort_power}{Exponent of the effort (1 = proportional; 0.5 = a
 softer correction).}
+
+\item{target}{For \code{"target_group"}: records of the target group (a
+data.frame with coordinates, a CSV path, \code{sf} or SpatVector; a column
+\code{n}, \code{count} or \code{n_target} gives the number of records at each point,
+e.g. from an aggregated GBIF table), or a raster of record counts.
+Leave your own species out of it.}
+
+\item{target_bandwidth_km}{Standard deviation of the Gaussian kernel
+(km); 0 = records per cell.}
+
+\item{target_floor}{Added to the target density of every cell (0: cells
+without target records are never drawn when the bandwidth is 0).}
+
+\item{target_observer}{Name of the observer column (e.g. \code{recordedBy})
+in \code{target} and \code{presences}, for observer weighting.}
+
+\item{presences}{Records of your species, with the observer column, for
+the observer weights.}
+
+\item{target_stratify}{Combine the target density with the environmental
+bins (as \code{"enveffort"} does with \code{effort}).}
 
 \item{env_pool}{Size of the random pool of cells for the weighted methods.}
 
@@ -97,6 +124,27 @@ recorded" means "absent" only where people recorded.
 \item \code{"enveffort"}: the \code{envstrat} bins with equal total probability per
 bin, but \emph{within} a bin cells with more recording effort are preferred
 (their missing record of the species is a more reliable absence).
+\item \code{"target_group"}: probability proportional to the density of the
+records of a target group: species of the same genus, family or
+another group recorded by the same observers and methods, supplied as
+records in \code{target} (e.g. a GBIF download built with
+\code{\link[=gbif_target_group_sql]{gbif_target_group_sql()}}). Target-group backgrounds corrected
+sampling bias best among four common methods, though they sometimes
+overcompensated (Barber et al. 2021). With \code{target_bandwidth_km = 0}
+the density is the number of target records per cell (the classic
+target-group background); with a bandwidth it is a Gaussian kernel
+density estimate, which spreads the effort to neighbouring cells
+(TGOB+ of Balej et al. 2025, their recommendation when no independent
+data are available; no single bandwidth was best, so try a few, e.g.
+1, 2 and 4 cell widths). With \code{target_observer} (the observer column
+of \code{target} and \code{presences}) each observer's density is normalised and
+weighted by that observer's share of the records of your species, as
+in the presence-weighted observer-oriented approach (PW-OOA) of Balej
+et al. (2025), which was best when checked against independent data.
+\code{target_stratify = TRUE} combines the density with the environmental
+bins of \code{"enveffort"}: every occupied bin keeps the same total
+probability and the target density decides within it (bins without
+target records are not sampled unless \code{target_floor > 0}).
 }
 
 No method is best for every species and data set; compare the
@@ -119,4 +167,16 @@ effort <- terra::init(sim$env[[1]], function(n) rpois(n, 5))
 bg2 <- sample_background(sim$env, n = 500, method = "enveffort",
                          effort = effort, seed = 1)
 head(bg2)
+}
+\references{
+Barber, R.A., Ball, S.G., Morris, R.K.A., Gilbert, F. (2021)
+Target-group backgrounds prove effective at correcting sampling bias in
+Maxent models. \emph{Diversity and Distributions} 28, 128-141.
+\doi{10.1111/ddi.13442}
+
+Balej, P., Moudry, V., Prajzlerova, D., Gabor, L., Sillero, N.,
+Rocchini, D., Simova, P. (2025) Species-observer link and kernel
+density estimation of background points allow for sampling bias
+correction in bird species distribution models. \emph{Ecography} 2025,
+e08202. \doi{10.1002/ecog.08202}
 }

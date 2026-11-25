@@ -151,6 +151,27 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #' * `"enveffort"`: the `envstrat` bins with equal total probability per
 #'   bin, but *within* a bin cells with more recording effort are preferred
 #'   (their missing record of the species is a more reliable absence).
+#' * `"target_group"`: probability proportional to the density of the
+#'   records of a target group: species of the same genus, family or
+#'   another group recorded by the same observers and methods, supplied as
+#'   records in `target` (e.g. a GBIF download built with
+#'   [gbif_target_group_sql()]). Target-group backgrounds corrected
+#'   sampling bias best among four common methods, though they sometimes
+#'   overcompensated (Barber et al. 2021). With `target_bandwidth_km = 0`
+#'   the density is the number of target records per cell (the classic
+#'   target-group background); with a bandwidth it is a Gaussian kernel
+#'   density estimate, which spreads the effort to neighbouring cells
+#'   (TGOB+ of Balej et al. 2025, their recommendation when no independent
+#'   data are available; no single bandwidth was best, so try a few, e.g.
+#'   1, 2 and 4 cell widths). With `target_observer` (the observer column
+#'   of `target` and `presences`) each observer's density is normalised and
+#'   weighted by that observer's share of the records of your species, as
+#'   in the presence-weighted observer-oriented approach (PW-OOA) of Balej
+#'   et al. (2025), which was best when checked against independent data.
+#'   `target_stratify = TRUE` combines the density with the environmental
+#'   bins of `"enveffort"`: every occupied bin keeps the same total
+#'   probability and the target density decides within it (bins without
+#'   target records are not sampled unless `target_floor > 0`).
 #'
 #' No method is best for every species and data set; compare the
 #' backgrounds on the same hold-out folds (and independent records, if you
@@ -179,6 +200,21 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #'   keep a small chance.
 #' @param effort_power Exponent of the effort (1 = proportional; 0.5 = a
 #'   softer correction).
+#' @param target For `"target_group"`: records of the target group (a
+#'   data.frame with coordinates, a CSV path, `sf` or SpatVector; a column
+#'   `n`, `count` or `n_target` gives the number of records at each point,
+#'   e.g. from an aggregated GBIF table), or a raster of record counts.
+#'   Leave your own species out of it.
+#' @param target_bandwidth_km Standard deviation of the Gaussian kernel
+#'   (km); 0 = records per cell.
+#' @param target_floor Added to the target density of every cell (0: cells
+#'   without target records are never drawn when the bandwidth is 0).
+#' @param target_observer Name of the observer column (e.g. `recordedBy`)
+#'   in `target` and `presences`, for observer weighting.
+#' @param presences Records of your species, with the observer column, for
+#'   the observer weights.
+#' @param target_stratify Combine the target density with the environmental
+#'   bins (as `"enveffort"` does with `effort`).
 #' @param env_pool Size of the random pool of cells for the weighted methods.
 #' @param env_cumvar,env_axes PCs used for the bins: those explaining
 #'   `env_cumvar` of the variance, or exactly `env_axes` PCs.
@@ -189,6 +225,16 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #' @return A data.frame with `set`, `cell`, `lon`, `lat` (cell centres) and,
 #'   for the environmental methods, `bin`. Attribute `"background"` holds the
 #'   method and, for the environmental methods, the PCA and bin settings.
+#' @references Barber, R.A., Ball, S.G., Morris, R.K.A., Gilbert, F. (2021)
+#'   Target-group backgrounds prove effective at correcting sampling bias in
+#'   Maxent models. *Diversity and Distributions* 28, 128-141.
+#'   \doi{10.1111/ddi.13442}
+#'
+#'   Balej, P., Moudry, V., Prajzlerova, D., Gabor, L., Sillero, N.,
+#'   Rocchini, D., Simova, P. (2025) Species-observer link and kernel
+#'   density estimation of background points allow for sampling bias
+#'   correction in bird species distribution models. *Ecography* 2025,
+#'   e08202. \doi{10.1002/ecog.08202}
 #' @export
 #' @examples
 #' r <- terra::rast(nrows = 20, ncols = 20, xmin = 0, xmax = 10, ymin = 40,
@@ -205,9 +251,12 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
                               seed = NULL, crs = "EPSG:4326",
                               method = c("uniform", "envstrat", "effort",
-                                         "enveffort"),
+                                         "enveffort", "target_group"),
                               effort = NULL, effort_floor = 1,
-                              effort_power = 1, env_pool = 1e6,
+                              effort_power = 1, target = NULL,
+                              target_bandwidth_km = 0, target_floor = 0,
+                              target_observer = NULL, presences = NULL,
+                              target_stratify = FALSE, env_pool = 1e6,
                               env_cumvar = 0.95, env_axes = NULL,
                               env_total_bins = 3000, env_min_bin = 5,
                               log_vars = NULL) {
@@ -215,6 +264,10 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
   r <- as_grid(raster)
   if (method %in% c("effort", "enveffort") && is.null(effort)) {
     stop("method = \"", method, "\" needs an `effort` raster.", call. = FALSE)
+  }
+  if (method == "target_group" && is.null(target)) {
+    stop("method = \"target_group\" needs `target`: records of the target ",
+         "group (e.g. from gbif_target_group_sql()).", call. = FALSE)
   }
   ok <- if (terra::nlyr(r) > 1) sum(r) else r
   valid <- terra::cells(ok)
@@ -247,7 +300,8 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
                                                   min(length(valid),
                                                       env_pool))]))
     bin <- NULL
-    if (method %in% c("envstrat", "enveffort")) {
+    if (method %in% c("envstrat", "enveffort") ||
+        (method == "target_group" && target_stratify)) {
       eb <- env_bins(r, pool, env_cumvar, env_axes, env_total_bins, log_vars)
       pool <- pool[eb$ok]
       bin <- eb$bin
@@ -264,10 +318,24 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
       e <- (pmax(e, 0) + effort_floor)^effort_power
       info$effort <- c(floor = effort_floor, power = effort_power)
     }
+    if (method == "target_group") {
+      td <- target_density(r, pool, target, target_bandwidth_km,
+                           target_observer, presences)
+      e <- (td$density + target_floor)^effort_power
+      info$target <- td$info
+      info$target$floor <- target_floor
+      info$target$stratify <- target_stratify
+      if (!target_stratify) bin <- NULL
+    }
+    stratified <- function(e) {
+      tot <- stats::ave(e, bin, FUN = sum)
+      ifelse(tot > 0, e / tot, 0) * pmin(1, cnt / env_min_bin)
+    }
     w <- switch(method,
       envstrat = 1 / pmax(cnt, env_min_bin),
       effort = e,
-      enveffort = e / stats::ave(e, bin, FUN = sum) * pmin(1, cnt / env_min_bin))
+      enveffort = stratified(e),
+      target_group = if (target_stratify) stratified(e) else e)
     keep <- w > 0
     pool <- pool[keep]
     w <- w[keep]
@@ -289,6 +357,152 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
   rownames(out) <- NULL
   attr(out, "background") <- info
   out
+}
+
+# Density of target-group records at pool cells (internal): records per
+# cell (bandwidth 0) or a Gaussian kernel density in records per cell,
+# optionally per observer, normalised and weighted by the observer's share
+# of the focal species' records (PW-OOA of Balej et al. 2025)
+target_density <- function(r, pool, target, bw_km, observer, presences) {
+  tp <- target_points(target, r)
+  xy <- tp$xy
+  cnt <- tp$n
+  obs <- NULL
+  w_obs <- NULL
+  if (!is.null(observer)) {
+    obs_t <- if (is.null(tp$data)) NA else find_column(names(tp$data),
+                                                       observer)
+    if (is.na(obs_t)) {
+      stop("Observer column `", observer, "` not found in `target`.",
+           call. = FALSE)
+    }
+    if (is.null(presences)) {
+      stop("Observer weighting needs `presences` (records of your ",
+           "species with the observer column).", call. = FALSE)
+    }
+    pr <- as.data.frame(presences, stringsAsFactors = FALSE)
+    obs_p <- find_column(names(pr), observer)
+    if (is.na(obs_p)) {
+      stop("Observer column `", observer, "` not found in `presences`.",
+           call. = FALSE)
+    }
+    pp <- as_points(pr)
+    if (!terra::same.crs(pp, r)) pp <- terra::project(pp, r)
+    pc <- terra::cellFromXY(r, terra::crds(pp))
+    # an observer's records in one cell count once (Balej et al. 2025)
+    u <- !duplicated(paste(pr[[obs_p]], pc)) & !is.na(pc) &
+      !is.na(pr[[obs_p]])
+    tab <- table(pr[[obs_p]][u])
+    w_obs <- tab / sum(tab)
+    obs <- as.character(tp$data[[obs_t]])
+  }
+  geo <- terra::is.lonlat(r)
+  pxy <- terra::xyFromCell(r, pool)
+  res <- terra::res(r)
+  cell_km2 <- if (geo) {
+    (res[1] * 111.32 * cos(pxy[, 2] * pi / 180)) * (res[2] * 111.32)
+  } else rep(prod(res) / 1e6 * (terra::linearUnits(r)^2), length(pool))
+  group <- if (is.null(obs)) rep("all", nrow(xy)) else obs
+  keep_g <- if (is.null(w_obs)) "all" else names(w_obs)
+  dens <- numeric(length(pool))
+  for (g in keep_g) {
+    j <- which(group == g)
+    if (!length(j)) next
+    if (bw_km <= 0) {
+      tc <- terra::cellFromXY(r, xy[j, , drop = FALSE])
+      ok <- !is.na(tc)
+      d <- tapply(cnt[j][ok], tc[ok], sum)
+      v <- as.numeric(d[match(pool, as.numeric(names(d)))])
+      v[is.na(v)] <- 0
+    } else {
+      v <- kernel_at(pxy, xy[j, , drop = FALSE], cnt[j], bw_km, geo) *
+        cell_km2
+    }
+    if (!is.null(w_obs)) {
+      s <- sum(v)
+      v <- if (s > 0) v / s * as.numeric(w_obs[[g]]) else v
+    }
+    dens <- dens + v
+  }
+  if (!any(dens > 0)) {
+    warning("No target-group record falls in the background cells: check ",
+            "the extent and CRS of `target`.", call. = FALSE)
+  }
+  list(density = dens,
+       info = list(n_records = sum(cnt), bandwidth_km = bw_km,
+                   observers = if (is.null(w_obs)) NULL else length(w_obs)))
+}
+
+# Target-group records as coordinates in the raster's CRS with counts
+# (internal)
+target_points <- function(target, r) {
+  if (inherits(target, "SpatRaster")) {
+    t1 <- target[[1]]
+    if (terra::ncell(t1) > 5e7) {
+      stop("The target raster is very large; give the records as points.",
+           call. = FALSE)
+    }
+    v <- terra::values(t1, mat = FALSE)
+    i <- which(!is.na(v) & v > 0)
+    xy <- terra::xyFromCell(t1, i)
+    p <- terra::vect(xy, crs = terra::crs(t1))
+    if (!terra::same.crs(p, r)) p <- terra::project(p, r)
+    return(list(xy = terra::crds(p), n = v[i], data = NULL))
+  }
+  if (is.character(target) && length(target) == 1) {
+    target <- read_any_csv(target)
+  }
+  d <- if (is.data.frame(target) && !inherits(target, "sf")) {
+    as.data.frame(target, stringsAsFactors = FALSE)
+  } else NULL
+  if (!is.null(d) && all(c("lat_bin", "lon_bin") %in% tolower(names(d)))) {
+    stop("An aggregated GBIF table: turn it into a raster with ",
+         "gbif_effort_rasters() and give its count layer as `target`.",
+         call. = FALSE)
+  }
+  if (!is.null(d)) {
+    xy_cols <- guess_coords(names(d))
+    d <- d[!is.na(as_number(d[[xy_cols[1]]])) &
+             !is.na(as_number(d[[xy_cols[2]]])), , drop = FALSE]
+  }
+  p <- as_points(if (is.null(d)) target else d)
+  if (!terra::same.crs(p, r)) p <- terra::project(p, r)
+  ncol_ <- if (is.null(d)) NA else find_column(names(d), c("n", "count",
+                                                          "n_target"))
+  n <- if (is.na(ncol_)) rep(1, nrow(terra::crds(p))) else
+    pmax(as_number(d[[ncol_]]), 0)
+  n[is.na(n)] <- 0
+  list(xy = terra::crds(p), n = n, data = d)
+}
+
+# Gaussian kernel density (records per km2) at query points Q from points
+# X with weights w and standard deviation h km, summed over neighbours
+# within 4 h (internal); processed in chunks
+kernel_at <- function(Q, X, w, h, geo) {
+  to_space <- function(xy) {
+    if (geo) {
+      lon <- xy[, 1] * pi / 180
+      lat <- xy[, 2] * pi / 180
+      cbind(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat)) * 6371.0088
+    } else xy / 1000
+  }
+  Xs <- to_space(X)
+  Qs <- to_space(Q)
+  out <- numeric(nrow(Qs))
+  if (nrow(Xs) == 1) Xs <- rbind(Xs, Xs + 1e9)    # dbscan needs two
+  w <- c(w, 0)[seq_len(nrow(Xs))]
+  step <- 2e4
+  for (s0 in seq(1, nrow(Qs), by = step)) {
+    i <- s0:min(nrow(Qs), s0 + step - 1)
+    nn <- dbscan::frNN(Xs, eps = 4 * h, query = Qs[i, , drop = FALSE],
+                       sort = FALSE)
+    out[i] <- vapply(seq_along(i), function(k) {
+      id <- nn$id[[k]]
+      if (!length(id)) return(0)
+      sum(w[id] * exp(-nn$dist[[k]]^2 / (2 * h^2)))
+    }, numeric(1))
+  }
+  out / (2 * pi * h^2)
 }
 
 # Weighted sampling without replacement (Efraimidis-Spirakis; fast for

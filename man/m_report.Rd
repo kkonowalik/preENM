@@ -4,12 +4,16 @@
 \alias{m_report}
 \title{Report of an accessible area (M)}
 \usage{
-m_report(m, raster = NULL)
+m_report(m, raster = NULL, env = NULL)
 }
 \arguments{
 \item{m}{An \code{m_area} object from \code{\link[=delimit_m]{delimit_m()}}.}
 
 \item{raster}{Optional raster; adds the area of its non-\code{NA} cells.}
+
+\item{env}{Optional predictor layers: adds, as attribute
+\code{"availability"}, how evenly M offers the records' conditions of each
+predictor (\code{\link[=m_availability]{m_availability()}}).}
 }
 \value{
 A data.frame with one row per part.

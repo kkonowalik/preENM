@@ -6,7 +6,8 @@
 \usage{
 delimit_m(
   points,
-  method = c("delaunay", "buffer", "cluster_hull", "convex_hull", "adaptive"),
+  method = c("delaunay", "buffer", "cluster_hull", "convex_hull", "adaptive",
+    "simulation"),
   link_km = NULL,
   link_search = c(100, 600),
   link2_max_km = 1000,
@@ -15,6 +16,8 @@ delimit_m(
   adaptive_mult = 1,
   adaptive_weight = FALSE,
   adaptive_min_km = 1,
+  env = NULL,
+  simulation = list(),
   hull_ratio = 1,
   corridors = FALSE,
   closing_km = NULL,
@@ -42,7 +45,7 @@ detected column names), a CSV path, an \code{sf} object or a
 should shape M (e.g. with \code{\link[=merge_occurrences]{merge_occurrences()}}).}
 
 \item{method}{\code{"delaunay"}, \code{"buffer"}, \code{"cluster_hull"},
-\code{"convex_hull"} or \code{"adaptive"}.}
+\code{"convex_hull"}, \code{"adaptive"} or \code{"simulation"}.}
 
 \item{link_km}{Linking distance L in km; \code{NULL} (default) = derived from the
 data.}
@@ -59,6 +62,9 @@ data.}
 \item{adaptive_mult, adaptive_weight, adaptive_min_km}{For \code{"adaptive"}:
 multiplier of the cluster radii, scaling by cluster size, and the
 radius (km) of single-record clusters.}
+
+\item{env, simulation}{For \code{"simulation"}: the predictor layers and a
+list of further arguments for \code{\link[=m_simulate]{m_simulate()}}.}
 
 \item{hull_ratio}{For \code{"cluster_hull"}: 1 = convex, smaller = more concave
 (needs GEOS >= 3.11).}
@@ -131,6 +137,9 @@ just after the largest jump among the links longer than L (up to
 \code{link2_max_km}), or the longest of them when there are only one or two.
 See \code{\link[=linking_distance]{linking_distance()}}.
 
+Whatever the method, compare it with others in \code{\link[=m_scenarios]{m_scenarios()}}: the
+calibration area strongly affects model accuracy (Luna et al. 2024).
+
 \strong{Methods} (radius r = L/2 by default: two buffers of L/2 touch when
 records are L apart, so every chain of records linked at L becomes one
 patch):
@@ -144,6 +153,10 @@ hull (\code{hull_ratio = 1}) or a concave hull (\code{hull_ratio < 1}) of the
 buffers. Fills gaps inside each cluster automatically.
 \item \code{"convex_hull"}: one convex hull around all buffers (the simplest and
 most generous M).
+\item \code{"simulation"}: M simulated by dispersal from the records over the
+landscape in \code{env} (\code{\link[=m_simulate]{m_simulate()}}, Machado-Stredel et al. 2021); give
+its settings in \code{simulation}, e.g. \code{simulation = list(kernel_sd = 2, n_events = 30, barrier = mountains)}. L is still computed and
+reported but does not shape this M.
 \item \code{"adaptive"}: spatially adaptive buffers for unevenly surveyed areas
 (Barbosa 2026, "cluster mean distance"): around each cluster of records
 linked at L, a buffer whose radius is the mean distance between the
@@ -191,4 +204,14 @@ Barbosa, A.M. (2026) Spatially adaptive background
 delimitation strategies for species distribution models with unevenly
 surveyed occurrences. \emph{Biodiversity Informatics} 20, 81-88.
 \doi{10.17161/bi.v20i1.25045}
+
+Machado-Stredel, F., Cobos, M.E., Peterson, A.T. (2021) A
+simulation-based method for selecting calibration areas for ecological
+niche models and species distribution models. \emph{Frontiers of
+Biogeography} 13, e48814. \doi{10.21425/F5FBG48814}
+
+Luna, S., Pena-Peniche, A., Mendoza-Alfaro, R. (2024) Species
+distribution model accuracy is strongly influenced by the choice of
+calibration area. \emph{Biodiversity Informatics} 18, 43-55.
+\doi{10.17161/bi.v18i.22655}
 }

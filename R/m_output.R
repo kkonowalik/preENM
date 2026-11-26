@@ -39,13 +39,16 @@ print.m_scenarios <- function(x, ...) {
 #'
 #' @param m An `m_area` object from [delimit_m()].
 #' @param raster Optional raster; adds the area of its non-`NA` cells.
+#' @param env Optional predictor layers: adds, as attribute
+#'   `"availability"`, how evenly M offers the records' conditions of each
+#'   predictor ([m_availability()]).
 #' @return A data.frame with one row per part.
 #' @export
 #' @examples
 #' sim <- simulate_enm_data(seed = 1, n_presence = 150)
 #' m <- delimit_m(sim$presence, link_km = 120, thin_km = 5)
 #' m_report(m, raster = sim$env)
-m_report <- function(m, raster = NULL) {
+m_report <- function(m, raster = NULL, env = NULL) {
   check_m(m)
   parts <- list(automatic = m$automatic, added_by_expert = m$added,
                 M = m$m)
@@ -72,6 +75,10 @@ m_report <- function(m, raster = NULL) {
     out[[k]] <- c(ins_auto[[k]], NA, ins[[k]])
   }
   rownames(out) <- NULL
+  if (!is.null(env)) {
+    attr(out, "availability") <- m_availability(
+      env, m$all_points[c("lon", "lat")], m = m)
+  }
   out
 }
 
@@ -503,4 +510,276 @@ write_m_area <- function(x, dir, prefix = "M", raster = NULL, land = NULL) {
   invisible(c(paths, connectivity = f("_connectivity.csv"),
               links = f("_links.csv"), map = f("_map.png"),
               links_plot = f("_links.png")))
+}
+
+# Availability of conditions within M -------------------------------------------
+
+#' How evenly does M offer the conditions the species occupies?
+#'
+#' Presence records come from the conditions that M offers, and M rarely
+#' offers them evenly: a climate common in M will be sampled often whatever
+#' the species prefers, and one that M offers in a few cells will be
+#' sampled rarely even if the species thrives there. Uneven availability of
+#' climates inside the calibration area therefore biases the estimated
+#' niche (Jimenez & Soberon 2022). `m_availability()` is the continuous
+#' analogue of [m_class_shares()]: for each predictor, it divides the
+#' range of the records' values into `bins` equal bins and compares the
+#' share of M's cells in each bin with the share an even spread over M's
+#' range would give.
+#'
+#' * `ratio` (per bin, in `bins`): observed / even share; 1 = as available
+#'   as an even spread, 0.1 = a tenth of it.
+#' * `well_represented`: the share of the records' range in bins with
+#'   `ratio` of at least `thin_ratio` (default 0.25); the rest is thinly
+#'   represented.
+#' * `complete`: the share of the records' range in which M has any cell
+#'   (records outside M's range, or gaps).
+#' * `evenness`: Pielou's evenness of M's cells over the bins of the
+#'   records' range (1 = even).
+#' * `distorted`: `well_represented` below `min_well` (default 0.8),
+#'   `complete` below 1, or `evenness` below `min_even` (default 0.7); M
+#'   then gives a distorted view of the availability of that variable.
+#'
+#' For a flagged variable, read its response curve with care: the records
+#' are thin where M is thin. Jimenez & Soberon (2022) weight the likelihood
+#' of the records by the availability of their conditions to estimate the
+#' fundamental niche; other remedies are a larger or differently shaped M,
+#' or a background stratified in environmental space ([sample_background()]
+#' with `method = "envstrat"`).
+#'
+#' @param env Predictor layers ([terra::SpatRaster] or files), clipped to M
+#'   or covering it.
+#' @param records Records: a data.frame with coordinates, a CSV path, `sf`
+#'   or [terra::SpatVector].
+#' @param m Optional M: an `m_area` from [delimit_m()] or polygons; cells
+#'   outside it are ignored. `NULL` when `env` is already clipped to M.
+#' @param bins Number of bins over the records' range of each predictor.
+#' @param thin_ratio Ratio below which a bin is thinly represented.
+#' @param min_well,min_even Limits of `well_represented` and `evenness`
+#'   below which a variable is flagged.
+#' @param n Cells of M sampled.
+#' @param coords,points_crs Coordinate columns and their CRS.
+#' @param seed Random seed.
+#' @return An object of class `m_availability`: `variables` (one row per
+#'   predictor: records' range, `well_represented`, `thin`, `complete`,
+#'   `evenness`, `distorted` and `reason`), `bins` (per predictor and bin:
+#'   `lower`, `upper`, `m_share`, `even_share`, `ratio`, `records`) and
+#'   `settings`. See [plot_m_availability()].
+#' @references Jimenez, L., Soberon, J. (2022) Estimating the fundamental
+#'   niche: accounting for the uneven availability of existing climates in
+#'   the calibration area. *Ecological Modelling* 464, 109823.
+#'   \doi{10.1016/j.ecolmodel.2021.109823}
+#' @seealso [m_report()], [m_class_shares()], [niche_truncation()]
+#' @export
+#' @examples
+#' sim <- simulate_enm_data(seed = 1, n_presence = 100)
+#' av <- m_availability(sim$env, sim$presence)
+#' av
+#' plot_m_availability(av)
+m_availability <- function(env, records, m = NULL, bins = 20,
+                           thin_ratio = 0.25, min_well = 0.8,
+                           min_even = 0.7, n = 1e5, coords = NULL,
+                           points_crs = "EPSG:4326", seed = 1) {
+  r <- as_grid(env)
+  vars <- names(r)
+  # cells of M
+  cells <- suppressWarnings(suppressMessages(sample_background(r, n = n,
+                                                              seed = seed)))
+  if (!is.null(m)) {
+    g <- if (inherits(m, "m_area")) m$m else as_sfc(m, "m")
+    pts <- sf::st_as_sf(data.frame(x = cells$lon, y = cells$lat),
+                        coords = c("x", "y"), crs = 4326)
+    pts <- sf::st_transform(pts, sf::st_crs(g))
+    cells <- cells[lengths(sf::st_intersects(pts, g)) > 0, , drop = FALSE]
+    if (!nrow(cells)) stop("No cell of `env` lies inside `m`.",
+                           call. = FALSE)
+  }
+  M <- env_at_cells(r, cells$cell)
+  M <- M[stats::complete.cases(M), , drop = FALSE]
+  # records
+  if (is.character(records) && length(records) == 1) {
+    records <- read_any_csv(records)
+  }
+  p <- if (is.data.frame(records) && !inherits(records, "sf")) {
+    df <- as.data.frame(records, stringsAsFactors = FALSE)
+    xy <- if (is.null(coords)) guess_coords(names(df)) else coords
+    x <- as_number(df[[xy[1]]])
+    y <- as_number(df[[xy[2]]])
+    ok <- !is.na(x) & !is.na(y)
+    terra::vect(cbind(x[ok], y[ok]), crs = points_crs)
+  } else as_points(records, coords, points_crs)
+  pr <- if (terra::same.crs(p, r)) p else terra::project(p, r)
+  E <- env_at_cells(r, terra::cellFromXY(r, terra::crds(pr)))
+  E <- E[stats::complete.cases(E), , drop = FALSE]
+  if (nrow(E) < 5) stop("Fewer than 5 records with values in all layers.",
+                        call. = FALSE)
+  rows <- list()
+  bin_rows <- list()
+  for (v in vars) {
+    e <- E[, v]
+    mv <- M[, v]
+    lo <- min(e)
+    hi <- max(e)
+    if (hi <= lo) {
+      rows[[v]] <- data.frame(layer = v, rec_min = lo, rec_max = hi,
+                              well_represented = NA_real_, thin = NA_real_,
+                              complete = NA_real_, evenness = NA_real_,
+                              distorted = NA, reason = "records constant",
+                              stringsAsFactors = FALSE)
+      next
+    }
+    br <- seq(lo, hi, length.out = bins + 1)
+    w <- diff(br)
+    mrange <- diff(range(mv))
+    cnt <- tabulate(findInterval(mv[mv >= lo & mv <= hi], br,
+                                 rightmost.closed = TRUE), bins)
+    share <- cnt / length(mv)
+    even <- if (mrange > 0) w / mrange else rep(1 / bins, bins)
+    ratio <- share / even
+    rcnt <- tabulate(findInterval(e, br, rightmost.closed = TRUE), bins)
+    pin <- cnt / max(sum(cnt), 1)
+    ev <- if (sum(cnt) > 0) {
+      pp <- pin[pin > 0]
+      -sum(pp * log(pp)) / log(bins)
+    } else 0
+    well <- mean(ratio >= thin_ratio)
+    comp <- mean(cnt > 0)
+    why <- c(if (comp < 1) paste0("no cells of M in ",
+                                  round(100 * (1 - comp)),
+                                  "% of the records' range"),
+             if (well < min_well) paste0(round(100 * (1 - well)),
+                                         "% of the records' range thinly ",
+                                         "represented"),
+             if (ev < min_even) paste0("uneven (evenness ", round(ev, 2),
+                                       ")"))
+    rows[[v]] <- data.frame(layer = v, rec_min = lo, rec_max = hi,
+                            well_represented = well, thin = 1 - well,
+                            complete = comp, evenness = ev,
+                            distorted = length(why) > 0,
+                            reason = paste(why, collapse = "; "),
+                            stringsAsFactors = FALSE)
+    bin_rows[[v]] <- data.frame(layer = v, bin = seq_len(bins),
+                                lower = br[-(bins + 1)], upper = br[-1],
+                                m_share = share, even_share = even,
+                                ratio = ratio, records = rcnt,
+                                stringsAsFactors = FALSE)
+  }
+  out <- list(variables = do.call(rbind, rows),
+              bins = do.call(rbind, bin_rows),
+              settings = list(bins = bins, thin_ratio = thin_ratio,
+                              min_well = min_well, min_even = min_even,
+                              n_cells = nrow(M), n_records = nrow(E)))
+  rownames(out$variables) <- NULL
+  rownames(out$bins) <- NULL
+  class(out) <- "m_availability"
+  out
+}
+
+#' @export
+print.m_availability <- function(x, digits = 2, ...) {
+  v <- x$variables
+  s <- x$settings
+  say <- function(txt) cat(strwrap(txt, width = 76, initial = "- ",
+                                   exdent = 2), sep = "\n")
+  cat("Availability of the records' conditions in M: ", nrow(v),
+      " predictor(s), ", s$n_records, " records, ", s$n_cells,
+      " cells of M\n\nIN SHORT\n", sep = "")
+  bad <- v[v$distorted %in% TRUE, , drop = FALSE]
+  if (!nrow(bad)) {
+    say(paste0("M offers the records' range of every predictor fairly ",
+               "evenly: at least ", s$min_well * 100, "% of each range is ",
+               "well represented."))
+  } else {
+    say(paste0("M gives a distorted view of the availability of ",
+               nrow(bad), " predictor(s): ",
+               paste0(bad$layer, " (", bad$reason, ")", collapse = "; "),
+               "."))
+    say(paste0("Where M is thin, records are thin whatever the species ",
+               "prefers: read these response curves with care, and ",
+               "consider weighting by availability (Jimenez & Soberon ",
+               "2022), a different M, or a background stratified in ",
+               "environmental space."))
+  }
+  ok <- v$layer[v$distorted %in% FALSE]
+  if (length(ok) && nrow(bad)) {
+    say(paste0("Fairly even: ", paste(ok, collapse = ", "), "."))
+  }
+  cat("\n")
+  show <- v[c("layer", "rec_min", "rec_max", "well_represented",
+              "complete", "evenness", "distorted")]
+  num <- vapply(show, is.double, logical(1))
+  show[num] <- lapply(show[num], signif, 3)
+  print(show, row.names = FALSE)
+  cat("", strwrap(paste0(
+    "The records' range of each predictor is cut into ", s$bins, " equal ",
+    "bins; ratio = share of M's cells in a bin / the share an even spread ",
+    "over M's range would give. well_represented = share of the range in ",
+    "bins with ratio of at least ", s$thin_ratio, "; complete = share with ",
+    "any cell of M; evenness = Pielou's evenness of M's cells over the ",
+    "bins. Flagged when well_represented < ", s$min_well, ", complete < 1 ",
+    "or evenness < ", s$min_even, ": rules of thumb, not values from the ",
+    "literature."), width = 76), sep = "\n")
+  invisible(x)
+}
+
+#' Plot the availability of the records' conditions in M
+#'
+#' For each predictor, the availability ratio of every bin of the records'
+#' range (share of M's cells relative to an even spread), with the limit of
+#' thin representation, and the number of records per bin.
+#'
+#' @param x An `m_availability` from [m_availability()].
+#' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to; the format follows the
+#'   extension, a name without extension is saved as PNG and PDF.
+#' @param width,height Size of the saved plot in inches.
+#' @return A ggplot object.
+#' @references Jimenez, L., Soberon, J. (2022) Estimating the fundamental
+#'   niche: accounting for the uneven availability of existing climates in
+#'   the calibration area. *Ecological Modelling* 464, 109823.
+#'   \doi{10.1016/j.ecolmodel.2021.109823}
+#' @export
+#' @examples
+#' # see ?m_availability
+plot_m_availability <- function(x, base_size = 11, file = NULL, width = 8,
+                                height = 5) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width, height))
+  }
+  if (!inherits(x, "m_availability")) {
+    stop("`x` must come from m_availability().", call. = FALSE)
+  }
+  b <- x$bins
+  th <- x$settings$thin_ratio
+  b$mid <- (b$lower + b$upper) / 2
+  b$wid <- b$upper - b$lower
+  lab <- c("Well represented", "Thinly represented")
+  b$cls <- factor(ifelse(b$ratio >= th, lab[1], lab[2]), lab)
+  cnt <- table(b$cls)
+  ll <- paste0(lab, ": ", as.integer(cnt), " bins (",
+               share_label(as.integer(cnt) / nrow(b)), ")")
+  b$cls <- factor(b$cls, lab, ll)
+  fl <- x$variables$layer[x$variables$distorted %in% TRUE]
+  b$panel <- ifelse(b$layer %in% fl, paste0(b$layer, " (flagged)"), b$layer)
+  b$panel <- factor(b$panel, unique(b$panel))
+  b$ratio_plot <- pmax(b$ratio, 1e-3)
+  base_y <- min(1e-3, min(b$ratio_plot)) / 2
+  ggplot2::ggplot(b) +
+    ggplot2::geom_rect(ggplot2::aes(xmin = .data$lower, xmax = .data$upper,
+                                    ymin = base_y, ymax = .data$ratio_plot,
+                                    fill = .data$cls)) +
+    ggplot2::geom_hline(yintercept = 1, colour = "#8a8a86") +
+    ggplot2::geom_hline(yintercept = th, linetype = "dashed",
+                        colour = "#d95f02") +
+    ggplot2::facet_wrap(~panel, scales = "free_x") +
+    ggplot2::scale_y_log10() +
+    ggplot2::scale_fill_manual(values = stats::setNames(
+      c("#7570b3", "#d95f02"), ll), name = NULL) +
+    ggplot2::labs(x = "Value (range of the records)",
+                  y = "Availability in M relative to an even spread",
+                  title = "Availability of the records' conditions in M",
+                  subtitle = paste0("Solid: even availability; dashed: ",
+                                    th, " of it (thin below)")) +
+    theme_enm(base_size, "#3a3a38", "#8a8a86") +
+    ggplot2::theme(legend.position = "bottom")
 }

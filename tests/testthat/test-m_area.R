@@ -227,3 +227,125 @@ test_that("adaptive M: clusters reach by their spread, singletons stay small", {
                                    closing_km = 0, adaptive_mult = 0.5))
   expect_lt(as.numeric(sf::st_area(mw$m)), as.numeric(sf::st_area(m$m)))
 })
+
+sim_landscape <- function() {
+  r <- terra::rast(nrows = 60, ncols = 90, xmin = 0, xmax = 9, ymin = 44,
+                   ymax = 50, crs = "EPSG:4326")
+  xy <- terra::crds(r, na.rm = FALSE)
+  set.seed(1)
+  a <- terra::rast(r, vals = 1 - abs(xy[, 2] - 47) / 3 +
+                     stats::rnorm(nrow(xy), 0, 0.02))
+  b <- terra::rast(r, vals = stats::rnorm(nrow(xy), 0, 0.05))
+  env <- c(a, b)
+  names(env) <- c("a", "b")
+  env
+}
+
+test_that("m_simulate(): M holds all records and respects barriers", {
+  env <- sim_landscape()
+  set.seed(2)
+  pts <- data.frame(lon = stats::runif(30, 1, 3), lat = stats::runif(30, 46,
+                                                                      48))
+  # a 1-degree wide barrier (10 cells) between x = 4 and 5, far wider than
+  # the kernel (SD 1 cell)
+  bar <- sf::st_sfc(sf::st_polygon(list(rbind(c(4, 43), c(5, 43), c(5, 51),
+                                              c(4, 51), c(4, 43)))),
+                    crs = 4326)
+  ms <- m_simulate(pts, env, barrier = bar, n_rep = 4, n_events = 40,
+                   kernel_sd = 1, seed = 1)
+  expect_s3_class(ms, "m_simulation")
+  inside <- lengths(sf::st_intersects(
+    sf::st_as_sf(pts, coords = c("lon", "lat"), crs = 4326),
+    sf::st_transform(ms$m, 4326))) > 0
+  expect_true(all(inside))
+  bb <- sf::st_bbox(sf::st_transform(ms$m, 4326))
+  expect_lte(bb[["xmax"]], 4 + 1e-6)          # nothing beyond the barrier
+  # without the barrier dispersal crosses
+  m2 <- m_simulate(pts, env, n_rep = 4, n_events = 40, kernel_sd = 1,
+                   seed = 1)
+  expect_gt(sf::st_bbox(sf::st_transform(m2$m, 4326))[["xmax"]], 5)
+  expect_output(print(ms), "IN SHORT")
+  expect_s3_class(plot(ms), "ggplot")
+  # as a method of delimit_m() and in m_scenarios()
+  dm <- suppressMessages(delimit_m(pts, method = "simulation", env = env,
+                                   link_km = 100, thin_km = 1,
+                                   simulation = list(n_rep = 3,
+                                                     n_events = 20)))
+  expect_equal(dm$settings$method, "simulation")
+  expect_s3_class(dm$simulation, "m_simulation")
+  sc <- suppressMessages(m_scenarios(
+    pts, link_km = 100, thin_km = 1,
+    scenarios = list(delaunay = list(),
+                     sim = list(method = "simulation", env = env,
+                                simulation = list(n_rep = 3,
+                                                  n_events = 20)))))
+  expect_equal(sc$comparison$method, c("delaunay", "simulation"))
+  expect_error(delimit_m(pts, method = "simulation", link_km = 100),
+               "needs `env`")
+})
+
+test_that("m_minimal(): growing extents and a stabilisation point", {
+  # a stationary landscape: short waves, the same mix of conditions
+  # everywhere at a large enough scale
+  r <- terra::rast(nrows = 300, ncols = 300, xmin = 0, xmax = 30,
+                   ymin = 40, ymax = 70, crs = "EPSG:4326")
+  xy <- terra::crds(r, na.rm = FALSE)
+  set.seed(1)
+  env <- c(terra::rast(r, vals = sin(xy[, 1] * 2.5) +
+                         stats::rnorm(nrow(xy), 0, 0.1)),
+           terra::rast(r, vals = cos(xy[, 2] * 2.5) +
+                         stats::rnorm(nrow(xy), 0, 0.1)))
+  names(env) <- c("a", "b")
+  pts <- data.frame(lon = stats::rnorm(80, 15, 2),
+                    lat = stats::rnorm(80, 55, 1.5))
+  mm <- m_minimal(pts, env, steps = 8, beyond = c(1.5, 2, 3, 4), n = 5000)
+  t <- mm$extents
+  expect_true(all(diff(t$radius_km) > 0))         # monotone extents
+  expect_true(all(diff(t$records_pct) >= 0))
+  expect_false(is.null(mm$minimal))
+  expect_lt(mm$minimal$radius_km, max(t$radius_km))
+  expect_gt(t$ks_step[2], t$critical[2])          # small extents differ
+  expect_s3_class(mm$m, "sfc")
+  expect_output(print(mm), "stabilises")
+  expect_s3_class(plot(mm), "ggplot")
+  # a continental gradient keeps changing: no stabilisation
+  g <- terra::rast(r, vals = xy[, 1] + xy[, 2])
+  names(g) <- "g"
+  m2 <- m_minimal(pts, g, steps = 6, beyond = c(1.5, 2), n = 5000)
+  expect_null(m2$minimal)
+  expect_output(print(m2), "did not stabilise")
+})
+
+test_that("m_availability() flags a truncated and a skewed predictor", {
+  env <- sim_landscape()
+  set.seed(3)
+  pts <- data.frame(lon = stats::runif(60, 1, 8), lat = stats::runif(60, 44.5,
+                                                                     49.5))
+  # M that leaves out the north: the records' range of `a` reaches values
+  # M does not have
+  m <- sf::st_sfc(sf::st_polygon(list(rbind(c(0, 44), c(9, 44), c(9, 46),
+                                            c(0, 46), c(0, 44)))),
+                  crs = 4326)
+  av <- m_availability(env, pts, m = m)
+  va <- av$variables
+  expect_true(va$distorted[va$layer == "a"])
+  expect_lt(va$complete[va$layer == "a"], 1)
+  # a skewed layer: most of M low, a thin tail where the records also are
+  e2 <- env
+  v <- terra::values(env[["a"]])
+  terra::values(e2[["a"]]) <- exp(12 * v)
+  av2 <- m_availability(e2, pts)
+  w <- av2$variables
+  expect_true(w$distorted[w$layer == "a"])
+  expect_lt(w$well_represented[w$layer == "a"], 0.8)
+  # an even layer is not flagged
+  flat <- env
+  terra::values(flat[["a"]]) <- stats::runif(terra::ncell(flat))
+  av3 <- m_availability(flat, pts)
+  expect_false(av3$variables$distorted[av3$variables$layer == "a"])
+  expect_output(print(av), "distorted")
+  expect_s3_class(plot_m_availability(av), "ggplot")
+  mm <- suppressMessages(delimit_m(pts, link_km = 150, thin_km = 1))
+  rp <- m_report(mm, env = env)
+  expect_s3_class(attr(rp, "availability"), "m_availability")
+})

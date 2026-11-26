@@ -7,7 +7,11 @@
 #'   [filter_layers()]: rule-based filtering of occurrence records,
 #'   including tests of the names.
 #' * [delimit_m()], [linking_distance()], [m_scenarios()], [plot_m_area()],
-#'   [write_m_area()], [crop_to_m()]: the accessible area (M).
+#'   [write_m_area()], [crop_to_m()]: the accessible area (M); compare
+#'   several with [m_scenarios()] as a matter of course.
+#' * [m_simulate()]: M by simulated dispersal; [m_minimal()]: the smallest
+#'   extent whose environment has stabilised; [m_availability()],
+#'   [plot_m_availability()]: how evenly M offers the records' conditions.
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
 #' * [download_chelsa_monthly()], [download_chelsa_trace21k()],
 #'   [monthly_files()], [climate_indices()]: twenty-five derived climate

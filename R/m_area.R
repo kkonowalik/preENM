@@ -18,6 +18,9 @@
 #' `link2_max_km`), or the longest of them when there are only one or two.
 #' See [linking_distance()].
 #'
+#' Whatever the method, compare it with others in [m_scenarios()]: the
+#' calibration area strongly affects model accuracy (Luna et al. 2024).
+#'
 #' **Methods** (radius r = L/2 by default: two buffers of L/2 touch when
 #' records are L apart, so every chain of records linked at L becomes one
 #' patch):
@@ -30,6 +33,11 @@
 #'   buffers. Fills gaps inside each cluster automatically.
 #' * `"convex_hull"`: one convex hull around all buffers (the simplest and
 #'   most generous M).
+#' * `"simulation"`: M simulated by dispersal from the records over the
+#'   landscape in `env` ([m_simulate()], Machado-Stredel et al. 2021); give
+#'   its settings in `simulation`, e.g. `simulation = list(kernel_sd = 2,
+#'   n_events = 30, barrier = mountains)`. L is still computed and
+#'   reported but does not shape this M.
 #' * `"adaptive"`: spatially adaptive buffers for unevenly surveyed areas
 #'   (Barbosa 2026, "cluster mean distance"): around each cluster of records
 #'   linked at L, a buffer whose radius is the mean distance between the
@@ -65,7 +73,9 @@
 #'   [terra::SpatVector]. Combine modern and fossil records beforehand if both
 #'   should shape M (e.g. with [merge_occurrences()]).
 #' @param method `"delaunay"`, `"buffer"`, `"cluster_hull"`,
-#'   `"convex_hull"` or `"adaptive"`.
+#'   `"convex_hull"`, `"adaptive"` or `"simulation"`.
+#' @param env,simulation For `"simulation"`: the predictor layers and a
+#'   list of further arguments for [m_simulate()].
 #' @param link_km Linking distance L in km; `NULL` (default) = derived from the
 #'   data.
 #' @param link_search Range (km) in which the automatic L is searched.
@@ -115,6 +125,16 @@
 #'   delimitation strategies for species distribution models with unevenly
 #'   surveyed occurrences. *Biodiversity Informatics* 20, 81-88.
 #'   \doi{10.17161/bi.v20i1.25045}
+#'
+#'   Machado-Stredel, F., Cobos, M.E., Peterson, A.T. (2021) A
+#'   simulation-based method for selecting calibration areas for ecological
+#'   niche models and species distribution models. *Frontiers of
+#'   Biogeography* 13, e48814. \doi{10.21425/F5FBG48814}
+#'
+#'   Luna, S., Pena-Peniche, A., Mendoza-Alfaro, R. (2024) Species
+#'   distribution model accuracy is strongly influenced by the choice of
+#'   calibration area. *Biodiversity Informatics* 18, 43-55.
+#'   \doi{10.17161/bi.v18i.22655}
 #' @export
 #' @examples
 #' sim <- simulate_enm_data(seed = 1, n_presence = 150)
@@ -127,11 +147,12 @@
 #' m2 <- delimit_m(sim$presence, link_km = 120, thin_km = 5, add = extra)
 #' m_report(m2)
 delimit_m <- function(points, method = c("delaunay", "buffer", "cluster_hull",
-                                         "convex_hull", "adaptive"),
+                                         "convex_hull", "adaptive",
+                                         "simulation"),
                       link_km = NULL, link_search = c(100, 600),
                       link2_max_km = 1000, link_mult = 1, buffer_km = NULL,
                       adaptive_mult = 1, adaptive_weight = FALSE,
-                      adaptive_min_km = 1,
+                      adaptive_min_km = 1, env = NULL, simulation = list(),
                       hull_ratio = 1, corridors = FALSE, closing_km = NULL,
                       close_km = 25, fill_holes = TRUE, add = NULL,
                       add_sites = NULL, seal_km = 5, exclude = NULL,
@@ -146,13 +167,24 @@ delimit_m <- function(points, method = c("delaunay", "buffer", "cluster_hull",
                     points_crs = points_crs)
   lk <- m_linking(prep, link_km = link_km, link_search = link_search,
                   link2_max_km = link2_max_km)
-  m_build(prep, lk, method = method, link_mult = link_mult,
+  sim <- NULL
+  if (method == "simulation") {
+    if (is.null(env)) {
+      stop("method = \"simulation\" needs `env` (see m_simulate()).",
+           call. = FALSE)
+    }
+    sim <- do.call(m_simulate, c(list(points = prep$all[c("lon", "lat")],
+                                      env = env), simulation))
+  }
+  out <- m_build(prep, lk, method = method, link_mult = link_mult, sim = sim,
           buffer_km = buffer_km, adaptive = list(
             mult = adaptive_mult, weight = adaptive_weight,
             min_km = adaptive_min_km), hull_ratio = hull_ratio,
           corridors = corridors, closing_km = closing_km,
           close_km = close_km, fill_holes = fill_holes, add = add,
           add_sites = add_sites, seal_km = seal_km, land = land)
+  if (!is.null(sim)) out$simulation <- sim
+  out
 }
 
 #' Linking distance of occurrence records
@@ -198,8 +230,16 @@ linking_distance <- function(points, link_km = NULL,
 #' Builds several M variants from the same records (thinning and linking
 #' distance are computed once) and compares them: area, share of records
 #' inside (per `group`), and overlap with a reference scenario (share of this
-#' scenario inside the reference, and the Jaccard index). Use it to show how
-#' sensitive M is to the method, as a supplement to the chosen M.
+#' scenario inside the reference, and the Jaccard index).
+#'
+#' **Use it by default, not as an optional check.** The choice of
+#' calibration area was the most influential factor in simulations of model
+#' accuracy, explaining half of its variance, more than regularisation,
+#' collinearity treatment and spatial thinning together (Luna et al. 2024).
+#' Comparing several delimitations (geometric, simulated with
+#' `method = "simulation"`, and the minimal extent of [m_minimal()]) and
+#' reporting how much they differ is therefore part of choosing M, not a
+#' supplement to it.
 #'
 #' @inheritParams delimit_m
 #' @param scenarios Named list; each element is a list of arguments of
@@ -208,9 +248,15 @@ linking_distance <- function(points, link_km = NULL,
 #'   cluster and overall convex hulls, and fixed 100 km buffers.
 #' @param reference Name of the reference scenario (default: the first).
 #' @param ... Arguments passed to [delimit_m()] for every scenario (e.g.
-#'   `add`, `exclude`, `extent`, `link_km`).
+#'   `add`, `exclude`, `extent`, `link_km`). A scenario with
+#'   `method = "simulation"` needs `env` (and optionally `simulation`) in its
+#'   own list.
 #' @return An object of class `m_scenarios`: a list with `areas` (the
 #'   `m_area` objects) and `comparison` (a data.frame).
+#' @references Luna, S., Pena-Peniche, A., Mendoza-Alfaro, R. (2024)
+#'   Species distribution model accuracy is strongly influenced by the
+#'   choice of calibration area. *Biodiversity Informatics* 18, 43-55.
+#'   \doi{10.17161/bi.v18i.22655}
 #' @export
 #' @examples
 #' sim <- simulate_enm_data(seed = 1, n_presence = 150)
@@ -254,6 +300,18 @@ m_scenarios <- function(points, scenarios = NULL, reference = NULL,
   common <- list(...)
   areas <- lapply(names(scenarios), function(nm) {
     args <- utils::modifyList(common, scenarios[[nm]])
+    # a simulated M: run the simulation for this scenario
+    if (identical(args$method, "simulation")) {
+      if (is.null(args$env)) {
+        stop("Scenario '", nm, "': method \"simulation\" needs `env`.",
+             call. = FALSE)
+      }
+      args$sim <- do.call(m_simulate, c(list(
+        points = prep$all[c("lon", "lat")], env = args$env),
+        if (is.null(args$simulation)) list() else args$simulation))
+    }
+    args$env <- NULL
+    args$simulation <- NULL
     m <- tryCatch(do.call(m_build, c(list(prep = prep, lk = lk), args)),
                   error = function(e) {
                     warning("Scenario '", nm, "' failed: ", conditionMessage(e),
@@ -557,14 +615,14 @@ print.m_linking <- function(x, ...) {
 
 # --- building M -------------------------------------------------------------------
 
-m_build <- function(prep, lk, method = "delaunay", link_mult = 1,
+m_build <- function(prep, lk, method = "delaunay", link_mult = 1, sim = NULL,
                     buffer_km = NULL, adaptive = list(mult = 1, weight = FALSE,
                                                       min_km = 1),
                     hull_ratio = 1, corridors = FALSE,
                     closing_km = NULL, close_km = 25, fill_holes = TRUE,
                     add = NULL, add_sites = NULL, seal_km = 5, land = NULL) {
   method <- match.arg(method, c("delaunay", "buffer", "cluster_hull",
-                                "convex_hull", "adaptive"))
+                                "convex_hull", "adaptive", "simulation"))
   crs <- prep$crs
   th <- lk$points
   L <- lk$L * link_mult
@@ -633,6 +691,7 @@ m_build <- function(prep, lk, method = "delaunay", link_mult = 1,
     },
     convex_hull = buffer_geom(sf::st_convex_hull(union_geom(pts_of(all_i))),
                               r),
+    simulation = union_geom(sf::st_transform(sim$m, crs)),
     adaptive = {
       cl <- if (link_mult == 1) th$cluster else
         link_components(nrow(th), lk$links, L)
@@ -807,4 +866,601 @@ inside_shares <- function(m) {
     "records_inside_pct"
   } else paste0("records_inside_pct_", grp)
   as.data.frame(as.list(vals), check.names = FALSE)
+}
+
+# Simulated accessible area -------------------------------------------------------
+
+#' Accessible area (M) by simulating dispersal from the records
+#'
+#' M is the area that has been accessible to the species over a relevant
+#' period. Instead of drawing a hull or buffers around the records,
+#' `m_simulate()` simulates that history, following the method of
+#' Machado-Stredel et al. (2021) in a stable climate (their "stable
+#' framework"), which is conceptually closer to the definition of M than
+#' any geometry:
+#'
+#' 1. **Niche.** An ellipsoid in the space of the first principal components
+#'    of the layers (those explaining `pc_cumvar` of the variance, at most
+#'    `max_pc`), with the centroid and covariance of the records. A cell is
+#'    suitable when its Mahalanobis distance from the centroid is within the
+#'    `niche_level` quantile of the chi-squared distribution (default 0.95,
+#'    leaving out the most extreme 5%), with suitability
+#'    `exp(-0.5 * MD^2)`.
+#' 2. **Dispersal.** In each of `n_rep` replicates, a random half of the
+#'    records inside the niche are the starting populations. In each of
+#'    `n_events` dispersal events, every colonised cell sends dispersers in
+#'    random directions over distances drawn from a normal kernel with
+#'    standard deviation `kernel_sd` (in cells): 1 to `max_dispersers`
+#'    of them, more from more suitable cells. Every cell reached is
+#'    *accessed*; it is *colonised*, and sends dispersers itself, only if
+#'    suitable. Cells without values (the sea, cells outside the layers) and
+#'    `barrier` cells can be neither accessed nor colonised, so dispersal
+#'    can only jump a barrier narrower than the kernel allows.
+#' 3. **M.** The mean number of accesses per cell over the replicates; the
+#'    accessed cells, without the `access_threshold` share (default 5%)
+#'    accessed least often, form M. The cells of all records are always
+#'    added, and their number is reported.
+#'
+#' The simulation works on the whole grid, so it needs the layers in
+#' memory: grids with more than `max_cells` cells are first aggregated on
+#' disk (as in [grain_sensitivity()]). The kernel is in cells of the grid
+#' used, so choose `kernel_sd` and `n_events` together with the resolution:
+#' a disperser moves about `kernel_sd` cells per event, and M grows with
+#' both. Past climates (their "changing framework") are not simulated.
+#'
+#' The result can be compared with the other delimitations in
+#' [m_scenarios()] (`method = "simulation"` in [delimit_m()], with `env`).
+#'
+#' @param points Records: a data.frame with coordinates, a CSV path, `sf`
+#'   or [terra::SpatVector].
+#' @param env Predictor layers covering a generous study region (larger
+#'   than any plausible M), [terra::SpatRaster] or files.
+#' @param barrier Optional barriers to dispersal: polygons (`sf`,
+#'   SpatVector, path) or a raster whose cells other than `NA` and 0 are
+#'   barriers.
+#' @param n_rep,n_events Replicates and dispersal events per replicate.
+#' @param kernel_sd Standard deviation of the dispersal kernel, in cells.
+#' @param max_dispersers Largest number of dispersers per colonised cell
+#'   and event.
+#' @param niche_level Chi-squared quantile that bounds the niche ellipsoid.
+#' @param access_threshold Share of the least accessed cells left out of M.
+#' @param pc_cumvar,max_pc Principal components used for the niche.
+#' @param max_cells Largest grid simulated; larger grids are aggregated.
+#' @param coords,points_crs Coordinate columns and their CRS.
+#' @param seed Random seed.
+#' @return An object of class `m_simulation`: `m` (M as polygons, `sfc` in
+#'   the CRS of `env`), `access` (raster of the mean number of accesses),
+#'   `suitability` (the niche suitability), `m_raster` (1 in M), `report`
+#'   (records, starting records inside the niche, records added, cells and
+#'   area) and `settings`.
+#' @references Machado-Stredel, F., Cobos, M.E., Peterson, A.T. (2021) A
+#'   simulation-based method for selecting calibration areas for ecological
+#'   niche models and species distribution models. *Frontiers of
+#'   Biogeography* 13, e48814. \doi{10.21425/F5FBG48814}
+#'
+#'   Barve, N., Barve, V., Jimenez-Valverde, A., Lira-Noriega, A., Maher,
+#'   S.P., Peterson, A.T., Soberon, J., Villalobos, F. (2011) The crucial
+#'   role of the accessible area in ecological niche modeling and species
+#'   distribution modeling. *Ecological Modelling* 222, 1810-1819.
+#'   \doi{10.1016/j.ecolmodel.2011.02.011}
+#' @seealso [delimit_m()], [m_scenarios()], [m_minimal()]
+#' @export
+#' @examples
+#' \donttest{
+#' sim <- simulate_enm_data(seed = 1, n_presence = 60)
+#' ms <- m_simulate(sim$presence, sim$env, n_rep = 5, n_events = 10,
+#'                  kernel_sd = 2, seed = 1)
+#' ms
+#' plot(ms)
+#' }
+m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
+                       n_events = 20, kernel_sd = 1, max_dispersers = 4,
+                       niche_level = 0.95, access_threshold = 0.05,
+                       pc_cumvar = 0.95, max_pc = 3, max_cells = 2e6,
+                       coords = NULL, points_crs = "EPSG:4326", seed = 1) {
+  r <- as_grid(env)
+  fact <- 1
+  if (terra::ncell(r) > max_cells) {
+    fact <- ceiling(sqrt(terra::ncell(r) / max_cells))
+    tmp <- tempfile("preENM_msim")
+    r <- aggregate_on_disk(r, fact, "average", tmp)
+    message("Grid aggregated by ", fact, " to ", terra::ncell(r), " cells.")
+  }
+  nr <- terra::nrow(r)
+  nc <- terra::ncol(r)
+  V <- terra::values(r)
+  valid <- stats::complete.cases(V)
+  if (!is.null(barrier)) {
+    b <- if (inherits(barrier, "SpatRaster") || (is.character(barrier) &&
+           grepl("\\.(tif|tiff|grd|asc|nc)$", barrier[1],
+                 ignore.case = TRUE))) {
+      br <- as_grid(barrier)[[1]]
+      if (!terra::compareGeom(br, r, stop = FALSE)) {
+        br <- terra::resample(br, r, method = "near")
+      }
+      bv <- terra::values(br, mat = FALSE)
+      !is.na(bv) & bv != 0
+    } else {
+      bp <- terra::vect(sf::st_transform(as_sfc(barrier, "barrier"),
+                                         terra::crs(r)))
+      bv <- terra::values(terra::rasterize(bp, r, touches = TRUE),
+                          mat = FALSE)
+      !is.na(bv)
+    }
+    valid <- valid & !b
+  }
+  # records
+  if (is.character(points) && length(points) == 1) {
+    points <- read_any_csv(points)
+  }
+  p <- if (is.data.frame(points) && !inherits(points, "sf")) {
+    df <- as.data.frame(points, stringsAsFactors = FALSE)
+    xy <- if (is.null(coords)) guess_coords(names(df)) else coords
+    x <- as_number(df[[xy[1]]])
+    y <- as_number(df[[xy[2]]])
+    ok <- !is.na(x) & !is.na(y)
+    terra::vect(cbind(x[ok], y[ok]), crs = points_crs)
+  } else as_points(points, coords, points_crs)
+  pr <- if (terra::same.crs(p, r)) p else terra::project(p, r)
+  rec_cell <- terra::cellFromXY(r, terra::crds(pr))
+  rec_cell <- rec_cell[!is.na(rec_cell)]
+  rec_ok <- unique(rec_cell[valid[rec_cell]])
+  if (length(rec_ok) < 5) {
+    stop("Fewer than 5 records in cells with values (outside barriers).",
+         call. = FALSE)
+  }
+  # niche: ellipsoid in principal-component space
+  vc <- which(valid)
+  smp <- if (length(vc) > 1e5) with_seed(seed, sample(vc, 1e5)) else vc
+  pc <- stats::prcomp(V[smp, , drop = FALSE], scale. = TRUE)
+  ve <- pc$sdev^2 / sum(pc$sdev^2)
+  k <- min(max_pc, ncol(V), which(cumsum(ve) >= pc_cumvar - 1e-9)[1])
+  scores <- function(i) stats::predict(pc, V[i, , drop = FALSE])[, seq_len(k),
+                                                                 drop = FALSE]
+  Sr <- scores(rec_ok)
+  ctr <- colMeans(Sr)
+  cv <- stats::cov(Sr)
+  if (k == 1) cv <- matrix(cv, 1, 1)
+  icv <- tryCatch(solve(cv), error = function(e) MASS_ginv(cv))
+  limit <- stats::qchisq(niche_level, df = k)
+  S <- numeric(nr * nc)
+  for (s0 in seq(1, length(vc), by = 2e5)) {
+    i <- vc[s0:min(length(vc), s0 + 2e5 - 1)]
+    d <- sweep(scores(i), 2, ctr)
+    md2 <- rowSums((d %*% icv) * d)
+    S[i] <- ifelse(md2 <= limit, exp(-0.5 * md2), 0)
+  }
+  start <- rec_ok[S[rec_ok] > 0]
+  if (!length(start)) stop("No record lies inside the niche ellipsoid.",
+                           call. = FALSE)
+
+  # dispersal
+  move <- function(cells, n) {
+    rc <- cbind((cells - 1) %/% nc + 1, (cells - 1) %% nc + 1)
+    d <- stats::rnorm(n, 0, kernel_sd)
+    a <- stats::runif(n, 0, 2 * pi)
+    rr <- rc[, 1] + round(d * sin(a))
+    cc <- rc[, 2] + round(d * cos(a))
+    inside <- rr >= 1 & rr <= nr & cc >= 1 & cc <= nc
+    out <- rep(NA_integer_, n)
+    out[inside] <- as.integer((rr[inside] - 1) * nc + cc[inside])
+    out[!is.na(out)][!valid[out[!is.na(out)]]] <- NA_integer_
+    out
+  }
+  Dsum <- numeric(nr * nc)
+  with_seed(seed, {
+    for (rep_i in seq_len(n_rep)) {
+      st <- start[sample.int(length(start), max(1, ceiling(length(start) /
+                                                             2)))]
+      col <- logical(nr * nc)
+      col[st] <- TRUE
+      D <- numeric(nr * nc)
+      D[st] <- 1
+      for (ev in seq_len(n_events)) {
+        cl <- which(col)
+        nd <- pmin(max_dispersers, pmax(1, ceiling(S[cl] * max_dispersers)))
+        from <- rep(cl, nd)
+        to <- move(from, length(from))
+        to <- to[!is.na(to)]
+        if (!length(to)) next
+        tab <- tabulate(to, nbins = nr * nc)
+        D <- D + tab
+        col[to[S[to] > 0]] <- TRUE
+      }
+      Dsum <- Dsum + D
+    }
+  })
+  Dm <- Dsum / n_rep
+  acc <- Dm > 0
+  thr <- stats::quantile(Dm[acc], access_threshold, names = FALSE)
+  inM <- acc & Dm >= thr
+  outside <- setdiff(unique(rec_cell), which(inM))
+  inM[unique(rec_cell)] <- TRUE
+
+  mk <- function(v, nm) {
+    x <- terra::rast(r[[1]])
+    terra::values(x) <- v
+    names(x) <- nm
+    x
+  }
+  access <- mk(ifelse(valid, Dm, NA), "access")
+  m_r <- mk(ifelse(inM, 1, NA), "M")
+  suit <- mk(ifelse(valid, S, NA), "suitability")
+  poly <- sf::st_as_sfc(sf::st_as_sf(terra::as.polygons(m_r, dissolve = TRUE)))
+  poly <- union_geom(poly)
+  area <- terra::global(terra::mask(terra::cellSize(m_r, unit = "km"), m_r),
+                        "sum", na.rm = TRUE)[[1]]
+  structure(list(
+    m = poly, access = access, suitability = suit, m_raster = m_r,
+    report = data.frame(records = length(unique(rec_cell)),
+                        in_niche = length(start),
+                        added_to_m = length(outside),
+                        cells_accessed = sum(acc), cells_in_m = sum(inM),
+                        area_km2 = round(area)),
+    settings = list(n_rep = n_rep, n_events = n_events,
+                    kernel_sd = kernel_sd, max_dispersers = max_dispersers,
+                    niche_level = niche_level,
+                    access_threshold = access_threshold, n_pc = k,
+                    variance = sum(ve[seq_len(k)]), aggregated = fact,
+                    barrier = !is.null(barrier))),
+    class = "m_simulation")
+}
+
+# Generalised inverse for a singular covariance (internal)
+MASS_ginv <- function(X) {
+  s <- svd(X)
+  pos <- s$d > max(sqrt(.Machine$double.eps) * s$d[1], 0)
+  s$v[, pos, drop = FALSE] %*% (t(s$u[, pos, drop = FALSE]) / s$d[pos])
+}
+
+#' @export
+print.m_simulation <- function(x, ...) {
+  s <- x$settings
+  rp <- x$report
+  say <- function(txt) cat(strwrap(txt, width = 76, initial = "- ",
+                                   exdent = 2), sep = "\n")
+  cat("Simulated accessible area (M): ", s$n_rep, " replicates x ",
+      s$n_events, " dispersal events, kernel SD ", s$kernel_sd,
+      " cell(s)\n\nIN SHORT\n", sep = "")
+  say(paste0("M covers ", formatC(rp$area_km2, format = "d", big.mark = " "),
+             " km2 (", rp$cells_in_m, " cells): the cells reached by ",
+             "dispersal from the records, without the ",
+             s$access_threshold * 100, "% least accessed."))
+  say(paste0(rp$in_niche, " of the ", rp$records, " record cells lie inside ",
+             "the niche ellipsoid and served as starting populations",
+             if (rp$records > rp$in_niche) paste0("; the other ",
+               rp$records - rp$in_niche, " are outside it (extreme ",
+               "conditions) and could not colonise") else "", "."))
+  if (rp$added_to_m > 0) {
+    say(paste0(rp$added_to_m, " record cell(s) were not reached by the ",
+               "simulation and were added to M: consider more events, a ",
+               "wider kernel, or whether these records are reliable."))
+  }
+  say(paste0("M grows with the kernel and the number of events: compare ",
+             "a few settings, and other delimitations, with m_scenarios()."))
+  cat("", strwrap(paste0(
+    "Niche: ellipsoid on PC1-PC", s$n_pc, " (", round(100 * s$variance),
+    "% of the variance) bounded at the ", s$niche_level, " chi-squared ",
+    "quantile; up to ", s$max_dispersers, " dispersers per cell and event",
+    if (s$aggregated > 1) paste0("; grid aggregated by ", s$aggregated)
+    else "", if (s$barrier) "; with barriers" else "",
+    ". Method of Machado-Stredel et al. (2021), stable climate."),
+    width = 76), sep = "\n")
+  invisible(x)
+}
+
+#' Plot a simulated accessible area
+#'
+#' The mean number of accesses per cell over the replicates, the outline of
+#' M and the records' cells.
+#'
+#' @param x An `m_simulation` from [m_simulate()].
+#' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to; the format follows the
+#'   extension, a name without extension is saved as PNG and PDF.
+#' @param width,height Size of the saved plot in inches.
+#' @param ... Not used.
+#' @return A ggplot object.
+#' @references Machado-Stredel, F., Cobos, M.E., Peterson, A.T. (2021) A
+#'   simulation-based method for selecting calibration areas for ecological
+#'   niche models and species distribution models. *Frontiers of
+#'   Biogeography* 13, e48814. \doi{10.21425/F5FBG48814}
+#' @export
+#' @examples
+#' # see ?m_simulate
+plot.m_simulation <- function(x, base_size = 11, file = NULL, width = 7,
+                              height = 6, ...) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width, height))
+  }
+  a <- x$access
+  if (terra::ncell(a) > 5e5) {
+    a <- terra::spatSample(a, 5e5, method = "regular", as.raster = TRUE)
+  }
+  d <- terra::as.data.frame(a, xy = TRUE, na.rm = TRUE)
+  d <- d[d$access > 0, , drop = FALSE]
+  lonlat <- terra::is.lonlat(a)
+  ggplot2::ggplot() +
+    ggplot2::geom_raster(data = d, ggplot2::aes(.data$x, .data$y,
+                                                fill = .data$access)) +
+    ggplot2::scale_fill_distiller(palette = "YlGnBu", direction = 1,
+                                  trans = "log10",
+                                  name = "Mean accesses\nper cell") +
+    ggplot2::geom_sf(data = sf::st_sf(geometry = x$m), fill = NA,
+                     colour = "#d95f02", linewidth = 0.6,
+                     inherit.aes = FALSE) +
+    ggplot2::labs(x = NULL, y = NULL, title = "Simulated accessible area",
+                  subtitle = paste0(x$settings$n_rep, " replicates x ",
+                                    x$settings$n_events, " events; ",
+                                    "outline: M (",
+                                    formatC(x$report$area_km2, format = "d",
+                                            big.mark = " "), " km2)")) +
+    theme_enm(base_size, "#3a3a38", "#8a8a86")
+}
+
+# Minimal background area ---------------------------------------------------------
+
+#' Smallest calibration area whose environment has stabilised
+#'
+#' How large must the calibration area be? Rotllan-Puig & Traveset (2021)
+#' grew the background in steps from the centre of the records and found
+#' the smallest area beyond which models stopped improving (their MinBAR
+#' method). preENM fits no model, so `m_minimal()` keeps the geometry of
+#' their procedure and asks a model-free question instead: from which
+#' extent on does the *environment available* stop changing as the area
+#' grows?
+#'
+#' * **Extents.** Circles around the centre of the records (their median
+#'   coordinates, or the mean), whose radii contain growing shares of the
+#'   records (`steps` equal steps of records, as in MinBAR, so that
+#'   scattered records do not leave large empty steps), then larger
+#'   circles beyond the farthest record (`beyond`, multiples of its
+#'   distance).
+#' * **Environment of each extent.** `n` random points within the circle,
+#'   with values in every layer.
+#' * **Change.** The largest Kolmogorov-Smirnov distance, over the layers,
+#'   between the environment of an extent and of the previous one
+#'   (`ks_step`), and between each extent and the largest (`ks_largest`).
+#'   The environment has stabilised when `ks_step` is below the 5%
+#'   critical value of the two-sample test (`1.36 * sqrt(2 / n)`, about
+#'   0.019 for `n = 10000`; consecutive extents cannot be told apart) for
+#'   `k_stable` consecutive steps.
+#'
+#' The stable extent is a lower bound for a calibration area that
+#' represents the conditions around the records; it is not a delimitation
+#' of M by dispersal (see [delimit_m()] and [m_simulate()]). The extent of
+#' the calibration area strongly affects model accuracy (Luna et al. 2024),
+#' so compare it with the other delimitations in [m_scenarios()].
+#'
+#' @param points Records: a data.frame with coordinates, a CSV path, `sf`
+#'   or [terra::SpatVector].
+#' @param env Predictor layers covering a generous region around the
+#'   records.
+#' @param steps Number of extents up to the farthest record.
+#' @param beyond Multiples of the farthest record's distance added as
+#'   further extents.
+#' @param centre `"median"` or `"mean"` of the record coordinates.
+#' @param n Random points per extent.
+#' @param k_stable Consecutive stable steps required.
+#' @param coords,points_crs Coordinate columns and their CRS.
+#' @param seed Random seed.
+#' @return An object of class `m_minimal`: `extents` (one row per extent:
+#'   `radius_km`, `area_km2`, `records_pct`, `n_points`, `ks_step`,
+#'   `ks_largest`, `stable`), `minimal` (the row of the first stable
+#'   extent, or `NULL`), `m` (that circle as an `sfc` polygon in WGS84),
+#'   `centre` and `settings`.
+#' @references Rotllan-Puig, X., Traveset, A. (2021) Determining the minimal
+#'   background area for species distribution models: MinBAR package.
+#'   *Ecological Modelling* 439, 109353.
+#'   \doi{10.1016/j.ecolmodel.2020.109353}
+#'
+#'   Luna, S., Pena-Peniche, A., Mendoza-Alfaro, R. (2024) Species
+#'   distribution model accuracy is strongly influenced by the choice of
+#'   calibration area. *Biodiversity Informatics* 18, 43-55.
+#'   \doi{10.17161/bi.v18i.22655}
+#' @seealso [delimit_m()], [m_simulate()], [m_scenarios()]
+#' @export
+#' @examples
+#' \donttest{
+#' sim <- simulate_enm_data(seed = 1, n_presence = 60)
+#' mm <- m_minimal(sim$presence, sim$env, steps = 6, n = 3000, seed = 1)
+#' mm
+#' plot(mm)
+#' }
+m_minimal <- function(points, env, steps = 10, beyond = c(1.25, 1.5, 2),
+                      centre = c("median", "mean"), n = 10000, k_stable = 2,
+                      coords = NULL, points_crs = "EPSG:4326", seed = 1) {
+  centre <- match.arg(centre)
+  r <- as_grid(env)
+  if (is.character(points) && length(points) == 1) {
+    points <- read_any_csv(points)
+  }
+  p <- if (is.data.frame(points) && !inherits(points, "sf")) {
+    df <- as.data.frame(points, stringsAsFactors = FALSE)
+    xy <- if (is.null(coords)) guess_coords(names(df)) else coords
+    x <- as_number(df[[xy[1]]])
+    y <- as_number(df[[xy[2]]])
+    ok <- !is.na(x) & !is.na(y)
+    terra::vect(cbind(x[ok], y[ok]), crs = points_crs)
+  } else as_points(points, coords, points_crs)
+  ll <- terra::crds(terra::project(p, "EPSG:4326"))
+  if (nrow(ll) < 3) stop("At least 3 records are needed.", call. = FALSE)
+  ctr <- if (centre == "median") apply(ll, 2, stats::median) else
+    colMeans(ll)
+  crs <- sprintf(paste0("+proj=laea +lat_0=%s +lon_0=%s +x_0=0 +y_0=0 ",
+                        "+datum=WGS84 +units=m +no_defs"),
+                 num_arg(ctr[2]), num_arg(ctr[1]))
+  pe <- terra::crds(terra::project(terra::vect(ll, crs = "EPSG:4326"), crs))
+  dist <- sqrt(rowSums(pe^2)) / 1000
+  far <- max(dist)
+  radii <- c(stats::quantile(dist, seq_len(steps) / steps, names = FALSE),
+             far * beyond)
+  radii <- sort(unique(pmax(radii, 1e-3)))
+  # environment of each extent: random points within the circle
+  draw <- function(R, k) {
+    with_seed(seed + k, {
+      rad <- R * 1000 * sqrt(stats::runif(2 * n))
+      a <- stats::runif(2 * n, 0, 2 * pi)
+      xy <- cbind(rad * cos(a), rad * sin(a))
+      pts <- terra::project(terra::vect(xy, crs = crs), terra::crs(r))
+      v <- as.matrix(terra::extract(r, pts, ID = FALSE))
+      v <- v[stats::complete.cases(v), , drop = FALSE]
+      v[seq_len(min(n, nrow(v))), , drop = FALSE]
+    })
+  }
+  envs <- lapply(seq_along(radii), function(k) draw(radii[k], k))
+  vars <- names(r)
+  ks <- function(A, B) {
+    if (!nrow(A) || !nrow(B)) return(NA_real_)
+    max(vapply(seq_along(vars), function(j) {
+      u <- sort(unique(c(A[, j], B[, j])))
+      max(abs(stats::ecdf(A[, j])(u) - stats::ecdf(B[, j])(u)))
+    }, numeric(1)))
+  }
+  m <- length(radii)
+  ks_step <- c(NA, vapply(2:m, function(k) ks(envs[[k]], envs[[k - 1]]),
+                          numeric(1)))
+  ks_largest <- vapply(seq_len(m), function(k) ks(envs[[k]], envs[[m]]),
+                       numeric(1))
+  npts <- vapply(envs, nrow, integer(1))
+  crit <- 1.36 * sqrt((npts + c(NA, npts[-m])) / (npts * c(NA, npts[-m])))
+  below <- !is.na(ks_step) & ks_step <= crit
+  # stable from step k when this and the next k_stable - 1 steps are below
+  stable <- vapply(seq_len(m), function(k) {
+    j <- k:min(m, k + k_stable - 1)
+    length(j) == k_stable && all(below[j])
+  }, logical(1))
+  tab <- data.frame(step = seq_len(m), radius_km = radii,
+                    area_km2 = pi * radii^2,
+                    records_pct = vapply(radii, function(R)
+                      100 * mean(dist <= R + 1e-9), numeric(1)),
+                    n_points = npts, ks_step = ks_step, critical = crit,
+                    ks_largest = ks_largest, stable = stable)
+  first <- which(stable)[1]
+  # the extent before the first indistinguishable step is the minimal one
+  minimal <- if (is.na(first)) NULL else tab[max(1, first - 1), ]
+  circle <- if (is.null(minimal)) NULL else {
+    g <- sf::st_buffer(sf::st_sfc(sf::st_point(c(0, 0)), crs = crs),
+                       minimal$radius_km * 1000, nQuadSegs = 32)
+    sf::st_transform(g, 4326)
+  }
+  structure(list(extents = tab, minimal = minimal, m = circle,
+                 centre = ctr,
+                 settings = list(steps = steps, beyond = beyond, n = n,
+                                 k_stable = k_stable, centre = centre,
+                                 farthest_km = far)),
+            class = "m_minimal")
+}
+
+#' @export
+print.m_minimal <- function(x, digits = 3, ...) {
+  t <- x$extents
+  s <- x$settings
+  say <- function(txt) cat(strwrap(txt, width = 76, initial = "- ",
+                                   exdent = 2), sep = "\n")
+  f <- function(v) formatC(round(v), format = "d", big.mark = " ")
+  cat("Minimal background area: ", nrow(t), " extents around the ", s$centre,
+      " centre of the records, up to ", f(max(t$radius_km)),
+      " km\n\nIN SHORT\n", sep = "")
+  if (is.null(x$minimal)) {
+    say(paste0("The environment did not stabilise within the extents ",
+               "tested: each larger circle still adds conditions that ",
+               "differ from the smaller one. Test larger extents (`beyond`), ",
+               "or accept that the environment around the records keeps ",
+               "changing (e.g. a continental gradient), and choose M on ",
+               "other grounds (dispersal, m_simulate())."))
+  } else {
+    mm <- x$minimal
+    say(paste0("The available environment stabilises from a radius of about ",
+               f(mm$radius_km), " km (", f(mm$area_km2), " km2, ",
+               round(mm$records_pct), "% of the records inside): larger ",
+               "circles add conditions that cannot be told apart from it."))
+    if (mm$records_pct < 100) {
+      say(paste0("That circle leaves ", round(100 - mm$records_pct),
+                 "% of the records outside: a calibration area should still ",
+                 "contain all records, so use it as a lower bound."))
+    }
+  }
+  say(paste0("This concerns the environment only, not model performance ",
+             "(MinBAR used models). The extent of the calibration area ",
+             "strongly affects model accuracy (Luna et al. 2024): compare ",
+             "it with other delimitations in m_scenarios()."))
+  cat("\n")
+  show <- t[c("step", "radius_km", "area_km2", "records_pct", "n_points",
+              "ks_step", "critical", "ks_largest", "stable")]
+  show$radius_km <- round(show$radius_km)
+  show$area_km2 <- round(show$area_km2)
+  show$records_pct <- round(show$records_pct, 1)
+  for (k in c("ks_step", "critical", "ks_largest")) {
+    show[[k]] <- round(show[[k]], digits)
+  }
+  print(show, row.names = FALSE)
+  cat("", strwrap(paste0(
+    "ks_step = largest Kolmogorov-Smirnov distance, over the layers, ",
+    "between the environment of an extent and the previous one; critical ",
+    "= its 5% critical value; ks_largest = the same against the largest ",
+    "extent. Stable = ks_step below the critical value for ", s$k_stable,
+    " consecutive steps; the minimal extent is the one before the first ",
+    "stable step."), width = 76), sep = "\n")
+  invisible(x)
+}
+
+#' Plot the stabilisation of the environment with the extent
+#'
+#' The change of the environment between consecutive extents and against
+#' the largest extent, with the 5% critical value and the minimal extent,
+#' from [m_minimal()].
+#'
+#' @param x An `m_minimal` object.
+#' @param base_size Base font size.
+#' @param file Optional file(s) to save the plot to; the format follows the
+#'   extension, a name without extension is saved as PNG and PDF.
+#' @param width,height Size of the saved plot in inches.
+#' @param ... Not used.
+#' @return A ggplot object.
+#' @references Rotllan-Puig, X., Traveset, A. (2021) Determining the minimal
+#'   background area for species distribution models: MinBAR package.
+#'   *Ecological Modelling* 439, 109353.
+#'   \doi{10.1016/j.ecolmodel.2020.109353}
+#' @export
+#' @examples
+#' # see ?m_minimal
+plot.m_minimal <- function(x, base_size = 11, file = NULL, width = 7,
+                           height = 4.5, ...) {
+  if (!is.null(file)) {
+    return(save_call(match.call(), parent.frame(), file, width, height))
+  }
+  t <- x$extents
+  lv <- c("Change from the previous extent", "Difference from the largest")
+  d <- rbind(data.frame(radius = t$radius_km, value = t$ks_step,
+                        series = lv[1]),
+             data.frame(radius = t$radius_km, value = t$ks_largest,
+                        series = lv[2]))
+  d <- d[!is.na(d$value), , drop = FALSE]
+  d$series <- factor(d$series, lv)
+  p <- ggplot2::ggplot(d, ggplot2::aes(.data$radius, .data$value,
+                                       colour = .data$series)) +
+    ggplot2::geom_line(data = t[!is.na(t$critical), , drop = FALSE],
+                       ggplot2::aes(.data$radius_km, .data$critical),
+                       inherit.aes = FALSE, linetype = "dashed",
+                       colour = "#8a8a86") +
+    ggplot2::geom_line(linewidth = 0.7) +
+    ggplot2::geom_point(size = 2) +
+    ggplot2::scale_colour_manual(values = stats::setNames(
+      c("#1b9e77", "#7570b3"), lv), name = NULL) +
+    ggplot2::labs(x = "Radius around the centre of the records (km)",
+                  y = "Largest Kolmogorov-Smirnov distance",
+                  title = "Environment of growing extents",
+                  subtitle = paste0(
+                    "Dashed: 5% critical value",
+                    if (!is.null(x$minimal)) paste0(
+                      "; vertical: minimal extent (",
+                      round(x$minimal$radius_km), " km)") else "")) +
+    theme_enm(base_size, "#3a3a38", "#8a8a86") +
+    ggplot2::theme(legend.position = "bottom")
+  if (!is.null(x$minimal)) {
+    p <- p + ggplot2::geom_vline(xintercept = x$minimal$radius_km,
+                                 colour = "#d95f02")
+  }
+  p
 }

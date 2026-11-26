@@ -65,7 +65,9 @@ azimuthal equal-area centred on the data (polar for circumpolar data).}
 a table.}
 
 \item{...}{Arguments passed to \code{\link[=delimit_m]{delimit_m()}} for every scenario (e.g.
-\code{add}, \code{exclude}, \code{extent}, \code{link_km}).}
+\code{add}, \code{exclude}, \code{extent}, \code{link_km}). A scenario with
+\code{method = "simulation"} needs \code{env} (and optionally \code{simulation}) in its
+own list.}
 }
 \value{
 An object of class \code{m_scenarios}: a list with \code{areas} (the
@@ -75,8 +77,17 @@ An object of class \code{m_scenarios}: a list with \code{areas} (the
 Builds several M variants from the same records (thinning and linking
 distance are computed once) and compares them: area, share of records
 inside (per \code{group}), and overlap with a reference scenario (share of this
-scenario inside the reference, and the Jaccard index). Use it to show how
-sensitive M is to the method, as a supplement to the chosen M.
+scenario inside the reference, and the Jaccard index).
+}
+\details{
+\strong{Use it by default, not as an optional check.} The choice of
+calibration area was the most influential factor in simulations of model
+accuracy, explaining half of its variance, more than regularisation,
+collinearity treatment and spatial thinning together (Luna et al. 2024).
+Comparing several delimitations (geometric, simulated with
+\code{method = "simulation"}, and the minimal extent of \code{\link[=m_minimal]{m_minimal()}}) and
+reporting how much they differ is therefore part of choosing M, not a
+supplement to it.
 }
 \examples{
 sim <- simulate_enm_data(seed = 1, n_presence = 150)
@@ -87,4 +98,10 @@ sc <- m_scenarios(sim$presence, link_km = 120, thin_km = 5,
                                                     buffer_km = 50)))
 sc$comparison
 plot_m_area(sc)
+}
+\references{
+Luna, S., Pena-Peniche, A., Mendoza-Alfaro, R. (2024)
+Species distribution model accuracy is strongly influenced by the
+choice of calibration area. \emph{Biodiversity Informatics} 18, 43-55.
+\doi{10.17161/bi.v18i.22655}
 }

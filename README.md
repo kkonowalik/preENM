@@ -34,7 +34,7 @@ step can be used on its own.
 | | Section | Step | Functions |
 |---|---|---|---|
 | Before | [1](#1-point-filtering) | **Name matching and point filtering** (especially GBIF) | `read_gbif()`, `match_names()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
-| Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()` (incl. spatially adaptive buffers), `m_scenarios()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
+| Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()` (incl. spatially adaptive buffers and simulated dispersal), `m_scenarios()` (the default practice), `m_simulate()`, `m_minimal()`, `m_availability()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
 | Before | [4](#4-computing-derived-climate-variables) | **Derived climate variables** (25 indices of water balance, heat, cold, season and light; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
 | Before | [5](#5-checks-before-modelling) | **Checks** (sample size, record years vs climate period) | `check_sample_size()`, `match_climate_period()` |
@@ -212,6 +212,7 @@ patch.
 | `"cluster_hull"` | convex (or concave, `hull_ratio < 1`) hull of each cluster linked at L: fills hollows inside a cluster automatically |
 | `"convex_hull"` | one convex hull around all records: the most generous M |
 | `"buffer"` | buffers of fixed radius (`buffer_km`), e.g. as a reference |
+| `"simulation"` | dispersal simulated from the records over the landscape (`env`), with a niche ellipsoid, a dispersal kernel and optional barriers (Machado-Stredel et al. 2021, *Frontiers of Biogeography* 13, e48814; `m_simulate()`): conceptually closest to the definition of M |
 | `"adaptive"` | spatially adaptive buffers for unevenly surveyed areas (Barbosa 2026, *Biodiversity Informatics* 20): each cluster linked at L buffered by the mean distance between its records, isolated records by a small circle (`adaptive_min_km`), so unsurveyed land is not pulled into M; generous for one large, well-surveyed cluster |
 
 **Room for expert judgement.** The automatic M can leave out areas the
@@ -263,6 +264,59 @@ env_m <- crop_to_m(env, m)               # predictors clipped to M
 The example above uses simulated records with a hollow between two arms of the
 range. The default Delaunay M leaves the hollow out; an expert polygon or a
 cluster hull includes it.
+
+**Compare several M by default.** The calibration area was the most
+influential choice in simulations of model accuracy, explaining half of its
+variance, more than regularisation, collinearity treatment and spatial
+thinning together (Luna et al. 2024, *Biodiversity Informatics* 18, 43-55).
+Treat `m_scenarios()` as part of choosing M, not as an optional check, and
+report how much the candidates differ.
+
+**M by simulated dispersal.** `m_simulate()` (or `delimit_m(method =
+"simulation", env = env)`) follows Machado-Stredel et al. (2021): a niche
+ellipsoid on the first principal components of the layers decides where
+dispersers can establish; from random halves of the records, dispersers
+move over `n_events` steps with a normal kernel (`kernel_sd` cells), and
+the cells reached most often, without the 5% least accessed, form M. Cells
+without values and `barrier` polygons cannot be crossed, so M stops at a
+barrier wider than the kernel allows; the cells of all records are always
+added. The grid is aggregated on disk when it is very large, and only the
+stable-climate version of the method is implemented.
+
+```r
+ms <- m_simulate(occ, env_region, barrier = "mountain_ranges.gpkg",
+                 kernel_sd = 2, n_events = 30)
+ms; plot(ms)
+sc <- m_scenarios(occ, scenarios = list(
+  delaunay = list(),
+  simulated = list(method = "simulation", env = env_region,
+                   simulation = list(kernel_sd = 2, n_events = 30))))
+```
+
+**Minimal background area.** `m_minimal()` grows circles around the centre
+of the records in steps of records included, then beyond the farthest one,
+as in MinBAR (Rotllan-Puig & Traveset 2021, *Ecological Modelling* 439,
+109353), but asks a model-free question: from which extent on does the
+available environment stop changing? Consecutive extents count as stable
+when their environments cannot be told apart (largest Kolmogorov-Smirnov
+distance over the layers below its 5% critical value) for two steps. The
+stable extent is a lower bound to compare with the other delimitations; a
+continental gradient may never stabilise, and the printout then says so.
+
+**Is the environment of M offered evenly?** Uneven availability of climates
+inside the calibration area biases the estimated niche (Jimenez & Soberon
+2022, *Ecological Modelling* 464, 109823). `m_availability()` (or
+`m_report(m, env = env)`) is the continuous analogue of `m_class_shares()`:
+for each predictor it cuts the records' range into bins, compares the share
+of M's cells in each with an even spread, and flags variables with a large
+thinly represented part, gaps, or low evenness. Read their response curves
+with care, or consider a background stratified in environmental space.
+
+```r
+av <- m_availability(env, occ, m = m)
+av                                   # flagged predictors, in plain words
+plot_m_availability(av)
+```
 
 ### 3. Cutting raster files to M
 

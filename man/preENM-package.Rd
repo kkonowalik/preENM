@@ -14,7 +14,11 @@ local backbone (accepted name, rank, synonyms, fuzzy matches).
 \code{\link[=filter_layers]{filter_layers()}}: rule-based filtering of occurrence records,
 including tests of the names.
 \item \code{\link[=delimit_m]{delimit_m()}}, \code{\link[=linking_distance]{linking_distance()}}, \code{\link[=m_scenarios]{m_scenarios()}}, \code{\link[=plot_m_area]{plot_m_area()}},
-\code{\link[=write_m_area]{write_m_area()}}, \code{\link[=crop_to_m]{crop_to_m()}}: the accessible area (M).
+\code{\link[=write_m_area]{write_m_area()}}, \code{\link[=crop_to_m]{crop_to_m()}}: the accessible area (M); compare
+several with \code{\link[=m_scenarios]{m_scenarios()}} as a matter of course.
+\item \code{\link[=m_simulate]{m_simulate()}}: M by simulated dispersal; \code{\link[=m_minimal]{m_minimal()}}: the smallest
+extent whose environment has stabilised; \code{\link[=m_availability]{m_availability()}},
+\code{\link[=plot_m_availability]{plot_m_availability()}}: how evenly M offers the records' conditions.
 \item \code{\link[=crop_rasters]{crop_rasters()}}: cut folders of raster files to M, keeping values exact.
 \item \code{\link[=download_chelsa_monthly]{download_chelsa_monthly()}}, \code{\link[=download_chelsa_trace21k]{download_chelsa_trace21k()}},
 \code{\link[=monthly_files]{monthly_files()}}, \code{\link[=climate_indices]{climate_indices()}}: twenty-five derived climate

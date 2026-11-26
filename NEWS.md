@@ -1,3 +1,32 @@
+# preENM 2.39.0
+
+The calibration area beyond geometry (Machado-Stredel et al. 2021,
+*Frontiers of Biogeography* 13, e48814; Rotllan-Puig & Traveset 2021,
+*Ecological Modelling* 439, 109353; Jimenez & Soberon 2022, *Ecological
+Modelling* 464, 109823; Luna et al. 2024, *Biodiversity Informatics* 18,
+43-55):
+
+* `m_simulate()`: M by simulated dispersal from the records (stable-climate
+  version of Machado-Stredel et al.): a niche ellipsoid on the first
+  principal components, starting populations from random halves of the
+  records, dispersal with a normal kernel over `n_events`, colonisation of
+  suitable cells only, barriers that cannot be crossed, and the cells
+  accessed most often as M; the cells of all records are always added and
+  reported. Large grids are aggregated on disk. `print()` and `plot()`
+  methods. Also available as `delimit_m(method = "simulation", env = )`,
+  so `m_scenarios()` compares it with the geometric methods.
+* `m_minimal()`: circles growing around the centre of the records in steps
+  of records included (MinBAR), and the first extent from which the
+  available environment no longer changes (consecutive extents not
+  distinguishable by a Kolmogorov-Smirnov test), without fitting models.
+  `print()` and `plot()` methods.
+* `m_availability()` and `plot_m_availability()`: per predictor, how much
+  of the records' range M offers evenly and how much thinly, with gaps and
+  evenness, flagging variables for which M gives a distorted view of
+  availability; `m_report(env = )` attaches it.
+* The documentation and README recommend `m_scenarios()` as the default
+  practice for choosing M.
+
 # preENM 2.38.0
 
 Bias-correction decision support (Lamboley & Fourcade 2024, *Journal of

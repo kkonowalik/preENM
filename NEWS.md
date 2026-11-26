@@ -1,3 +1,25 @@
+# preENM 2.38.0
+
+Bias-correction decision support (Lamboley & Fourcade 2024, *Journal of
+Biogeography* 51, 1783-1794; Ten Caten & Dallas 2023, *Ecosphere* 14,
+e4703; Inman et al. 2021, *Ecosphere* 12, e03422; Baker et al. 2024,
+*Diversity and Distributions* 30, e13802):
+
+* `bias_sensitivity()`: applies a grid of corrections (no thinning, one
+  record per cell, spatial filtering at several distances, environmental
+  thinning at several bin widths; background strategies and sizes) and
+  reports how each changes the data, without fitting a model: records kept,
+  coverage of the environmental bins of M and of the records' own bins,
+  the coverage of random subsets of the same size (is thinning better than
+  random removal?), Clark-Evans ratio, range kept and gaps to the limits of
+  M (as `niche_truncation()`), shift from the uncorrected records, and for
+  backgrounds their coverage, shift from uniform and overlap with the
+  records. The printout names the choices that change the design most and
+  least, and the thinning designs that leave the niche intact.
+* `plot_bias_sensitivity()`: the designs on any two of these measures.
+* Internal: the environmental binning of `background_sufficiency()` is
+  shared with `bias_sensitivity()`.
+
 # preENM 2.37.0
 
 Target-group background, background sufficiency and adaptive M (Barber et

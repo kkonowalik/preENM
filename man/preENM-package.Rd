@@ -61,6 +61,8 @@ and target-group records from GBIF with \code{\link[=gbif_effort_sql]{gbif_effor
 \code{\link[=gbif_effort_rasters]{gbif_effort_rasters()}}.
 \item \code{\link[=background_sufficiency]{background_sufficiency()}}, \code{\link[=plot_background_sufficiency]{plot_background_sufficiency()}}: how many
 background points represent the environment of M.
+\item \code{\link[=bias_sensitivity]{bias_sensitivity()}}, \code{\link[=plot_bias_sensitivity]{plot_bias_sensitivity()}}: how thinning and
+background choices change the data design (no model is fitted).
 \item \code{\link[=download_neotoma]{download_neotoma()}}, \code{\link[=neotoma_records]{neotoma_records()}}, \code{\link[=fossil_site_bins]{fossil_site_bins()}},
 \code{\link[=site_bin_slices]{site_bin_slices()}}: dated fossil records for \code{\link[=temporal_validation]{temporal_validation()}}.
 }

@@ -54,6 +54,8 @@
 #'   [gbif_effort_rasters()].
 #' * [background_sufficiency()], [plot_background_sufficiency()]: how many
 #'   background points represent the environment of M.
+#' * [bias_sensitivity()], [plot_bias_sensitivity()]: how thinning and
+#'   background choices change the data design (no model is fitted).
 #' * [download_neotoma()], [neotoma_records()], [fossil_site_bins()],
 #'   [site_bin_slices()]: dated fossil records for [temporal_validation()].
 #'

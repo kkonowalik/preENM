@@ -42,30 +42,31 @@ step can be used on its own.
 | Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()` (with `data_type` per source), `thin_by_cell()`, `sample_background()` |
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort**, target-group background, how many background points | `sample_background(method = ...)`, `gbif_effort_sql()`, `gbif_target_group_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()`, `background_sufficiency()`, `plot_background_sufficiency()` |
-| Before | [10](#10-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()`, `classify_points()`, `unfilled_records()` |
-| Before | [11](#11-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
-| Before | [12](#12-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
-| Before | [13](#13-does-the-design-depend-on-the-grain) | **Grain sensitivity** (records kept, records too uncertain, correlation structure and the selected variable set at coarser grains) | `grain_sensitivity()`, `plot_grain_sensitivity()`, `write_grain_sensitivity()` |
-| Before | [14](#14-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
-| Before | [15](#15-preparing-data-for-integrated-models) | **Data for integrated SDMs** (presence-only, presence-absence and count datasets in the input structure of intSDM, PointedSDMs or biomod2) | `merge_occurrences(data_type = )`, `export_integrated()`, `write_integrated()` |
-| After | [16](#16-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
-| After | [16](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
-| After | [16](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
-| After | [16](#response-curves-are-they-ecologically-plausible) | **Plausibility of response curves** (shape, turning points, rising edges, agreement with records) | `response_check()`, `plot_response_check()` |
-| After | [19](#prediction-scales-0-1-0-100-0-1000) | **Prediction scales** checked per model, 0-100 and 0-1000 rescaled to 0-1 | `rescale = TRUE` in `evaluate_models()`, `ensemble_models()`, ... |
-| After | [20](#20-how-the-selection-works) | **How the selection works** (Pareto front, compromise distance, bootstrap robustness) | `pareto_rank()` |
-| After | [21](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
-| After | [21](#fossil-temporal-validation) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
-| After | [21](#ensembles-and-disagreement) | **Ensemble of the selected models and the disagreement between them** | `ensemble_models()`, `plot_ensemble()` |
-| After | [21](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
-| After | [22](#22-range-metrics-for-conservation-assessment) | **Range metrics** (EOO, AOO, locations, patches, fragmentation) under each threshold rule, change between projections, IUCN thresholds | `range_metrics()`, `plot_range_metrics()`, `write_range_metrics()` |
-| After | [23](#23-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
-| After | [24](#24-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
-| After | [25](#25-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
-| After | [25](#spread-due-to-coordinate-error) | **Spread due to coordinate error** (models fitted to jittered replicates), compared with the disagreement between models | `coordinate_spread()`, `plot_coordinate_spread()` |
-| After | [26](#26-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `taxon_complexity()`, `plot_ignorance()` |
-| After | [27](#27-how-different-are-the-niches-of-two-groups) | **Niche overlap** between species, lineages or cytotypes (D, I, breadth, expansion/unfilling, equivalency and similarity tests) and its sensitivity to methodological choices | `niche_overlap()`, `overlap_scenarios()`, `plot_niche_overlap()`, `prediction_overlap()` |
-| After | [28](#28-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
+| Before | [10](#10-which-bias-correction-sensitivity-of-the-data-design) | **Bias-correction sensitivity** (thinning method and radius, background strategy and size: records kept, environmental coverage against random removal, spatial clustering, niche kept, background coverage and overlap) | `bias_sensitivity()`, `plot_bias_sensitivity()` |
+| Before | [11](#11-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()`, `classify_points()`, `unfilled_records()` |
+| Before | [12](#12-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
+| Before | [13](#13-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
+| Before | [14](#14-does-the-design-depend-on-the-grain) | **Grain sensitivity** (records kept, records too uncertain, correlation structure and the selected variable set at coarser grains) | `grain_sensitivity()`, `plot_grain_sensitivity()`, `write_grain_sensitivity()` |
+| Before | [15](#15-mapping-where-a-projection-extrapolates) | **Extrapolation risk of projections** (ExDet, MOP; disappearing and new conditions) | `extrapolation_risk()`, `environment_shift()` |
+| Before | [16](#16-preparing-data-for-integrated-models) | **Data for integrated SDMs** (presence-only, presence-absence and count datasets in the input structure of intSDM, PointedSDMs or biomod2) | `merge_occurrences(data_type = )`, `export_integrated()`, `write_integrated()` |
+| After | [17](#17-model-evaluation-and-selection) | **Model evaluation and selection** | `evaluate_models()`, `evaluate_cv()`, `suggest_block_size()`, `spatial_folds()`, `select_models()`, `plot_pareto()`, `plot_selection()`, `plot_models()` |
+| After | [17](#calibration-can-the-predictions-be-read-as-probabilities) | **Calibration** (reliability diagram, calibration slope and intercept, Brier decomposition) | `calibration_curve()`, `brier_decompose()`, `brier_score()`, `plot_calibration()` |
+| After | [17](#the-boyce-index-with-few-presences) | **Boyce index with few presences** (smoothed P/E curve, bootstrap interval) | `boyce_index(smooth = , n_boot = )`, `plot_boyce()` |
+| After | [17](#response-curves-are-they-ecologically-plausible) | **Plausibility of response curves** (shape, turning points, rising edges, agreement with records) | `response_check()`, `plot_response_check()` |
+| After | [20](#prediction-scales-0-1-0-100-0-1000) | **Prediction scales** checked per model, 0-100 and 0-1000 rescaled to 0-1 | `rescale = TRUE` in `evaluate_models()`, `ensemble_models()`, ... |
+| After | [21](#21-how-the-selection-works) | **How the selection works** (Pareto front, compromise distance, bootstrap robustness) | `pareto_rank()` |
+| After | [22](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias) | **Auditing cross-validation folds** (leakage, spatial and environmental separation, spatial sorting bias), environmental folds | `fold_report()`, `plot_folds()`, `environmental_folds()`, `spatial_sorting_bias()` |
+| After | [22](#fossil-temporal-validation) | **Validation with fossil records** (hindcasts) | `temporal_validation()`, `download_neotoma()`, `neotoma_records()`, `calibrate_radiocarbon()`, `fossil_site_bins()`, `site_bin_slices()` |
+| After | [22](#ensembles-and-disagreement) | **Ensemble of the selected models and the disagreement between them** | `ensemble_models()`, `plot_ensemble()` |
+| After | [22](#thresholds-how-much-does-the-mapped-range-depend-on-the-rule) | **Thresholds under several rules** and the cells on which they agree | `thresholds()`, `threshold_agreement()`, `plot_thresholds()` |
+| After | [23](#23-range-metrics-for-conservation-assessment) | **Range metrics** (EOO, AOO, locations, patches, fragmentation) under each threshold rule, change between projections, IUCN thresholds | `range_metrics()`, `plot_range_metrics()`, `write_range_metrics()` |
+| After | [24](#24-testing-the-models-against-sampling-bias) | **Significance against sampling bias** | `null_model_test()` |
+| After | [25](#25-is-a-projected-change-driven-by-the-data-or-by-the-study-design) | **Design bias of projections** (models of random points, with the sampling bias of the records) | `null_occurrences()`, `transfer_bias_test()`, `plot_transfer_bias()` |
+| After | [26](#26-which-source-of-uncertainty-dominates-a-set-of-projections) | **Partitioning projection uncertainty** (GCM, scenario, algorithm, run; dominant source per cell) | `partition_uncertainty()`, `plot_partition()` |
+| After | [26](#spread-due-to-coordinate-error) | **Spread due to coordinate error** (models fitted to jittered replicates), compared with the disagreement between models | `coordinate_spread()`, `plot_coordinate_spread()` |
+| After | [27](#27-where-are-the-data-too-sparse-to-trust-a-prediction) | **Maps of biogeographical ignorance** from recording effort, joint map with suitability | `ignorance_map()`, `record_ignorance()`, `taxon_complexity()`, `plot_ignorance()` |
+| After | [28](#28-how-different-are-the-niches-of-two-groups) | **Niche overlap** between species, lineages or cytotypes (D, I, breadth, expansion/unfilling, equivalency and similarity tests) and its sensitivity to methodological choices | `niche_overlap()`, `overlap_scenarios()`, `plot_niche_overlap()`, `prediction_overlap()` |
+| After | [29](#29-reporting-with-odmap) | **Reporting** (ODMAP protocol filled from the workflow) | `odmap_table()` |
 
 Inputs can be GeoTIFF paths, `terra` rasters, CSV files or `sf` objects.
 Points are re-projected to each raster automatically.
@@ -184,7 +185,7 @@ settings <- filter_settings(
 `data_type` in `merge_occurrences()`), give `filter_occurrences()` a list
 of settings named by data type, e.g. `list(presence_only =
 filter_settings("strict"), presence_absence = filter_settings("lenient",
-drop_tests = "coarse_decimals"))`; see [section 15](#15-preparing-data-for-integrated-models).
+drop_tests = "coarse_decimals"))`; see [section 16](#16-preparing-data-for-integrated-models).
 
 **Relation to CoordinateCleaner.** Its standard tests are called, not
 re-implemented, so please also cite Zizka et al. (2019), *Methods in Ecology
@@ -531,7 +532,7 @@ do, the replicates are environmentally the same dataset and propagating is
 not worth the model runs. `propagate = "variable"` moves only the records
 that `uncertainty_environment()` marks as `"propagate"`, keeping the others
 where they are. After modelling, `coordinate_spread()` turns the replicate
-predictions into the spread due to coordinate error (section 25 below).
+predictions into the spread due to coordinate error (section 26 below).
 Coordinates can also be optimised within the radius against model
 performance (Wu et al. 2026, *Environmental Modelling & Software* 204,
 107096); that needs the model and is left to the modelling software.
@@ -717,7 +718,51 @@ in simulations the most accurate current predictions came from about
 number mattered little for projections to future climates
 (Rausell-Moreno et al. 2025, *Ecological Modelling* 507, 111177).
 
-### 10. Checking that the niche is not truncated by M
+### 10. Which bias correction? Sensitivity of the data design
+
+Sections 7 to 9 offer several corrections of sampling bias, and none can
+be chosen from first principles: there is no optimal spatial filtering
+distance (Lamboley & Fourcade 2024, *Journal of Biogeography* 51,
+1783-1794), thinned records often did no better than the same number of
+records removed at random (Ten Caten & Dallas 2023, *Ecosphere* 14, e4703),
+and the best correction depends on the structure of the bias and can make
+predictions worse for narrow niches (Inman et al. 2021, *Ecosphere* 12,
+e03422). Without independent test data, internal evaluation is a poor guide
+to whether a correction helps, so present models with and without
+correction (Baker et al. 2024, *Diversity and Distributions* 30, e13802).
+
+`bias_sensitivity()` makes the choice transparent on the data side. It
+applies a grid of corrections and reports how each changes the design; it
+fits no model and reports no predictive performance.
+
+```r
+bs <- bias_sensitivity(
+  occ, env_m,
+  thin = c("none", "cell", "distance", "environment"),
+  thin_km = c(5, 10, 25, 50), env_mult = c(1, 2),
+  background = list(uniform = list(),
+                    target  = list(method = "target_group", target = tg)),
+  bg_n = c(1000, 10000))
+bs                                        # IN SHORT: what matters, what does not
+plot_bias_sensitivity(bs, "n", "env_coverage")
+plot_bias_sensitivity(bs, "bg_coverage", "overlap")
+```
+
+![Records kept against the environmental coverage of M for each thinning design](man/figures/bias_sensitivity.png)
+
+For each thinning design: records kept; the share of the environmental bins
+of M that hold a record and of the records' own bins still occupied; the
+same coverage for random subsets of the same size (does the thinning keep
+more environment than losing records at random?); the Clark-Evans ratio of
+nearest-neighbour distances; the range of each layer still spanned and the
+gaps to the limits of M (as in `niche_truncation()`); and the shift from
+the uncorrected records in environmental space. For each background: its
+coverage of M, its shift from a uniform background, and its overlap with
+the records. The printout names the choices that change the design most
+and those that barely matter, and the thinning designs that leave the niche
+intact.
+
+### 11. Checking that the niche is not truncated by M
 
 A model learns only the part of a species' response that the calibration
 area contains. If the records are still frequent where the conditions of M
@@ -875,7 +920,7 @@ points that land far beyond the whole range in the niche space, or
 variables with a median far from that of the records (e.g. Kelvin against
 degrees Celsius), give a warning.
 
-### 11. Selecting predictor variables across periods and regions
+### 12. Selecting predictor variables across periods and regions
 
 Collinearity between predictors can change through time. A set that is
 uncorrelated today may be collinear at the Last Glacial Maximum or in 2070,
@@ -1058,7 +1103,7 @@ then enters the screen, and `novelty` reports the worst one.
 The figures above use simulated climate (thirteen layers in five groups
 of collinear variables, three periods, six regions).
 
-### 12. Are the selected predictors better than random variables?
+### 13. Are the selected predictors better than random variables?
 
 A set of uncorrelated predictors can still hold layers that mean nothing to
 the species. The test of Konowalik (2022) answers this by modelling the
@@ -1139,7 +1184,7 @@ those, make new random variables, fit again, and repeat until every
 predictor is kept, because importance is shared among predictors and
 changes when one is removed.
 
-### 13. Does the design depend on the grain?
+### 14. Does the design depend on the grain?
 
 The grain (cell size) of a model is usually whatever resolution the rasters
 happen to have, yet spatial scale and resolution can change the
@@ -1157,7 +1202,7 @@ grains and reports how the design changes. At each grain it:
 3. counts the records whose coordinate uncertainty spans too much of the
    niche at that grain (`uncertainty_environment()`, section 6);
 4. samples the layers and runs the variable selection
-   (`sample_environment()`, `select_variables()`, section 11).
+   (`sample_environment()`, `select_variables()`, section 12).
 
 ```r
 g <- grain_sensitivity(records, list(present = now, LGM = lgm),
@@ -1187,7 +1232,7 @@ responds) and the data (the positional accuracy of the records); the stable
 range is the room within which to make it. Treat "stable" (by default the
 same set) as a rule of thumb, not a published limit.
 
-### 14. Mapping where a projection extrapolates
+### 15. Mapping where a projection extrapolates
 
 `niche_truncation()` answers per variable; `extrapolation_risk()` maps it,
 so that predictions in novel conditions can be masked or read with care:
@@ -1223,9 +1268,9 @@ environment_shift(env_m, list(period_2 = env_p2, period_3 = env_p3))
 The disappearing share matters as much as the new one: a model can only
 call suitable what it saw during training, so when present conditions
 disappear, most methods predict a decline for *any* species
-([section 24](#24-is-a-projected-change-driven-by-the-data-or-by-the-study-design)).
+([section 25](#25-is-a-projected-change-driven-by-the-data-or-by-the-study-design)).
 
-### 15. Preparing data for integrated models
+### 16. Preparing data for integrated models
 
 Integrated species distribution models combine presence-only records,
 presence-absence surveys and counts in one model, each with its own
@@ -1292,7 +1337,7 @@ absence and an opportunistic presence in one cell are both information.
 
 Fit your models with any software, then evaluate, select and report them.
 
-### 16. Model evaluation and selection
+### 17. Model evaluation and selection
 
 The model-selection tools implement the approach of:
 
@@ -1474,7 +1519,7 @@ it the data cover (Austin 2002, *Ecological Modelling* 157, 101-118):
 |---|---|
 | Direct, acting on the physiology (temperature, pH) | a bell: highest at the optimum, falling to zero beyond the tolerance; narrow or broad, skewed, with a peak or a plateau (Fiorentino et al. 2025) |
 | Resource (water, nutrients) | a rise that levels off (plateau) |
-| Covered only on one side of the niche | monotonic, **still rising at the edge**: a truncated niche, not a wrong model; the response beyond the edge is unknown (see [section 10](#10-checking-that-the-niche-is-not-truncated-by-m)) |
+| Covered only on one side of the niche | monotonic, **still rising at the edge**: a truncated niche, not a wrong model; the response beyond the edge is unknown (see [section 11](#11-checking-that-the-niche-is-not-truncated-by-m)) |
 | Indirect (elevation, latitude) | any shape; the curve says little about the species |
 | Any | irregular curves and U-shapes are rarely plausible: the model fits noise or follows where records happen to lie |
 
@@ -1488,7 +1533,7 @@ evenly in environmental space (`sample_background(method = "envstrat")`)
 gives response curves closer to the species' true response (Broussin et al.
 2024, *Ecological Modelling* 498, 110865).
 
-### 17. Quick start: model selection with example data
+### 18. Quick start: model selection with example data
 
 ```r
 library(preENM)
@@ -1529,7 +1574,7 @@ AUC alone cannot separate them. MAE can. `Maxent_LQ` is on the Pareto front in
 `Maxent_H_rm4` and `RandomForest` reach the front only about a third of the
 time.
 
-### 18. Choosing which metrics to compare
+### 19. Choosing which metrics to compare
 
 AUC vs MAE is the default, but any metric pair, or more than two metrics, can
 be compared. Give each criterion a direction: `"max"` (higher is better),
@@ -1570,7 +1615,7 @@ metric is any `function(obs, pred)` that returns one number (`obs` is 0/1,
 `criteria`. The bootstrap gives confidence intervals and `p_pareto` for
 whichever criteria you choose.
 
-### 19. Using your own data
+### 20. Using your own data
 
 You need three things:
 
@@ -1635,14 +1680,14 @@ values above 1000 such as raw Maxent output) are left as they are, with a
 warning: use probability-like output instead. A model on 0-100 that never
 exceeds 1 cannot be recognised, so check the message.
 
-### 20. How the selection works
+### 21. How the selection works
 
 1. **Metrics.** For each model, compute **AUC** (Mann–Whitney formulation,
    higher is better), **MAE** (`mean(|obs − pred|)`, lower is better),
    **MAEbal** (MAE averaged over presences and background, lower is better),
    **bias** (`mean(obs − pred)`, closer to 0 is better), **TSS** and the
    **Boyce index**. AUC and MAE are the default criteria; see
-   [Choosing which metrics to compare](#18-choosing-which-metrics-to-compare).
+   [Choosing which metrics to compare](#19-choosing-which-metrics-to-compare).
 2. **Pareto front.** Model A *dominates* model B if A is at least as good on
    every criterion (by default AUC and MAE) and strictly better on one.
    Models that no other model dominates form the **Pareto front**. These are
@@ -1672,7 +1717,7 @@ pareto_rank(my_table, maximize = c("AUC", "TSS"), minimize = c("MAE", "AICc"),
             zero = "bias")
 ```
 
-### 21. Full workflow: cross-validation, fossil validation, selection, ensemble
+### 22. Full workflow: cross-validation, fossil validation, selection, ensemble
 
 A typical workflow for choosing the algorithms of an ensemble, building it
 and mapping it. The subsections below follow the steps in order.
@@ -1686,7 +1731,7 @@ and mapping it. The subsections below follow the steps in order.
    instead, to test transfer to new conditions. **Audit the folds** with
    `fold_report()` (see [Auditing the folds](#auditing-the-folds-leakage-separation-and-spatial-sorting-bias)
    below), and `range_metrics()` the extent, occupancy and structure of the
-   range under each rule ([section 22](#22-range-metrics-for-conservation-assessment)).
+   range under each rule ([section 23](#23-range-metrics-for-conservation-assessment)).
 2. **Fit models** on all folds but one, for each algorithm, fold and,
    optionally, several background sets. Predict on the held-out fold.
 3. **Hold-out metrics.** `evaluate_cv()` computes AUC, MAE, bias, TSS and the
@@ -1703,7 +1748,7 @@ and mapping it. The subsections below follow the steps in order.
    *single* models, and a model can reach it through one criterion alone,
    e.g. the best present-day fit with weak hindcasts. How the Pareto front
    and the ranking work is explained in
-   [section 20](#20-how-the-selection-works).
+   [section 21](#21-how-the-selection-works).
 6. **Plots.** `plot(sel)` draws the full view and a zoom on the best
    models; `plot_models()` draws any two or three metrics, static or
    interactive (see [Plotting any metrics, zoom and 3-D](#plotting-any-metrics-zoom-and-3-d)).
@@ -2081,7 +2126,7 @@ cells suitable under all rules are the robust core of the range, those
 suitable under at least one its widest extent. Restrict the set with
 `rules`, e.g. `thresholds(tab, rules = c("maxSSS", "p10"))`.
 
-### 22. Range metrics for conservation assessment
+### 23. Range metrics for conservation assessment
 
 A suitability map is rarely the final product: an assessment needs the
 measures of the range derived from it, the quantities of the IUCN Red List
@@ -2130,7 +2175,7 @@ write_range_metrics(rm, "range_metrics")
   first (e.g. to 1 km); a noisy map of 4 million cells takes about half a
   minute per rule.
 
-### 23. Testing the models against sampling bias
+### 24. Testing the models against sampling bias
 
 A model can reach a high AUC by predicting where people record.
 `null_model_test()` replaces the presences by random locations drawn in
@@ -2150,7 +2195,7 @@ draws are uniform. The models are not refitted, so it works with
 predictions of any software; it tests the locations, not the flexibility
 of the algorithm, unlike the null models of Raes and ter Steege (2007).
 
-### 24. Is a projected change driven by the data or by the study design?
+### 25. Is a projected change driven by the data or by the study design?
 
 A model projected to another period can predict a decline (or an increase)
 that has little to do with the species. Think of a scale that shows 2 kg
@@ -2263,7 +2308,7 @@ design-driven result is not necessarily wrong (if the whole area becomes
 unsuitable, every model says so), but it does not come from your records
 and needs other evidence. Use 99 or more null models for stable intervals.
 
-### 25. Which source of uncertainty dominates a set of projections?
+### 26. Which source of uncertainty dominates a set of projections?
 
 A realistic set of projections varies at once in climate model (GCM),
 scenario, algorithm and cross-validation run, and it is hard to see which
@@ -2317,7 +2362,7 @@ cs                                       # IN SHORT: how much, and compared with
 plot_coordinate_spread(cs, file = "coordinate_spread.pdf")
 ```
 
-### 26. Where are the data too sparse to trust a prediction?
+### 27. Where are the data too sparse to trust a prediction?
 
 Where few records of any species have been made, the absence of records of
 your species says little, and a prediction there rests on extrapolation.
@@ -2393,7 +2438,7 @@ rescaled to 0-1, combined as space^0.5 x environment^0.5), so records from
 similar environments inform an empty cell more; cells with records of the
 focal species carry half of the weight, as in Tessarolo et al.
 
-### 27. How different are the niches of two groups?
+### 28. How different are the niches of two groups?
 
 Comparing the niches of species, lineages, cytotypes or native and
 introduced ranges follows Broennimann et al. (2012, *Global Ecology and
@@ -2466,7 +2511,7 @@ os <- overlap_scenarios(records, env, group = "cytotype",
 os                                     # robust, or which choice flips it
 ```
 
-### 28. Reporting with ODMAP
+### 29. Reporting with ODMAP
 
 `odmap_table()` writes the entries of the ODMAP protocol (Zurell et al.
 2020) that your workflow determines, from the objects themselves, and

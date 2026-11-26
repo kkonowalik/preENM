@@ -99,27 +99,12 @@ background_sufficiency <- function(raster,
   }
   R <- env_at_cells(r, ref$cell)
   vars <- colnames(R)
-  lv <- if (is.null(log_vars)) default_log_vars(vars) else
-    intersect(log_vars, vars)
-  tf <- function(M) log_tf(pmax_cols(M, lv), lv)
-  okr <- stats::complete.cases(R)
-  R <- R[okr, , drop = FALSE]
-  pc <- stats::prcomp(tf(R), scale. = TRUE)
-  ve <- pc$sdev^2 / sum(pc$sdev^2)
-  k <- if (!is.null(env_axes)) min(env_axes, ncol(R)) else
-    min(3, which(cumsum(ve) >= env_cumvar - 1e-9)[1])
-  nb <- max(4, round(total_bins^(1 / k)))
-  S <- pc$x[, seq_len(k), drop = FALSE]
-  brk <- lapply(seq_len(k), function(j) {
-    seq(min(S[, j]), max(S[, j]), length.out = nb + 1)
-  })
-  bin_of <- function(Sc) {
-    do.call(paste, lapply(seq_len(k), function(j) {
-      pmin(pmax(findInterval(Sc[, j], brk[[j]], rightmost.closed = TRUE),
-                1), nb)
-    }))
-  }
-  ref_bin <- bin_of(S)
+  R <- R[stats::complete.cases(R), , drop = FALSE]
+  sp <- env_space(R, total_bins, env_cumvar, env_axes, log_vars)
+  k <- sp$k
+  nb <- sp$nb
+  ve <- sp$ve
+  ref_bin <- sp$ref_bin
   ref_tab <- table(ref_bin)
   ref_share <- ref_tab / sum(ref_tab)
   ref_ecdf <- lapply(vars, function(v) stats::ecdf(R[, v]))
@@ -142,8 +127,7 @@ background_sufficiency <- function(raster,
     bg <- quiet(sample_background(r, n = n, seed = seed * 1000 + i, ...))
     B <- env_at_cells(r, bg$cell)
     B <- B[stats::complete.cases(B), , drop = FALSE]
-    Sb <- stats::predict(pc, tf(B))[, seq_len(k), drop = FALSE]
-    covered <- unique(bin_of(Sb))
+    covered <- unique(sp$bin_of(B))
     inb <- names(ref_tab) %in% covered
     rows[[length(rows) + 1]] <- data.frame(
       n = n, replicate = i, n_drawn = nrow(bg),
@@ -337,4 +321,38 @@ plot_background_sufficiency <- function(x, base_size = 11, file = NULL,
                     " percentage point(s) of the largest n")) +
     theme_enm(base_size, "#3a3a38", "#8a8a86") +
     ggplot2::theme(legend.position = "bottom")
+}
+
+# Environmental space of a reference sample (internal): a PCA of the layers
+# (precipitation amounts log-transformed) cut into about `total_bins`
+# equal-width bins on the first PCs (those explaining `cumvar`, at most 3,
+# or exactly `axes`). `bin_of()` gives the bin of any matrix of layer
+# values (outside the reference range: the outermost bin).
+env_space <- function(R, total_bins = 1000, cumvar = 0.95, axes = NULL,
+                      log_vars = NULL) {
+  vars <- colnames(R)
+  lv <- if (is.null(log_vars)) default_log_vars(vars) else
+    intersect(log_vars, vars)
+  tf <- function(M) log_tf(pmax_cols(M, lv), lv)
+  pc <- stats::prcomp(tf(R), scale. = TRUE)
+  ve <- pc$sdev^2 / sum(pc$sdev^2)
+  k <- if (!is.null(axes)) min(axes, ncol(R)) else
+    min(3, which(cumsum(ve) >= cumvar - 1e-9)[1])
+  nb <- max(4, round(total_bins^(1 / k)))
+  S <- pc$x[, seq_len(k), drop = FALSE]
+  brk <- lapply(seq_len(k), function(j) {
+    seq(min(S[, j]), max(S[, j]), length.out = nb + 1)
+  })
+  bin_scores <- function(Sc) {
+    do.call(paste, lapply(seq_len(k), function(j) {
+      pmin(pmax(findInterval(Sc[, j], brk[[j]], rightmost.closed = TRUE),
+                1), nb)
+    }))
+  }
+  bin_of <- function(X) {
+    X <- X[, vars, drop = FALSE]
+    bin_scores(stats::predict(pc, tf(X))[, seq_len(k), drop = FALSE])
+  }
+  list(bin_of = bin_of, ref_bin = bin_scores(S), k = k, nb = nb, ve = ve,
+       pca = pc)
 }

@@ -1,3 +1,40 @@
+# preENM 2.42.0
+
+Three additions to the predictor layer (Booth 2022, *Austral Ecology* 47,
+1506-1514; Schwager & Berg 2021, *Basic and Applied Ecology* 54, 1-13;
+Rodriguez-Rey & Jimenez-Valverde 2024, *Ecological Informatics* 79,
+102387):
+
+* `topo_indices()`: terrain predictors from an elevation raster: slope,
+  northness and eastness (0 on flat ground), Riley's ruggedness index,
+  topographic position at user-chosen radii in cells or km (`tpi_<r>`), its
+  scale-free form DEV (`dev_<r>`), the topographic wetness index with its
+  own D8 flow accumulation (upslope area from true cell areas, so correct
+  on longitude/latitude grids) and McCune & Keon's heat load index with
+  each cell's latitude and aspect folded by hemisphere. They form the
+  `terrain` group of `climate_index_names(table = TRUE)`.
+* Composite bioclimatic variables flagged: bio8, bio9, bio18 and bio19
+  combine temperature and precipitation over a quarter that switches
+  between neighbouring cells, which creates artefacts in some regions
+  (Booth 2022); `sri` and `synchronicity` share the problem.
+  `climate_index_names(table = TRUE)` gains `flag` and `source` columns;
+  `climate_index_names()` leaves the flagged variables out unless
+  `flagged = TRUE` and explains why; `select_variables()` warns when a
+  top-ranked set contains one. `climate_indices()` now also computes
+  bio1-bio19 and four smooth substitutes, `t_wet`, `t_dry`, `p_warm` and
+  `p_cold`, which weight every month by how wet, dry, warm or cold it is
+  instead of choosing a quarter. By default (`"all"`) it computes the
+  unflagged indices.
+* `climate_source_compare()`: samples two or more climate products at the
+  records and across M and reports per variable Lin's concordance (graded
+  after McBride 2005), Pearson and Spearman correlation, the offset and
+  RMSE, the overlapping index of the distributions, the range covered,
+  the Mantel correlation of the collinearity structure and the geographic
+  pattern of disagreement. `plot_climate_sources()` draws a summary, a map
+  of the standardised difference with the records and the largest
+  disagreements marked, a scatter against the reference and the
+  distributions; `write_climate_sources()` writes the tables.
+
 # preENM 2.41.0
 
 Acting on a truncated niche (Chevalier et al. 2021, *Ecological

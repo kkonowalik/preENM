@@ -2,7 +2,7 @@ Package: preENM
 Type: Package
 Title: Data Preparation and Model Selection for Ecological Niche and Species
     Distribution Models
-Version: 2.41.0
+Version: 2.42.0
 Authors@R:
     person("Kamil", "Konowalik", role = c("aut", "cre", "cph"),
            email = "kamil.konowalik@gmail.com")
@@ -30,9 +30,14 @@ Description: Tools for the steps around fitting ecological niche models /
     moisture deficit, aridity, heat stress, summer rain, heat-rain
     synchrony, growing degree days, frost, continentality, dry season,
     growing period, Emberger and Ellenberg quotients, Kira's warmth
-    and coldness indices, radiation and day length) from monthly
-    climatologies of the present, the future or the past, with download
-    of 'CHELSA' and 'CHELSA-TraCE21k' data for a region; selection of
+    and coldness indices, radiation and day length, the 19 bioclimatic
+    variables with the composite ones flagged and smooth substitutes) from
+    monthly climatologies of the present, the future or the past, with
+    download of 'CHELSA' and 'CHELSA-TraCE21k' data for a region; terrain
+    predictors from an elevation model (slope, northness, eastness,
+    ruggedness, topographic position at several radii, wetness and heat
+    load); comparison of climate products at the records and across the
+    accessible area before choosing one; selection of
     predictor variables uncorrelated in every period, scenario and region,
     ranked by transferability; sensitivity of records kept, coordinate
     uncertainty, correlation structure and the selected variables to the

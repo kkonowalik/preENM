@@ -28,7 +28,9 @@ precipitation: 12-layer \link[terra:SpatRaster-class]{terra::SpatRaster}s (Janua
 \item{tmean}{Monthly mean temperature; default \code{(tmax + tmin) / 2}.}
 
 \item{indices}{Which indices to compute: names of indices or of groups
-of them (see \code{\link[=climate_index_names]{climate_index_names()}}), or \code{"all"} (default).}
+of them (see \code{\link[=climate_index_names]{climate_index_names()}}), or \code{"all"} (default: every
+unflagged index from monthly data; a group brings its unflagged
+members, flagged ones are computed only by name).}
 
 \item{heat_threshold}{Temperature (degC) above which \code{heat_stress} sums.}
 
@@ -147,6 +149,18 @@ indices are strongly correlated with each other and with bioclim
 variables (e.g. \code{gdd} with bio1, \code{ellenberg} and \code{emberger} with
 \code{aridity}); let \code{\link[=select_variables]{select_variables()}} choose among them.
 
+\strong{Bioclimatic variables and smooth substitutes.} bio1 to bio19 follow
+the WorldClim definitions (quarters are any three consecutive months;
+bio4 is 100 x the SD of the monthly means, bio15 the CV of P + 1), so
+they match the other indices in grid and period. bio8, bio9, bio18,
+bio19, \code{sri} and \code{synchronicity} are flagged (see
+\code{\link[=climate_index_names]{climate_index_names()}}; Booth 2022) and computed only when asked by
+name. \code{t_wet} and \code{t_dry} are the mean temperature weighted by monthly
+precipitation and by dryness (max(P) - P); \code{p_warm} and \code{p_cold} are 3 x
+the mean precipitation weighted by warmth (T - min(T)) and coldness
+(max(T) - T), in mm per quarter. Without a season (equal weights of 0)
+they fall back to the plain mean.
+
 \strong{Units.} Temperatures must be in degC and precipitation in mm per
 month. CHELSA V2.1 stores temperature as K x 10 with a scale (0.1) and
 offset (-273.15) in the files, which terra applies when reading, so the
@@ -184,9 +198,17 @@ evapotranspiration. FAO Irrigation and Drainage Paper 56.
 Bagnouls, F., Gaussen, H. (1953) Saison seche et indice xerothermique.
 \emph{Bulletin de la Societe d'Histoire Naturelle de Toulouse} 88, 193-239.
 
+Booth, T.H. (2022) Checking bioclimatic variables that combine
+temperature and precipitation data before their use in species
+distribution models. \emph{Austral Ecology} 47, 1506-1514.
+\doi{10.1111/aec.13234}
+
 Bradshaw, W.E., Holzapfel, C.M. (2007) Evolution of animal
 photoperiodism. \emph{Annual Review of Ecology, Evolution, and Systematics}
 38, 1-25.
+
+Busby, J.R. (1991) BIOCLIM - a bioclimate analysis and prediction
+system. \emph{Plant Protection Quarterly} 6, 8-9.
 
 Daget, P. (1977) Le bioclimat mediterraneen: analyse des formes
 climatiques par le systeme d'Emberger. \emph{Vegetatio} 34, 87-103.
@@ -215,6 +237,11 @@ deficit. \emph{New Phytologist} 226, 1550-1566.
 Hargreaves, G.H., Samani, Z.A. (1985) Reference crop evapotranspiration
 from temperature. \emph{Applied Engineering in Agriculture} 1, 96-99.
 
+Hijmans, R.J., Cameron, S.E., Parra, J.L., Jones, P.G., Jarvis, A.
+(2005) Very high resolution interpolated climate surfaces for global
+land areas. \emph{International Journal of Climatology} 25, 1965-1978.
+\doi{10.1002/joc.1276}
+
 Karger, D.N. et al. (2017) Climatologies at high resolution for the
 earth's land surface areas. \emph{Scientific Data} 4, 170122.
 
@@ -227,6 +254,10 @@ perspective. \emph{Ecological Research} 6, 185-200.
 
 Koerner, C., Basler, D. (2010) Phenology under global warming. \emph{Science}
 327, 1461-1462.
+
+O'Donnell, M.S., Ignizio, D.A. (2012) Bioclimatic predictors for
+supporting ecological applications in the conterminous United States.
+U.S. Geological Survey Data Series 691. \doi{10.3133/ds691}
 
 Paruelo, J.M., Lauenroth, W.K. (1996) Relative abundance of plant
 functional types in grasslands and shrublands of North America.

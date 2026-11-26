@@ -40,7 +40,7 @@ metres. A projected CRS in metres or longitude/latitude.}
 }
 \value{
 A \code{SpatRaster} with one layer per index (and per radius for TPI
-and DEV), named as in \code{\link[=climate_index_table]{climate_index_table()}} (\verb{tpi_<r>}, \verb{dev_<r>},
+and DEV), named as in \code{climate_index_names(table = TRUE)} (\verb{tpi_<r>}, \verb{dev_<r>},
 with \code{r} followed by \code{km} when \code{radius_unit = "km"}).
 }
 \description{
@@ -51,7 +51,7 @@ topographic wetness index and the heat load index. They complement the
 climatic indices of \code{\link[=climate_indices]{climate_indices()}}: terrain controls the local
 microclimate, moisture and soil that coarse climate grids miss, and
 matters most for plants and for fine grains (Schwager & Berg 2021). They
-are listed in \code{\link[=climate_index_table]{climate_index_table()}} under the group \code{"terrain"}, so
+are listed in \code{climate_index_names(table = TRUE)} under the group \code{"terrain"}, so
 \code{climate_index_names("terrain")} gives their names and the layers can
 join any predictor stack for \code{\link[=sample_environment]{sample_environment()}} and
 \code{\link[=select_variables]{select_variables()}}.
@@ -149,6 +149,6 @@ Weiss, A.D. (2001) Topographic position and landforms analysis. Poster,
 ESRI User Conference, San Diego.
 }
 \seealso{
-\code{\link[=climate_indices]{climate_indices()}} for climatic indices; \code{\link[=climate_index_table]{climate_index_table()}}
+\code{\link[=climate_indices]{climate_indices()}} for climatic indices; \code{climate_index_names(table = TRUE)}
 for meanings and references.
 }

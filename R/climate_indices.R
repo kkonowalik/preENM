@@ -310,6 +310,18 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' variables (e.g. `gdd` with bio1, `ellenberg` and `emberger` with
 #' `aridity`); let [select_variables()] choose among them.
 #'
+#' **Bioclimatic variables and smooth substitutes.** bio1 to bio19 follow
+#' the WorldClim definitions (quarters are any three consecutive months;
+#' bio4 is 100 x the SD of the monthly means, bio15 the CV of P + 1), so
+#' they match the other indices in grid and period. bio8, bio9, bio18,
+#' bio19, `sri` and `synchronicity` are flagged (see
+#' [climate_index_names()]; Booth 2022) and computed only when asked by
+#' name. `t_wet` and `t_dry` are the mean temperature weighted by monthly
+#' precipitation and by dryness (max(P) - P); `p_warm` and `p_cold` are 3 x
+#' the mean precipitation weighted by warmth (T - min(T)) and coldness
+#' (max(T) - T), in mm per quarter. Without a season (equal weights of 0)
+#' they fall back to the plain mean.
+#'
 #' **Units.** Temperatures must be in degC and precipitation in mm per
 #' month. CHELSA V2.1 stores temperature as K x 10 with a scale (0.1) and
 #' offset (-273.15) in the files, which terra applies when reading, so the
@@ -328,7 +340,9 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'   12 file paths (e.g. from [monthly_files()]).
 #' @param tmean Monthly mean temperature; default `(tmax + tmin) / 2`.
 #' @param indices Which indices to compute: names of indices or of groups
-#'   of them (see [climate_index_names()]), or `"all"` (default).
+#'   of them (see [climate_index_names()]), or `"all"` (default: every
+#'   unflagged index from monthly data; a group brings its unflagged
+#'   members, flagged ones are computed only by name).
 #' @param heat_threshold Temperature (degC) above which `heat_stress` sums.
 #' @param gdd_base Base temperature (degC) of `gdd`, `lgp`, `ra_gs` and
 #'   the day-length indices of the growing season: 5 suits
@@ -350,9 +364,17 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' Bagnouls, F., Gaussen, H. (1953) Saison seche et indice xerothermique.
 #'   *Bulletin de la Societe d'Histoire Naturelle de Toulouse* 88, 193-239.
 #'
+#' Booth, T.H. (2022) Checking bioclimatic variables that combine
+#'   temperature and precipitation data before their use in species
+#'   distribution models. *Austral Ecology* 47, 1506-1514.
+#'   \doi{10.1111/aec.13234}
+#'
 #' Bradshaw, W.E., Holzapfel, C.M. (2007) Evolution of animal
 #'   photoperiodism. *Annual Review of Ecology, Evolution, and Systematics*
 #'   38, 1-25.
+#'
+#' Busby, J.R. (1991) BIOCLIM - a bioclimate analysis and prediction
+#'   system. *Plant Protection Quarterly* 6, 8-9.
 #'
 #' Daget, P. (1977) Le bioclimat mediterraneen: analyse des formes
 #'   climatiques par le systeme d'Emberger. *Vegetatio* 34, 87-103.
@@ -381,6 +403,11 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #' Hargreaves, G.H., Samani, Z.A. (1985) Reference crop evapotranspiration
 #'   from temperature. *Applied Engineering in Agriculture* 1, 96-99.
 #'
+#' Hijmans, R.J., Cameron, S.E., Parra, J.L., Jones, P.G., Jarvis, A.
+#'   (2005) Very high resolution interpolated climate surfaces for global
+#'   land areas. *International Journal of Climatology* 25, 1965-1978.
+#'   \doi{10.1002/joc.1276}
+#'
 #' Karger, D.N. et al. (2017) Climatologies at high resolution for the
 #'   earth's land surface areas. *Scientific Data* 4, 170122.
 #'
@@ -393,6 +420,10 @@ monthly_files <- function(dir, var, must_contain = NULL) {
 #'
 #' Koerner, C., Basler, D. (2010) Phenology under global warming. *Science*
 #'   327, 1461-1462.
+#'
+#' O'Donnell, M.S., Ignizio, D.A. (2012) Bioclimatic predictors for
+#'   supporting ecological applications in the conterminous United States.
+#'   U.S. Geological Survey Data Series 691. \doi{10.3133/ds691}
 #'
 #' Paruelo, J.M., Lauenroth, W.K. (1996) Relative abundance of plant
 #'   functional types in grasslands and shrublands of North America.
@@ -708,21 +739,44 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
 #' | `water` | `vpd`, `pet`, `cmd`, `aridity`, `dry_months`, `emberger`, `ellenberg` |
 #' | `heat` | `heat_stress`, `gdd`, `kira_warmth`, `continentality` |
 #' | `cold` | `cold_stress`, `frost_months`, `kira_coldness` |
-#' | `season` | `sri`, `synchronicity`, `lgp` |
+#' | `season` | `t_wet`, `t_dry`, `p_warm`, `p_cold`, `lgp`; flagged: `sri`, `synchronicity` |
 #' | `light` | `ra`, `ra_gs`, `daylength_start`, `daylength_end`, `daylength_gs`, `daylight_gs`, `daylength_max`, `days_to_solstice` |
+#' | `bioclim` | `bio1` to `bio19`; flagged: `bio8`, `bio9`, `bio18`, `bio19` |
+#' | `terrain` | `slope`, `northness`, `eastness`, `tri`, `tpi`, `dev`, `twi`, `hli`: from an elevation raster with [topo_indices()] |
+#'
+#' **Flagged variables.** bio8, bio9, bio18 and bio19 combine temperature
+#' and precipitation over a quarter chosen anew in every cell; where two
+#' quarters are nearly equally wet or warm, neighbouring cells pick
+#' different ones and the variable jumps along lines without climatic
+#' meaning (Booth 2022). `sri` (bio18 / bio12) and `synchronicity` (months
+#' of the maxima) share the problem. They are left out unless
+#' `flagged = TRUE`, with a message once per session. Booth advises to
+#' check their maps in the study area rather than to drop them everywhere;
+#' the smooth `t_wet`, `t_dry`, `p_warm` and `p_cold` measure the same
+#' contrasts without choosing a quarter (our construction, not from the
+#' literature). [select_variables()] warns if a selected set contains one.
 #'
 #' @param groups Groups to return (default: all).
 #' @param drop Indices or groups to leave out.
 #' @param table Return a data.frame with the group, meaning, unit,
-#'   ecological relevance and literature source of each index instead of
-#'   the names.
+#'   ecological relevance, literature source, flag and data source of each
+#'   index instead of the names.
+#' @param flagged Include the flagged composite variables?
+#' @param source `"monthly"` for indices of [climate_indices()], `"dem"`
+#'   for those of [topo_indices()], or `NULL` (both).
 #' @return A character vector of index names, or a data.frame.
+#' @references Booth, T.H. (2022) Checking bioclimatic variables that
+#'   combine temperature and precipitation data before their use in species
+#'   distribution models. *Austral Ecology* 47, 1506-1514.
+#'   \doi{10.1111/aec.13234}
 #' @export
 #' @examples
 #' climate_index_names()
 #' climate_index_names("water")
 #' climate_index_names(drop = c("light", "emberger"))
 #' climate_index_names(table = TRUE)
+#' climate_index_names("bioclim", flagged = TRUE)
+#' climate_index_names(source = "dem")
 climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE,
                                 flagged = FALSE, source = NULL) {
   tab <- climate_index_table()

@@ -18,8 +18,13 @@ climate_index_names(
 \item{drop}{Indices or groups to leave out.}
 
 \item{table}{Return a data.frame with the group, meaning, unit,
-ecological relevance and literature source of each index instead of
-the names.}
+ecological relevance, literature source, flag and data source of each
+index instead of the names.}
+
+\item{flagged}{Include the flagged composite variables?}
+
+\item{source}{\code{"monthly"} for indices of \code{\link[=climate_indices]{climate_indices()}}, \code{"dem"}
+for those of \code{\link[=topo_indices]{topo_indices()}}, or \code{NULL} (both).}
 }
 \value{
 A character vector of index names, or a data.frame.
@@ -34,13 +39,36 @@ all of them, those of some groups, or all but some.
    \code{water} \tab \code{vpd}, \code{pet}, \code{cmd}, \code{aridity}, \code{dry_months}, \code{emberger}, \code{ellenberg} \cr
    \code{heat} \tab \code{heat_stress}, \code{gdd}, \code{kira_warmth}, \code{continentality} \cr
    \code{cold} \tab \code{cold_stress}, \code{frost_months}, \code{kira_coldness} \cr
-   \code{season} \tab \code{sri}, \code{synchronicity}, \code{lgp} \cr
+   \code{season} \tab \code{t_wet}, \code{t_dry}, \code{p_warm}, \code{p_cold}, \code{lgp}; flagged: \code{sri}, \code{synchronicity} \cr
    \code{light} \tab \code{ra}, \code{ra_gs}, \code{daylength_start}, \code{daylength_end}, \code{daylength_gs}, \code{daylight_gs}, \code{daylength_max}, \code{days_to_solstice} \cr
+   \code{bioclim} \tab \code{bio1} to \code{bio19}; flagged: \code{bio8}, \code{bio9}, \code{bio18}, \code{bio19} \cr
+   \code{terrain} \tab \code{slope}, \code{northness}, \code{eastness}, \code{tri}, \code{tpi}, \code{dev}, \code{twi}, \code{hli}: from an elevation raster with \code{\link[=topo_indices]{topo_indices()}} \cr
 }
+
+
+\strong{Flagged variables.} bio8, bio9, bio18 and bio19 combine temperature
+and precipitation over a quarter chosen anew in every cell; where two
+quarters are nearly equally wet or warm, neighbouring cells pick
+different ones and the variable jumps along lines without climatic
+meaning (Booth 2022). \code{sri} (bio18 / bio12) and \code{synchronicity} (months
+of the maxima) share the problem. They are left out unless
+\code{flagged = TRUE}, with a message once per session. Booth advises to
+check their maps in the study area rather than to drop them everywhere;
+the smooth \code{t_wet}, \code{t_dry}, \code{p_warm} and \code{p_cold} measure the same
+contrasts without choosing a quarter (our construction, not from the
+literature). \code{\link[=select_variables]{select_variables()}} warns if a selected set contains one.
 }
 \examples{
 climate_index_names()
 climate_index_names("water")
 climate_index_names(drop = c("light", "emberger"))
 climate_index_names(table = TRUE)
+climate_index_names("bioclim", flagged = TRUE)
+climate_index_names(source = "dem")
+}
+\references{
+Booth, T.H. (2022) Checking bioclimatic variables that
+combine temperature and precipitation data before their use in species
+distribution models. \emph{Austral Ecology} 47, 1506-1514.
+\doi{10.1111/aec.13234}
 }

@@ -22,10 +22,16 @@ extent whose environment has stabilised; \code{\link[=m_availability]{m_availabi
 \code{\link[=plot_m_availability]{plot_m_availability()}}: how evenly M offers the records' conditions.
 \item \code{\link[=crop_rasters]{crop_rasters()}}: cut folders of raster files to M, keeping values exact.
 \item \code{\link[=download_chelsa_monthly]{download_chelsa_monthly()}}, \code{\link[=download_chelsa_trace21k]{download_chelsa_trace21k()}},
-\code{\link[=monthly_files]{monthly_files()}}, \code{\link[=climate_indices]{climate_indices()}}: twenty-five derived climate
-variables (water balance, heat, cold, season and light; see
-\code{\link[=climate_index_names]{climate_index_names()}}) from monthly climatologies of the present,
-the future or the past.
+\code{\link[=monthly_files]{monthly_files()}}, \code{\link[=climate_indices]{climate_indices()}}: derived climate variables
+(water balance, heat, cold, season, light and the 19 bioclimatic
+variables, the composite bio8, bio9, bio18 and bio19 flagged and
+replaced by smooth substitutes; see \code{\link[=climate_index_names]{climate_index_names()}}) from
+monthly climatologies of the present, the future or the past.
+\item \code{\link[=topo_indices]{topo_indices()}}: terrain predictors from an elevation raster (slope,
+northness, eastness, TRI, TPI and DEV at several radii, TWI, HLI).
+\item \code{\link[=climate_source_compare]{climate_source_compare()}}, \code{\link[=plot_climate_sources]{plot_climate_sources()}},
+\code{\link[=write_climate_sources]{write_climate_sources()}}: how much two or more climate products
+disagree at the records and across M, before choosing one.
 \item \code{\link[=uncertainty_environment]{uncertainty_environment()}}: coordinate uncertainty judged by how much
 the predictors vary within it (keep, propagate or drop).
 \item \code{\link[=jitter_uncertainty]{jitter_uncertainty()}}, \code{\link[=plot_jitter]{plot_jitter()}}, \code{\link[=write_jitter]{write_jitter()}}: replicate

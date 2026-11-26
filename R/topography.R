@@ -9,7 +9,7 @@
 #' climatic indices of [climate_indices()]: terrain controls the local
 #' microclimate, moisture and soil that coarse climate grids miss, and
 #' matters most for plants and for fine grains (Schwager & Berg 2021). They
-#' are listed in [climate_index_table()] under the group `"terrain"`, so
+#' are listed in `climate_index_names(table = TRUE)` under the group `"terrain"`, so
 #' `climate_index_names("terrain")` gives their names and the layers can
 #' join any predictor stack for [sample_environment()] and
 #' [select_variables()].
@@ -72,9 +72,9 @@
 #' @param prefix File name prefix.
 #' @param overwrite Overwrite existing files?
 #' @return A `SpatRaster` with one layer per index (and per radius for TPI
-#'   and DEV), named as in [climate_index_table()] (`tpi_<r>`, `dev_<r>`,
+#'   and DEV), named as in `climate_index_names(table = TRUE)` (`tpi_<r>`, `dev_<r>`,
 #'   with `r` followed by `km` when `radius_unit = "km"`).
-#' @seealso [climate_indices()] for climatic indices; [climate_index_table()]
+#' @seealso [climate_indices()] for climatic indices; `climate_index_names(table = TRUE)`
 #'   for meanings and references.
 #' @references Beven, K.J., Kirkby, M.J. (1979) A physically based, variable
 #'   contributing area model of basin hydrology. *Hydrological Sciences

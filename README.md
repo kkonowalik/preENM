@@ -36,7 +36,8 @@ step can be used on its own.
 | Before | [1](#1-point-filtering) | **Name matching and point filtering** (especially GBIF) | `read_gbif()`, `match_names()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
 | Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()` (incl. spatially adaptive buffers and simulated dispersal), `m_scenarios()` (the default practice), `m_simulate()`, `m_minimal()`, `m_availability()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
-| Before | [4](#4-computing-derived-climate-variables) | **Derived climate variables** (25 indices of water balance, heat, cold, season and light; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()` |
+| Before | [4](#4-computing-derived-climate-and-terrain-variables) | **Derived climate and terrain variables** (indices of water balance, heat, cold, season and light, the 19 bioclim variables with the composite ones flagged and smooth substitutes; terrain indices from a DEM; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()`, `topo_indices()` |
+| Before | [4](#which-climate-product-comparing-sources-before-choosing-one) | **Comparing climate products** at the records and across M (agreement, correlation, offset, distributions, collinearity structure, map of disagreement) | `climate_source_compare()`, `plot_climate_sources()`, `write_climate_sources()` |
 | Before | [5](#5-checks-before-modelling) | **Checks** (sample size, record years vs climate period) | `check_sample_size()`, `match_climate_period()` |
 | Before | [6](#6-imprecise-records-keep-propagate-or-drop) | **Coordinate uncertainty in environmental terms**: keep, propagate (replicate datasets jittered within each record's uncertainty) or drop | `uncertainty_environment()`, `jitter_uncertainty()`, `plot_jitter()`, `write_jitter()` |
 | Before | [7](#7-one-point-per-raster-cell-and-background-points) | **One point per raster cell, background points** | `merge_occurrences()` (with `data_type` per source), `thin_by_cell()`, `sample_background()` |
@@ -355,7 +356,7 @@ up to 0.95 deg C. `crop_rasters()` keeps the raw values, the data type, the
 scale/offset and NoData, on exactly the input grid (nothing is resampled). For
 a single raster in memory, `crop_to_m()` is enough.
 
-### 4. Computing derived climate variables
+### 4. Computing derived climate and terrain variables
 
 Bioclimatic variables describe temperature and precipitation, but not the
 water balance, the heat and cold stress, the length of the season or the
@@ -372,8 +373,13 @@ are not needed.
 | `cmd` | water | climatic moisture deficit: sum of monthly PET − P where positive | mm/year | drought not met by rain: forest-steppe limits, drought-sensitive trees, C3 versus C4 grasses | Stephenson 1990; Wang et al. 2012 |
 | `aridity` | water | aridity index P / PET (< 0.05 hyper-arid, > 0.65 humid) | – | the humid-arid gradient: biome limits, dryland and desert taxa | UNEP 1992 |
 | `heat_stress` | heat | sum over months of Tmax above `heat_threshold` | °C × months | exposure to hot months: upper thermal limits of alpine and boreal taxa and of ectotherms; C4 advantage | this package; Ehleringer et al. 1997 |
-| `sri` | season | summer rain index: precipitation of the warmest quarter / annual (bio18 / bio12) | 0-1 | rain in the warm season: C4 versus C3 grasses, monsoon versus Mediterranean taxa | Teeri & Stowe 1976; Paruelo & Lauenroth 1996 |
-| `synchronicity` | season | heat-rain synchrony: 1 = the warmest and the wettest month coincide, 0 = six months apart | 0-1 | whether water arrives when it is warm: summer-rain versus winter-rain floras, C3/C4 balance | this package; Paruelo & Lauenroth 1996 |
+| `sri` ⚑ | season | summer rain index: precipitation of the warmest quarter / annual (bio18 / bio12) | 0-1 | rain in the warm season: C4 versus C3 grasses, monsoon versus Mediterranean taxa | Teeri & Stowe 1976; Paruelo & Lauenroth 1996 |
+| `synchronicity` ⚑ | season | heat-rain synchrony: 1 = the warmest and the wettest month coincide, 0 = six months apart | 0-1 | whether water arrives when it is warm: summer-rain versus winter-rain floras, C3/C4 balance | this package; Paruelo & Lauenroth 1996 |
+| `t_wet` | season | mean temperature weighted by monthly precipitation (smooth bio8) | °C | temperature when water is available | this package; after Booth 2022 |
+| `t_dry` | season | mean temperature weighted by monthly dryness, max(P) − P (smooth bio9) | °C | temperature of the dry season | this package; after Booth 2022 |
+| `p_warm` | season | precipitation weighted by monthly warmth, T − min(T), × 3 (smooth bio18) | mm/quarter | rain in the warm season, like bio18 and `sri` | this package; after Booth 2022 |
+| `p_cold` | season | precipitation weighted by monthly coldness, max(T) − T, × 3 (smooth bio19) | mm/quarter | rain in the cold season, like bio19 | this package; after Booth 2022 |
+| `bio1` … `bio19` | bioclim | the standard bioclimatic variables from the same monthly layers; bio8, bio9, bio18, bio19 ⚑ | °C, mm | the usual predictors, on exactly the grid and period of the other indices | Busby 1991; Hijmans et al. 2005; O'Donnell & Ignizio 2012 |
 | `gdd` | heat | growing degree days: monthly Tmean above `gdd_base` × days | °C × days | heat sum for growth and development: cold range limits of plants, number of insect generations | Woodward 1987; Prentice et al. 1992 |
 | `cold_stress` | cold | sum over months of Tmin below `frost_threshold` | °C × months | winter severity: frost-sensitive plants, survival of overwintering stages | Woodward 1987; Sakai & Larcher 1987 |
 | `frost_months` | cold | number of months with Tmin below `frost_threshold` | months | duration of frost: evergreen versus deciduous plants, length of dormancy or hibernation | Woodward 1987; Sakai & Larcher 1987 |
@@ -393,6 +399,10 @@ are not needed.
 | `daylength_max` | light | day length on the summer solstice (latitude only; 24 = midnight sun) | hours | the longest day: species that need a critical day length to flower or to breed; like `ra` a stand-in for latitude | Allen et al. 1998; Bradshaw & Holzapfel 2007 |
 | `days_to_solstice` | light | days from the start of the growing season to the summer solstice (negative = it starts later) | days | share of the season on lengthening days: phenological timing, species whose flowering is triggered before the solstice | this package; Körner & Basler 2010 |
 
+⚑ = flagged as a composite variable (see
+[below](#composite-bioclimatic-variables-and-smooth-substitutes)); flagged
+variables are left out by default.
+
 "Useful for" gives examples of the questions an index was made for or is
 commonly used in; it is not a limit on its use. "Source" is the origin of
 the index or of its ecological use (full references in `?climate_indices`);
@@ -400,12 +410,14 @@ the index or of its ecological use (full references in `?climate_indices`);
 
 ![Six of the indices for a synthetic climate](man/figures/climate_indices.png)
 
-All twenty-five are computed by default. Choose some by name or by group
-(the Group column) with `climate_index_names()`:
+All unflagged indices from monthly data (42) are computed by default.
+Choose some by name or by group (the Group column) with
+`climate_index_names()`:
 
 ```r
-climate_index_names()                       # all names
-climate_index_names(table = TRUE)           # group, meaning, unit, relevance, source
+climate_index_names()                       # all names, without the flagged
+climate_index_names(flagged = TRUE)         # with bio8, bio9, bio18, bio19, sri, synchronicity
+climate_index_names(table = TRUE)           # group, meaning, unit, relevance, source, flag
 climate_indices(tmax, tmin, prec, indices = climate_index_names("water"))
 climate_indices(tmax, tmin, prec, indices = c("cold", "gdd"))   # a group and a name
 climate_indices(tmax, tmin, prec, indices = climate_index_names(drop = "light"))
@@ -431,6 +443,80 @@ mean day length and the hours of daylight of the season (`daylength_gs`,
 (bud burst and bud set of trees, flowering of long-day plants, diapause of
 insects), and can be useful outside niche modelling, e.g. in phenology or
 growth models.
+
+#### Composite bioclimatic variables and smooth substitutes
+
+bio8 (mean temperature of the wettest quarter), bio9 (of the driest
+quarter), bio18 (precipitation of the warmest quarter) and bio19 (of the
+coldest quarter) combine temperature and precipitation over a quarter
+that is chosen anew in every cell. Where two quarters are nearly equally
+wet or warm, neighbouring cells pick different quarters, and the variable
+jumps by many degrees or hundreds of millimetres along a line that has no
+climatic meaning (Booth 2022, *Austral Ecology* 47, 1506–1514). The
+artefacts are regional, often in equatorial and bimodal-rainfall areas,
+and Booth advises to check the maps of the study area before use rather
+than drop the variables everywhere. preENM's `sri` (bio18 / bio12) and
+`synchronicity` (based on the months of the maxima) share the problem.
+
+These six variables carry a flag in `climate_index_names(table = TRUE)`.
+`climate_index_names()` leaves them out unless `flagged = TRUE`, with a
+message the first time; `climate_indices()` computes them when asked by
+name, with a message; and `select_variables()` warns when a top-ranked
+set contains one (it recognises the usual layer names, e.g.
+`wc2.1_30s_bio_18` or `CHELSA_bio8_1981-2010_V.2.1`).
+
+As substitutes, `t_wet`, `t_dry`, `p_warm` and `p_cold` keep the
+contrast of the four variables without choosing a quarter: every month
+counts, weighted by how wet, dry, warm or cold it is. They change smoothly
+where the quarters switch, so they can replace bio8, bio9, bio18 (and
+`sri`) and bio19 in a model. They are our construction after Booth's
+suggestions, not variables from the literature.
+
+```r
+ci <- climate_indices(tmax, tmin, prec, indices = c("season", "bioclim"))
+# flagged variables only on request (then check their maps)
+climate_indices(tmax, tmin, prec, indices = c("bio8", "bio18"))
+```
+
+#### Terrain variables
+
+At fine grain, terrain shapes the microclimate, moisture and soils that
+climate grids miss; for plants, especially in mountains, terrain and
+remote-sensing variables add to climate (Schwager & Berg 2021, *Basic and
+Applied Ecology* 54, 1–13). `topo_indices()` derives them from an
+elevation raster. They form the `terrain` group of
+`climate_index_names(table = TRUE)`, so `climate_index_names("terrain")` lists them
+and the layers join any predictor stack for `sample_environment()` and
+`select_variables()`.
+
+| Index | Meaning | Unit | Source |
+|---|---|---|---|
+| `slope` | steepest gradient | degrees | Horn 1981 |
+| `northness`, `eastness` | cos / sin of aspect × sin of slope: 0 on flat ground | −1 to 1 | after Guisan et al. 1999 |
+| `tri` | terrain ruggedness: root of the summed squared differences to the 8 neighbours | m | Riley et al. 1999 |
+| `tpi_<r>` | topographic position: elevation minus the mean within radius `r` (one layer per radius); + ridges, − valleys | m | Weiss 2001 |
+| `dev_<r>` | deviation from mean elevation: TPI / SD of elevation in the same window, comparable between hills and mountains | – | De Reu et al. 2013 |
+| `twi` | topographic wetness index ln(a / tan β) with D8 flow accumulation | – | Beven & Kirkby 1979 |
+| `hli` | heat load: potential annual direct radiation from slope, aspect and latitude | MJ cm⁻² yr⁻¹ | McCune & Keon 2002 |
+
+```r
+ti <- topo_indices(dem, radius = c(0.5, 2, 5), radius_unit = "km",
+                   path = "terrain", prefix = "DEM_")
+```
+
+Compared with `terra::terrain()`, `topo_indices()` adds:
+- TPI at several radii, in cells or km, with round windows on
+  longitude/latitude grids;
+- its scale-free form, DEV;
+- a TWI whose upslope area is summed from true cell areas, so it is
+  correct on longitude/latitude grids;
+- an HLI that uses each cell's latitude and folds aspect by hemisphere,
+  so south-west slopes are warmest in the north and north-west slopes in
+  the south.
+
+The TWI needs the whole DEM in memory, so it stops above `max_cells`
+(clip or aggregate the DEM first). The other indices are computed in
+blocks and can be written straight to disk.
 
 **1. Get the monthly files.** They can be downloaded automatically from
 CHELSA V2.1 (no account needed). With `extent`, only your region is read
@@ -524,6 +610,51 @@ e(Tmin); PET = 0.0023 × 0.408 × Ra × (Tmean + 17.8) × √(Tmax − Tmin) mm/
 with extraterrestrial radiation Ra (MJ m⁻² day⁻¹) from latitude and the
 mid-month day (FAO-56 eq. 21; 0.408 converts it to mm of water); summer
 quarters are any three consecutive months, including December–February.
+
+#### Which climate product? Comparing sources before choosing one
+
+WorldClim, CHELSA, regional atlases and reanalyses differ, most where
+stations are sparse. Models fitted with different products differ too,
+and some algorithms are more sensitive to the choice than others
+(Rodríguez-Rey & Jiménez-Valverde 2024, *Ecological Informatics* 79,
+102387). If you have downloaded two or more products,
+`climate_source_compare()` shows how exposed your data are before you
+commit to one. It reads every product at the records and at a sample of
+cells of M, only at those points, and reports per variable:
+- agreement (Lin's concordance correlation, graded after McBride 2005);
+- Pearson and Spearman correlation;
+- the systematic offset and the RMSE, in units and in SD of the reference;
+- the overlapping index of the two distributions and the range covered;
+- whether the correlations among the variables, which guide variable
+  selection, are the same in each product (Mantel r);
+- where the products disagree.
+
+```r
+wc <- terra::rast(list.files("worldclim", "bio_.*tif$", full.names = TRUE))
+ch <- terra::rast(list.files("chelsa", "bio.*tif$", full.names = TRUE))
+cs <- climate_source_compare(list(WorldClim = wc, CHELSA = ch), records,
+                             m = m$m, reference = "CHELSA")
+cs                                       # IN SHORT, exposure per variable
+plot_climate_sources(cs)                 # agreement, correlation, offset
+plot_climate_sources(cs, "map", variable = "bio12", file = "bio12_disagreement")
+plot_climate_sources(cs, "scatter")      # product against reference
+plot_climate_sources(cs, "density")      # the two distributions
+write_climate_sources(cs, "climate_sources")
+```
+
+Layer names in the usual bioclim schemes (`bio_01`, `wc2.1_30s_bio_1`,
+`CHELSA_bio1_1981-2010_V.2.1`) are matched automatically; other layers
+need the same names in every product. The map shows the standardised
+difference at the cells of M, with the records marked and the 5% of
+cells with the largest disagreement ringed. It shows whether the records
+sit where the products disagree.
+
+Where agreement is poor, fit the model with each product and compare the
+results, prefer the product validated for your region, or drop the
+variable if others carry the same information. An offset of more than
+3 SD usually means different units (°C against kelvin, values × 10).
+
+![Disagreement between two climate products](man/figures/climate_sources.png)
 
 ### 5. Checks before modelling
 

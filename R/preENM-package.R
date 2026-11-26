@@ -15,10 +15,16 @@
 #'   [plot_m_availability()]: how evenly M offers the records' conditions.
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
 #' * [download_chelsa_monthly()], [download_chelsa_trace21k()],
-#'   [monthly_files()], [climate_indices()]: twenty-five derived climate
-#'   variables (water balance, heat, cold, season and light; see
-#'   [climate_index_names()]) from monthly climatologies of the present,
-#'   the future or the past.
+#'   [monthly_files()], [climate_indices()]: derived climate variables
+#'   (water balance, heat, cold, season, light and the 19 bioclimatic
+#'   variables, the composite bio8, bio9, bio18 and bio19 flagged and
+#'   replaced by smooth substitutes; see [climate_index_names()]) from
+#'   monthly climatologies of the present, the future or the past.
+#' * [topo_indices()]: terrain predictors from an elevation raster (slope,
+#'   northness, eastness, TRI, TPI and DEV at several radii, TWI, HLI).
+#' * [climate_source_compare()], [plot_climate_sources()],
+#'   [write_climate_sources()]: how much two or more climate products
+#'   disagree at the records and across M, before choosing one.
 #' * [uncertainty_environment()]: coordinate uncertainty judged by how much
 #'   the predictors vary within it (keep, propagate or drop).
 #' * [jitter_uncertainty()], [plot_jitter()], [write_jitter()]: replicate

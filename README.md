@@ -2655,6 +2655,6 @@ The package is still under development. You can use it but some functions may be
 > <https://doi.org/10.1038/s41598-020-80062-1>
 > (free to read: <https://rdcu.be/cjB5b>)
 
-Depending on the module that you are using, preENM may also use other packages - for example 'terra', 'CoordinateCleaner', 'ggplot', and others. Please cite the other packages as well.
+Depending on the module you use, `preENM` relies on several other R packages - such as `terra`, `CoordinateCleaner`, `ggplot2` and others. Please cite these underlying packages in your work as well. Additionally, most functions are based on published methodologies, so we recommend citing the original papers too.
 
 Thanks and good luck with modelling!

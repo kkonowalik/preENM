@@ -995,7 +995,8 @@ terrain_table <- function() {
       "deviation from mean elevation: TPI / SD of elevation within the radius (scale-free TPI)",
       "topographic wetness index: ln(specific catchment area / tan(slope)), D8 flow",
       "heat load index: potential direct radiation from slope, aspect and latitude"),
-    unit = c("degrees", "-1 to 1", "-1 to 1", "m", "m", "-", "-", "-"),
+    unit = c("degrees", "-1 to 1", "-1 to 1", "m", "m", "-", "-",
+             "MJ/cm2/yr"),
     relevance = c(
       "drainage, soil depth, erosion; steep rocky habitats",
       "cool, moist north-facing (south-facing in the south) slopes against warm, dry ones",

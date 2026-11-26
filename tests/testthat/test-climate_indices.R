@@ -19,10 +19,14 @@ test_that("radiation matches FAO-56", {
 
 test_that("climate_indices computes every index correctly", {
   d <- make_months()
-  ci <- climate_indices(d$tmax, d$tmin, d$prec)
-  expect_equal(names(ci), climate_index_names())
-  expect_equal(names(ci)[1:7], c("vpd", "pet", "cmd", "aridity",
-                                 "heat_stress", "sri", "synchronicity"))
+  ci <- suppressMessages(climate_indices(d$tmax, d$tmin, d$prec))
+  expect_equal(names(ci), suppressMessages(climate_index_names(
+    source = "monthly")))
+  expect_equal(names(ci)[1:6], c("vpd", "pet", "cmd", "aridity",
+                                 "heat_stress", "gdd"))
+  # the flagged sri and synchronicity, asked for by name
+  ci <- c(ci, suppressMessages(climate_indices(
+    d$tmax, d$tmin, d$prec, indices = c("sri", "synchronicity"))))
   cell <- 1
   tx <- as.numeric(d$tmax[cell])
   tn <- as.numeric(d$tmin[cell])
@@ -125,7 +129,7 @@ test_that("the additional indices are computed correctly", {
   d <- make_months()
   ci <- climate_indices(d$tmax, d$tmin, d$prec, indices = "all",
                         gdd_base = 10, frost_threshold = 12)
-  expect_equal(names(ci)[8:15],
+  expect_equal(names(ci)[6:13],
                c("gdd", "cold_stress", "frost_months", "continentality",
                  "dry_months", "lgp", "emberger", "ellenberg"))
   days <- c(31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
@@ -265,20 +269,105 @@ test_that("day-length indices handle cells without a growing season", {
 })
 
 test_that("climate_index_names chooses indices and groups", {
-  all <- climate_index_names()
-  expect_length(all, 25)
+  all <- suppressMessages(climate_index_names(source = "monthly"))
+  expect_length(all, 25 - 2 + 4 + 19 - 4)   # 2 flagged, 4 smooth, bioclim
   expect_equal(climate_index_names("cold"),
                c("cold_stress", "frost_months", "kira_coldness"))
-  expect_equal(climate_index_names(drop = c("light", "emberger")),
+  expect_equal(climate_index_names(drop = c("light", "emberger"),
+                                   source = "monthly"),
                setdiff(all, c(climate_index_names("light"), "emberger")))
   expect_length(climate_index_names("light"), 8)
-  tab <- climate_index_names(table = TRUE)
+  tab <- climate_index_names(table = TRUE, source = "monthly")
   expect_equal(names(tab), c("index", "group", "meaning", "unit",
-                            "relevance", "reference"))
-  expect_true(all(nzchar(unlist(tab))))
+                            "relevance", "reference", "flag", "source"))
+  expect_true(all(nzchar(unlist(tab[setdiff(names(tab), "flag")]))))
   expect_equal(tab$index, all)
   expect_error(climate_index_names("x"), "Unknown group")
   expect_error(climate_index_names(drop = "x"), "Unknown index")
   expect_equal(expand_indices(c("cold", "gdd")),
                c("gdd", "cold_stress", "frost_months", "kira_coldness"))
+})
+
+test_that("composite variables are flagged and left out by default", {
+  def <- suppressMessages(climate_index_names())
+  flagged <- c("bio8", "bio9", "bio18", "bio19", "sri", "synchronicity")
+  expect_false(any(flagged %in% def))
+  expect_true(all(flagged %in% climate_index_names(flagged = TRUE)))
+  expect_true(all(c("bio1", "bio12", "t_wet", "p_warm") %in% def))
+  tab <- climate_index_names(table = TRUE, flagged = TRUE)
+  expect_true(all(nzchar(tab$flag[tab$index %in% flagged])))
+  expect_false(any(nzchar(tab$flag[!tab$index %in% flagged])))
+  # the explanation is given (once per session)
+  .preenm_env$flag_note <- NULL
+  expect_message(climate_index_names(), "Booth 2022")
+  expect_silent(climate_index_names())
+  # by name they are computed, with a message
+  d <- make_months()
+  expect_message(climate_indices(d$tmax, d$tmin, d$prec, indices = "bio18"),
+                 "flagged")
+  expect_equal(flagged_names(c("CHELSA_bio18_1981", "bio08", "wc2.1_30s_bio_9",
+                               "bio1", "bio19", "bio180", "sri", "x")),
+               c("CHELSA_bio18_1981", "bio08", "wc2.1_30s_bio_9", "bio19",
+                 "sri"))
+})
+
+test_that("bioclim and the smooth substitutes match hand computations", {
+  d <- make_months()
+  ci <- suppressMessages(climate_indices(
+    d$tmax, d$tmin, d$prec,
+    indices = c(paste0("bio", 1:19), "t_wet", "t_dry", "p_warm", "p_cold")))
+  q <- function(m) ((m - 1 + 0:2) %% 12) + 1
+  for (cell in c(1, 40, 64)) {
+    tx <- as.numeric(d$tmax[cell])
+    tn <- as.numeric(d$tmin[cell])
+    p <- as.numeric(d$prec[cell])
+    tm <- (tx + tn) / 2
+    tq <- vapply(1:12, function(m) mean(tm[q(m)]), 1)
+    pq <- vapply(1:12, function(m) sum(p[q(m)]), 1)
+    v <- function(k) ci[[k]][cell][[1]]
+    expect_equal(v("bio1"), mean(tm), tolerance = 1e-6)
+    expect_equal(v("bio4"), 100 * stats::sd(tm), tolerance = 1e-6)
+    expect_equal(v("bio7"), max(tx) - min(tn), tolerance = 1e-6)
+    expect_equal(v("bio8"), tq[which.max(pq)], tolerance = 1e-6)
+    expect_equal(v("bio10"), max(tq), tolerance = 1e-6)
+    expect_equal(v("bio12"), sum(p), tolerance = 1e-6)
+    expect_equal(v("bio15"), 100 * stats::sd(p + 1) / mean(p + 1),
+                 tolerance = 1e-6)
+    expect_equal(v("bio18"), pq[which.max(tq)], tolerance = 1e-6)
+    expect_equal(v("bio19"), pq[which.min(tq)], tolerance = 1e-6)
+    expect_equal(v("t_wet"), sum(tm * p) / sum(p), tolerance = 1e-6)
+    w <- tm - min(tm)
+    expect_equal(v("p_warm"), 3 * sum(p * w) / sum(w), tolerance = 1e-6)
+  }
+  # no season: the weighted means fall back to the plain mean
+  flat <- terra::rast(d$tmax[[1]], nlyrs = 12)
+  terra::values(flat) <- 10
+  pr <- flat * 0 + 50
+  s <- climate_indices(flat + 5, flat - 5, pr,
+                       indices = c("t_dry", "p_warm"))
+  expect_equal(s$t_dry[1][[1]], 10)
+  expect_equal(s$p_warm[1][[1]], 150)
+})
+
+test_that("the smooth substitutes do not jump where bio18 does", {
+  # two cells whose warmest quarter flips between neighbours: bio18 jumps,
+  # p_warm changes little
+  r <- terra::rast(nrows = 1, ncols = 2, xmin = 0, xmax = 2, ymin = 0,
+                   ymax = 1, crs = "EPSG:4326")
+  tm1 <- c(10, 11, 12, 20, 20.1, 20, 12, 11, 10, 20, 20.05, 19.9)
+  tm2 <- c(10, 11, 12, 20, 20.05, 20, 12, 11, 10, 20.1, 20.1, 20.1)
+  pr <- c(10, 10, 10, 100, 100, 100, 10, 10, 10, 5, 5, 5)
+  mk <- function(a, b) terra::rast(lapply(1:12, function(m) {
+    x <- terra::rast(r)
+    terra::values(x) <- c(a[m], b[m])
+    x
+  }))
+  tmean <- mk(tm1, tm2)
+  prec <- mk(pr, pr)
+  ci <- suppressMessages(climate_indices(tmean + 1, tmean - 1, prec,
+                                         indices = c("bio18", "p_warm")))
+  b <- terra::values(ci$bio18)[, 1]
+  pw <- terra::values(ci$p_warm)[, 1]
+  expect_gt(abs(diff(b)) / mean(b), 0.5)
+  expect_lt(abs(diff(pw)) / mean(pw), 0.05)
 })

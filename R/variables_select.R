@@ -86,7 +86,17 @@
 #'   `agreement` data sets compared per variable), `structure_agreement`
 #'   (similarity of the correlation structure between data sets), `tree`,
 #'   `rho` and `regional_rho`.
-#' @references Elith, J., Kearney, M., Phillips, S. (2010) The art of
+#' **Flagged variables.** A top-ranked set containing a composite
+#' variable flagged in [climate_index_names()] (bio8, bio9, bio18, bio19,
+#' `sri`, `synchronicity`: temperature and precipitation over a period that
+#' switches between cells) gives a warning (Booth 2022).
+#'
+#' @references Booth, T.H. (2022) Checking bioclimatic variables that
+#'   combine temperature and precipitation data before their use in species
+#'   distribution models. *Austral Ecology* 47, 1506-1514.
+#'   \doi{10.1111/aec.13234}
+#'
+#'   Elith, J., Kearney, M., Phillips, S. (2010) The art of
 #'   modelling range-shifting species. *Methods in Ecology and Evolution* 1,
 #'   330-342. \doi{10.1111/j.2041-210X.2010.00036.x}
 #' @export
@@ -455,6 +465,22 @@ select_variables <- function(x, sizes = 3:6, thr_r = 0.8, thr_vif = 5,
   }))
   dimnames(agree) <- list(names(rho), names(rho))
 
+  # flagged composite variables in the best sets
+  fl <- flagged_names(V)
+  if (length(fl) && !is.null(res)) {
+    top <- res$set[res$rank == 1]
+    hit <- fl[vapply(fl, function(v) any(grepl(paste0("(^| )", v, "( |$)"),
+                                                 top)), logical(1))]
+    if (length(hit)) {
+      warning("A top-ranked set contains ", paste(hit, collapse = ", "),
+              ", which combine(s) temperature and precipitation over a ",
+              "period that switches between cells (warmest/wettest ",
+              "quarter or month) and can show spatial artefacts (Booth ",
+              "2022). Check their maps, or use the smooth t_wet, t_dry, ",
+              "p_warm and p_cold of climate_indices() instead.",
+              call. = FALSE)
+    }
+  }
   out <- list(sets = res, counts = counts, pairs = pairs,
               variables = variables, frequency = freq,
               reference_sets = refs, consistency = consistency,
@@ -644,4 +670,14 @@ best_sets <- function(x, n = 5, size = NULL, pareto_only = FALSE) {
   r <- r[intersect(unique(cols), names(r))]
   rownames(r) <- NULL
   r
+}
+
+# Layer names of the composite variables flagged in climate_index_table()
+# (bio8, bio9, bio18, bio19 in any common spelling, sri, synchronicity)
+# (internal)
+flagged_names <- function(vars) {
+  bio <- grepl("(^|[_.-])bio_?0?(8|9|18|19)([_.-]|$)", vars,
+               ignore.case = TRUE)
+  own <- grepl("(^|[_.-])(sri|synchronicity)([_.-]|$)", vars)
+  vars[bio | own]
 }

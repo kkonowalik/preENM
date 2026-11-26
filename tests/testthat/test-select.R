@@ -53,3 +53,14 @@ test_that("maximum values for lower-is-better metrics", {
   p <- plot_selection(s, "MAEbal", "AUC")
   expect_match(p$labels$subtitle, "required values")
 })
+
+test_that("select_variables() warns when a flagged variable is selected", {
+  sim <- simulate_enm_data(seed = 1)
+  e1 <- sim$env[["env1"]]
+  e2 <- sim$env[["env2"]]
+  now <- c(e1, e2)
+  names(now) <- c("bio1", "bio18")
+  es <- sample_environment(list(present = now), n = 1000, seed = 1,
+                           verbose = FALSE)
+  expect_warning(select_variables(es, sizes = 2), "Booth")
+})

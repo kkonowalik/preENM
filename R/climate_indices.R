@@ -456,6 +456,20 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
                             path = NULL, prefix = "", overwrite = FALSE) {
   temp_units <- match.arg(temp_units)
   indices <- expand_indices(indices)
+  tab <- climate_index_table()
+  dem <- intersect(indices, tab$index[tab$source == "dem"])
+  if (length(dem)) {
+    stop("Terrain indices (", paste(dem, collapse = ", "), ") come from an ",
+         "elevation raster: use topo_indices().", call. = FALSE)
+  }
+  fl <- intersect(indices, tab$index[nzchar(tab$flag)])
+  if (length(fl)) {
+    message("Computing flagged variable(s) ", paste(fl, collapse = ", "),
+            ": they combine temperature and precipitation over periods ",
+            "that switch between neighbouring cells, which creates spatial ",
+            "artefacts in some regions (Booth 2022). Check their maps ",
+            "before use, or use t_wet, t_dry, p_warm and p_cold.")
+  }
   monthly <- function(x, what) {
     if (is.character(x)) x <- terra::rast(x)
     if (!inherits(x, "SpatRaster") || terra::nlyr(x) != 12) {
@@ -542,6 +556,61 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     d <- abs(terra::which.max(tmax) - terra::which.max(prec))
     d <- terra::ifel(d > 6, 12 - d, d)
     make("synchronicity", (6 - d) / 6)
+  }
+  # smooth seasonal indices: monthly weights instead of the warmest or
+  # wettest quarter, so that no period switches between neighbouring cells
+  wmean <- function(v, w) {
+    sw <- sum(w)
+    terra::ifel(sw > 0, sum(v * w) / sw, terra::mean(v))
+  }
+  if ("t_wet" %in% indices) make("t_wet", wmean(tmean, prec))
+  if ("t_dry" %in% indices) make("t_dry", wmean(tmean, max(prec) - prec))
+  if ("p_warm" %in% indices) {
+    make("p_warm", 3 * wmean(prec, tmean - min(tmean)))
+  }
+  if ("p_cold" %in% indices) {
+    make("p_cold", 3 * wmean(prec, max(tmean) - tmean))
+  }
+  # bioclim variables (definitions of WorldClim; quarters are any three
+  # consecutive months, also across the year's end)
+  bio <- paste0("bio", 1:19)
+  if (any(bio %in% indices)) {
+    q <- function(m) ((m - 1 + 0:2) %% 12) + 1
+    tq <- terra::rast(lapply(1:12, function(m) terra::mean(tmean[[q(m)]])))
+    pq <- terra::rast(lapply(1:12, function(m) sum(prec[[q(m)]])))
+    sd12 <- function(x) sqrt(sum((x - terra::mean(x))^2) / 11)
+    b2 <- terra::mean(tmax - tmin)
+    b7 <- max(tmax) - min(tmin)
+    if ("bio1" %in% indices) make("bio1", terra::mean(tmean))
+    if ("bio2" %in% indices) make("bio2", b2)
+    if ("bio3" %in% indices) make("bio3", terra::ifel(b7 > 0, 100 * b2 / b7,
+                                                      NA))
+    if ("bio4" %in% indices) make("bio4", 100 * sd12(tmean))
+    if ("bio5" %in% indices) make("bio5", max(tmax))
+    if ("bio6" %in% indices) make("bio6", min(tmin))
+    if ("bio7" %in% indices) make("bio7", b7)
+    if ("bio8" %in% indices) {
+      make("bio8", terra::selectRange(tq, terra::which.max(pq)))
+    }
+    if ("bio9" %in% indices) {
+      make("bio9", terra::selectRange(tq, terra::which.min(pq)))
+    }
+    if ("bio10" %in% indices) make("bio10", max(tq))
+    if ("bio11" %in% indices) make("bio11", min(tq))
+    if ("bio12" %in% indices) make("bio12", sum(prec))
+    if ("bio13" %in% indices) make("bio13", max(prec))
+    if ("bio14" %in% indices) make("bio14", min(prec))
+    if ("bio15" %in% indices) {
+      make("bio15", 100 * sd12(prec + 1) / terra::mean(prec + 1))
+    }
+    if ("bio16" %in% indices) make("bio16", max(pq))
+    if ("bio17" %in% indices) make("bio17", min(pq))
+    if ("bio18" %in% indices) {
+      make("bio18", terra::selectRange(pq, terra::which.max(tq)))
+    }
+    if ("bio19" %in% indices) {
+      make("bio19", terra::selectRange(pq, terra::which.min(tq)))
+    }
   }
   if ("gdd" %in% indices) {
     make("gdd", sum(terra::clamp(tmean - gdd_base, lower = 0,
@@ -654,8 +723,13 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
 #' climate_index_names("water")
 #' climate_index_names(drop = c("light", "emberger"))
 #' climate_index_names(table = TRUE)
-climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE) {
+climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE,
+                                flagged = FALSE, source = NULL) {
   tab <- climate_index_table()
+  if (!is.null(source)) {
+    source <- match.arg(source, c("monthly", "dem"))
+    tab <- tab[tab$source == source, , drop = FALSE]
+  }
   known <- unique(tab$group)
   bad <- setdiff(groups, known)
   if (length(bad)) {
@@ -669,6 +743,18 @@ climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE) {
   }
   keep <- (is.null(groups) | tab$group %in% groups) &
     !(tab$index %in% drop | tab$group %in% drop)
+  out_fl <- keep & nzchar(tab$flag) & !flagged
+  if (any(out_fl) && !isTRUE(.preenm_env$flag_note)) {
+    message("Left out: ", paste(tab$index[out_fl], collapse = ", "),
+            ". They combine temperature and precipitation over the warmest, ",
+            "coldest, wettest or driest quarter (or month), which can switch ",
+            "between neighbouring cells and create spatial artefacts ",
+            "(Booth 2022). flagged = TRUE includes them; the smooth ",
+            "t_wet, t_dry, p_warm and p_cold measure the same contrasts ",
+            "without switching. (Shown once per session.)")
+    .preenm_env$flag_note <- TRUE
+  }
+  keep <- keep & !out_fl
   tab <- tab[keep, , drop = FALSE]
   rownames(tab) <- NULL
   if (table) tab else tab$index
@@ -828,22 +914,121 @@ climate_index_table <- function() {
     "share of the season on lengthening days: phenological timing, species whose flowering is triggered before the solstice",
     "this package; Koerner & Basler 2010")
   m <- matrix(x, ncol = 6, byrow = TRUE)
-  data.frame(index = m[, 1], group = m[, 2], meaning = m[, 3], unit = m[, 4],
-             relevance = m[, 5], reference = m[, 6],
+  tab <- data.frame(index = m[, 1], group = m[, 2], meaning = m[, 3],
+                    unit = m[, 4], relevance = m[, 5], reference = m[, 6],
+                    stringsAsFactors = FALSE)
+  tab <- rbind(tab, smooth_season_table(), bioclim_table(), terrain_table())
+  comp <- paste0("combines temperature and precipitation over a period ",
+                 "that switches between cells (artefacts; Booth 2022)")
+  tab$flag <- ifelse(tab$index %in% c("bio8", "bio9", "bio18", "bio19",
+                                      "sri", "synchronicity"), comp, "")
+  tab$source <- ifelse(tab$group == "terrain", "dem", "monthly")
+  rownames(tab) <- NULL
+  tab
+}
+
+# Package-level state (internal)
+.preenm_env <- new.env(parent = emptyenv())
+
+# Smooth seasonal indices (internal)
+smooth_season_table <- function() {
+  data.frame(
+    index = c("t_wet", "t_dry", "p_warm", "p_cold"),
+    group = "season",
+    meaning = c(
+      "mean temperature weighted by monthly precipitation (smooth bio8)",
+      "mean temperature weighted by monthly dryness, max(P) - P (smooth bio9)",
+      "precipitation weighted by monthly warmth, T - min(T), x 3 (smooth bio18)",
+      "precipitation weighted by monthly coldness, max(T) - T, x 3 (smooth bio19)"),
+    unit = c("degC", "degC", "mm/quarter", "mm/quarter"),
+    relevance = c(
+      "temperature when water is available: the contrast of bio8 without switching quarters",
+      "temperature of the dry season: the contrast of bio9 without switching quarters",
+      "rain in the warm season: the contrast of bio18 (and sri) without switching quarters",
+      "rain in the cold season: the contrast of bio19 without switching quarters"),
+    reference = "this package; after Booth 2022",
+    stringsAsFactors = FALSE)
+}
+
+# Bioclim variables (internal)
+bioclim_table <- function() {
+  m <- c(
+    "annual mean temperature", "degC",
+    "mean diurnal range: mean of monthly (Tmax - Tmin)", "degC",
+    "isothermality: bio2 / bio7 x 100", "%",
+    "temperature seasonality: SD of monthly means x 100", "degC x 100",
+    "maximum temperature of the warmest month", "degC",
+    "minimum temperature of the coldest month", "degC",
+    "temperature annual range: bio5 - bio6", "degC",
+    "mean temperature of the wettest quarter", "degC",
+    "mean temperature of the driest quarter", "degC",
+    "mean temperature of the warmest quarter", "degC",
+    "mean temperature of the coldest quarter", "degC",
+    "annual precipitation", "mm",
+    "precipitation of the wettest month", "mm",
+    "precipitation of the driest month", "mm",
+    "precipitation seasonality: CV of monthly (P + 1) x 100", "%",
+    "precipitation of the wettest quarter", "mm",
+    "precipitation of the driest quarter", "mm",
+    "precipitation of the warmest quarter", "mm",
+    "precipitation of the coldest quarter", "mm")
+  m <- matrix(m, ncol = 2, byrow = TRUE)
+  data.frame(index = paste0("bio", 1:19), group = "bioclim",
+             meaning = m[, 1], unit = m[, 2],
+             relevance = "the standard bioclimatic variables, computed from the same monthly layers",
+             reference = "Busby 1991; Hijmans et al. 2005; O'Donnell & Ignizio 2012",
              stringsAsFactors = FALSE)
+}
+
+# Terrain indices from an elevation raster, see topo_indices() (internal)
+terrain_table <- function() {
+  data.frame(
+    index = c("slope", "northness", "eastness", "tri", "tpi", "dev",
+              "twi", "hli"),
+    group = "terrain",
+    meaning = c(
+      "slope",
+      "northness: cos(aspect) x sin(slope), 0 on flat ground",
+      "eastness: sin(aspect) x sin(slope), 0 on flat ground",
+      "terrain ruggedness index (Riley): root of the summed squared differences to the 8 neighbours",
+      "topographic position index: elevation minus the mean within a radius (one layer per radius)",
+      "deviation from mean elevation: TPI / SD of elevation within the radius (scale-free TPI)",
+      "topographic wetness index: ln(specific catchment area / tan(slope)), D8 flow",
+      "heat load index: potential direct radiation from slope, aspect and latitude"),
+    unit = c("degrees", "-1 to 1", "-1 to 1", "m", "m", "-", "-", "-"),
+    relevance = c(
+      "drainage, soil depth, erosion; steep rocky habitats",
+      "cool, moist north-facing (south-facing in the south) slopes against warm, dry ones",
+      "morning against afternoon sun",
+      "habitat heterogeneity, rock outcrops, shelter",
+      "ridges and convex slopes (positive) against valleys and hollows (negative); cold-air pools",
+      "position relative to local relief, comparable between flat and mountainous terrain",
+      "water accumulation: wetlands, moist valley floors, drought refugia",
+      "warm and cold slopes: microclimate of plants and ectotherms"),
+    reference = c(
+      "Horn 1981", "this package; after Guisan et al. 1999",
+      "this package; after Guisan et al. 1999", "Riley et al. 1999",
+      "Weiss 2001; Guisan et al. 1999", "De Reu et al. 2013",
+      "Beven & Kirkby 1979", "McCune & Keon 2002"),
+    stringsAsFactors = FALSE)
 }
 
 # Index names from names, group names or "all" (internal)
 expand_indices <- function(indices) {
   tab <- climate_index_table()
-  if (identical(indices, "all")) return(tab$index)
+  # "all": every index computed from monthly climate, without the flagged
+  if (identical(indices, "all")) {
+    return(tab$index[tab$source == "monthly" & !nzchar(tab$flag)])
+  }
   bad <- setdiff(indices, c(tab$index, tab$group))
   if (length(bad)) {
     stop("Unknown index: ", paste(bad, collapse = ", "), ". Available: ",
          paste(tab$index, collapse = ", "), "; or a group: ",
          paste(unique(tab$group), collapse = ", "), call. = FALSE)
   }
-  tab$index[tab$index %in% indices | tab$group %in% indices]
+  # a group brings its unflagged members; flagged ones only by name
+  tab$index[tab$index %in% indices |
+              (tab$group %in% indices & !nzchar(tab$flag))]
 }
 
 # Middle day of each month (day of the year), as in FAO-56

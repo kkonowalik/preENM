@@ -25,7 +25,9 @@ test_that("flat ground has no aspect: northness and eastness are 0", {
   terra::values(f) <- 50
   ti <- topo_indices(f, indices = c("northness", "eastness"))
   v <- terra::values(ti)
-  expect_true(all(v[stats::complete.cases(v), ] == 0))
+  v <- v[stats::complete.cases(v), , drop = FALSE]
+  expect_gt(nrow(v), 0)
+  expect_equal(max(abs(v)), 0, tolerance = 1e-12)
 })
 
 test_that("TPI and DEV are 0 on a plane and known for a single peak", {

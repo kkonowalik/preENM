@@ -170,13 +170,15 @@ topo_indices <- function(dem, indices = "all", radius = c(3, 10),
   if (any(c("northness", "eastness", "hli") %in% indices)) {
     asp <- terra::terrain(dem, "aspect", unit = "degrees")
     asp <- terra::ifel(is.na(asp) & !is.na(slp), 0, asp)
+    # flat ground (slope 0 up to rounding): no aspect
+    sin_s <- terra::ifel(slp < 1e-6, 0, sin(slp * deg))
   }
   if ("slope" %in% indices) make("slope", slp)
   if ("northness" %in% indices) {
-    make("northness", cos(asp * deg) * sin(slp * deg))
+    make("northness", cos(asp * deg) * sin_s)
   }
   if ("eastness" %in% indices) {
-    make("eastness", sin(asp * deg) * sin(slp * deg))
+    make("eastness", sin(asp * deg) * sin_s)
   }
   if ("tri" %in% indices) make("tri", terra::terrain(dem, "TRIriley"))
   if (any(c("tpi", "dev") %in% indices)) {

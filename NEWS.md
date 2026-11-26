@@ -1,3 +1,22 @@
+# preENM 2.40.0
+
+* `m_simulate()` gains `past`, `periods` and `span_ka`: the "changing
+  framework" of Machado-Stredel et al. (2021), a glacial cycle of climatic
+  scenarios interpolated between the present and a glacial climate (5, 10,
+  5 and 10 thousand years by default), with extinction where a scenario is
+  unsuitable and dispersal over cells that had values only in the past
+  (land bridges); M is the accessed cells with values today, and the
+  report counts the others and the replicates in which the species went
+  extinct. Without `past` the simulation is unchanged.
+* `sample_background(method = "aggregation")`: the aggregation background
+  of Xu et al. (2024, *Ecological Informatics* 81, 102604), which weights
+  cells by the kernel density of the presences in environmental space,
+  each presence weighted by the inverse of its geographic distance
+  (`aggregation_k`, `aggregation_r_km`; `aggregation_k = 0` gives their
+  similarity background). Uses the existing `presences` argument.
+* `m_simulate()` and raster barriers on another grid: fixed the grid
+  comparison (`terra::compareGeom(stopOnError = FALSE)`).
+
 # preENM 2.39.0
 
 The calibration area beyond geometry (Machado-Stredel et al. 2021,

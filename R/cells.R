@@ -172,6 +172,20 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #'   bins of `"enveffort"`: every occupied bin keeps the same total
 #'   probability and the target density decides within it (bins without
 #'   target records are not sampled unless `target_floor > 0`).
+#' * `"aggregation"`: the "aggregation background" of Xu et al. (2024),
+#'   which estimates the sampling bias from the presences themselves, for
+#'   when no target group is available: each cell is weighted by the
+#'   kernel density of the presences on each standardised layer
+#'   (bandwidth `sd * (4 / (3 n))^0.2`), each presence weighted by
+#'   `1 / d^aggregation_k`, `d` its geographic distance from the cell (with
+#'   `aggregation_r_km`, default one cell, added to avoid division by 0);
+#'   the densities are averaged over the layers and rescaled to 0-1. With
+#'   `aggregation_k = 0` only environmental similarity counts (their
+#'   "similarity background"). It outperformed the target-group background
+#'   in their simulations and spatial filtering with up to about 70
+#'   presences; it puts background where presences are dense in both
+#'   spaces, so read the models for overcompensation as with any bias
+#'   correction.
 #'
 #' No method is best for every species and data set; compare the
 #' backgrounds on the same hold-out folds (and independent records, if you
@@ -211,10 +225,15 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #'   without target records are never drawn when the bandwidth is 0).
 #' @param target_observer Name of the observer column (e.g. `recordedBy`)
 #'   in `target` and `presences`, for observer weighting.
-#' @param presences Records of your species, with the observer column, for
-#'   the observer weights.
+#' @param presences Records of your species: with the observer column, for
+#'   the observer weights of `"target_group"`; their coordinates, for
+#'   `"aggregation"`.
 #' @param target_stratify Combine the target density with the environmental
 #'   bins (as `"enveffort"` does with `effort`).
+#' @param aggregation_k,aggregation_r_km For `"aggregation"`: the exponent
+#'   of the geographic distance weighting (1 = aggregation background, 0 =
+#'   similarity background) and the distance (km) added to it (default:
+#'   one cell).
 #' @param env_pool Size of the random pool of cells for the weighted methods.
 #' @param env_cumvar,env_axes PCs used for the bins: those explaining
 #'   `env_cumvar` of the variance, or exactly `env_axes` PCs.
@@ -235,6 +254,11 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 #'   density estimation of background points allow for sampling bias
 #'   correction in bird species distribution models. *Ecography* 2025,
 #'   e08202. \doi{10.1002/ecog.08202}
+#'
+#'   Xu, Q., Wang, X., Yi, J., Wang, Y. (2024) Bias correction in species
+#'   distribution models based on geographic and environmental
+#'   characteristics. *Ecological Informatics* 81, 102604.
+#'   \doi{10.1016/j.ecoinf.2024.102604}
 #' @export
 #' @examples
 #' r <- terra::rast(nrows = 20, ncols = 20, xmin = 0, xmax = 10, ymin = 40,
@@ -251,12 +275,14 @@ thin_by_cell <- function(x, raster, by = "species", priority = NULL,
 sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
                               seed = NULL, crs = "EPSG:4326",
                               method = c("uniform", "envstrat", "effort",
-                                         "enveffort", "target_group"),
+                                         "enveffort", "target_group",
+                                         "aggregation"),
                               effort = NULL, effort_floor = 1,
                               effort_power = 1, target = NULL,
                               target_bandwidth_km = 0, target_floor = 0,
                               target_observer = NULL, presences = NULL,
-                              target_stratify = FALSE, env_pool = 1e6,
+                              target_stratify = FALSE, aggregation_k = 1,
+                              aggregation_r_km = NULL, env_pool = 1e6,
                               env_cumvar = 0.95, env_axes = NULL,
                               env_total_bins = 3000, env_min_bin = 5,
                               log_vars = NULL) {
@@ -264,6 +290,9 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
   r <- as_grid(raster)
   if (method %in% c("effort", "enveffort") && is.null(effort)) {
     stop("method = \"", method, "\" needs an `effort` raster.", call. = FALSE)
+  }
+  if (method == "aggregation" && is.null(presences)) {
+    stop("method = \"aggregation\" needs `presences`.", call. = FALSE)
   }
   if (method == "target_group" && is.null(target)) {
     stop("method = \"target_group\" needs `target`: records of the target ",
@@ -327,6 +356,12 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
       info$target$stratify <- target_stratify
       if (!target_stratify) bin <- NULL
     }
+    if (method == "aggregation") {
+      ag <- aggregation_weights(r, pool, presences, aggregation_k,
+                                aggregation_r_km, log_vars)
+      e <- ag$weight
+      info$aggregation <- ag$info
+    }
     stratified <- function(e) {
       tot <- stats::ave(e, bin, FUN = sum)
       ifelse(tot > 0, e / tot, 0) * pmin(1, cnt / env_min_bin)
@@ -335,7 +370,8 @@ sample_background <- function(raster, n = 10000, n_sets = 1, exclude = NULL,
       envstrat = 1 / pmax(cnt, env_min_bin),
       effort = e,
       enveffort = stratified(e),
-      target_group = if (target_stratify) stratified(e) else e)
+      target_group = if (target_stratify) stratified(e) else e,
+      aggregation = e)
     keep <- w > 0
     pool <- pool[keep]
     w <- w[keep]
@@ -431,6 +467,68 @@ target_density <- function(r, pool, target, bw_km, observer, presences) {
   list(density = dens,
        info = list(n_records = sum(cnt), bandwidth_km = bw_km,
                    observers = if (is.null(w_obs)) NULL else length(w_obs)))
+}
+
+# Weights of the aggregation background (Xu et al. 2024) at pool cells
+# (internal): for each layer (standardised), a Gaussian kernel density of
+# the presences with bandwidth sd_v * (4 / (3 n))^0.2, each presence
+# weighted by 1 / d^k (d = geographic distance + r); averaged over the
+# layers and rescaled to 0-1
+aggregation_weights <- function(r, pool, presences, k, r_km, log_vars) {
+  pp <- as_points(presences)
+  if (!terra::same.crs(pp, r)) pp <- terra::project(pp, r)
+  pc <- terra::cellFromXY(r, terra::crds(pp))
+  E <- env_at_cells(r, pc)
+  ok <- stats::complete.cases(E)
+  if (sum(ok) < 2) stop("Fewer than 2 presences with values in all layers.",
+                        call. = FALSE)
+  E <- E[ok, , drop = FALSE]
+  P <- read_cells(r, pool)
+  colnames(P) <- names(r)
+  lv <- if (is.null(log_vars)) default_log_vars(names(r)) else
+    intersect(log_vars, names(r))
+  P <- log_tf(pmax_cols(P, lv), lv)
+  E <- log_tf(pmax_cols(E, lv), lv)
+  mu <- colMeans(P, na.rm = TRUE)
+  sdv <- apply(P, 2, stats::sd, na.rm = TRUE)
+  sdv[!is.finite(sdv) | sdv == 0] <- 1
+  P <- sweep(sweep(P, 2, mu), 2, sdv, "/")
+  E <- sweep(sweep(E, 2, mu), 2, sdv, "/")
+  n <- nrow(E)
+  h <- apply(E, 2, stats::sd) * (4 / (3 * n))^0.2
+  h[!is.finite(h) | h <= 0] <- 0.1
+  geo <- terra::is.lonlat(r)
+  pxy <- terra::xyFromCell(r, pool)
+  exy <- terra::xyFromCell(r, pc[ok])
+  to_km <- function(xy) if (geo) km_space(xy[, 1], xy[, 2]) else xy / 1000
+  Pk <- to_km(pxy)
+  Ek <- to_km(exy)
+  if (is.null(r_km)) {
+    rs <- terra::res(r)
+    r_km <- if (geo) sqrt(rs[1] * 111.32 * cos(stats::median(exy[, 2]) *
+                                                 pi / 180) *
+                            rs[2] * 111.32) else sqrt(prod(rs)) / 1000
+  }
+  w <- numeric(length(pool))
+  step <- max(1, floor(2e6 / n))
+  for (s0 in seq(1, length(pool), by = step)) {
+    i <- s0:min(length(pool), s0 + step - 1)
+    # distances (km) between these cells and all presences
+    d <- sqrt(pmax(0, outer(rowSums(Pk[i, , drop = FALSE]^2),
+                            rowSums(Ek^2), "+") -
+                     2 * Pk[i, , drop = FALSE] %*% t(Ek)))
+    wd <- 1 / (d + r_km)^k
+    sv <- vapply(seq_len(ncol(P)), function(v) {
+      z <- outer(P[i, v], E[, v], "-")
+      rowSums(wd * exp(-z^2 / (2 * h[v]^2))) / (n * h[v] * sqrt(2 * pi))
+    }, numeric(length(i)))
+    w[i] <- rowMeans(matrix(sv, nrow = length(i)))
+  }
+  w[!is.finite(w)] <- 0
+  rng <- range(w)
+  w <- if (diff(rng) > 0) (w - rng[1]) / diff(rng) else rep(1, length(w))
+  list(weight = w, info = list(n_presences = n, k = k, r_km = r_km,
+                               bandwidth = h))
 }
 
 # Target-group records as coordinates in the raster's CRS with counts

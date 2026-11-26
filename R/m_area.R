@@ -875,9 +875,9 @@ inside_shares <- function(m) {
 #' M is the area that has been accessible to the species over a relevant
 #' period. Instead of drawing a hull or buffers around the records,
 #' `m_simulate()` simulates that history, following the method of
-#' Machado-Stredel et al. (2021) in a stable climate (their "stable
-#' framework"), which is conceptually closer to the definition of M than
-#' any geometry:
+#' Machado-Stredel et al. (2021), in a stable climate or through a glacial
+#' cycle (`past`), which is conceptually closer to the definition of M
+#' than any geometry:
 #'
 #' 1. **Niche.** An ellipsoid in the space of the first principal components
 #'    of the layers (those explaining `pc_cumvar` of the variance, at most
@@ -901,12 +901,27 @@ inside_shares <- function(m) {
 #'    accessed least often, form M. The cells of all records are always
 #'    added, and their number is reported.
 #'
+#' **Past climate** (their "changing framework"). With `past` (the same
+#' layers for a glacial period, e.g. the Last Glacial Maximum from
+#' CHELSA-TraCE21k), the simulation runs through a cycle of climatic
+#' scenarios of `span_ka` thousand years each: a transition from
+#' current-like to glacial conditions, a glacial period, a transition back
+#' and a current period (`periods`, in thousands of years; default 5, 10,
+#' 5 and 10, as in their paper). Transitional climates are weighted means
+#' of the two layers, projected with the PCA of the present, and each
+#' scenario lasts `n_events` events. Populations go extinct where a new
+#' scenario is unsuitable, so the records' areas may have been reached
+#' from refugia. Cells with values only in the past (e.g. shelves exposed
+#' at low sea level) are land while the glacial weight dominates and can
+#' carry dispersal; M itself is the accessed cells that have values today
+#' (the others are counted in the report).
+#'
 #' The simulation works on the whole grid, so it needs the layers in
 #' memory: grids with more than `max_cells` cells are first aggregated on
 #' disk (as in [grain_sensitivity()]). The kernel is in cells of the grid
 #' used, so choose `kernel_sd` and `n_events` together with the resolution:
 #' a disperser moves about `kernel_sd` cells per event, and M grows with
-#' both. Past climates (their "changing framework") are not simulated.
+#' both.
 #'
 #' The result can be compared with the other delimitations in
 #' [m_scenarios()] (`method = "simulation"` in [delimit_m()], with `env`).
@@ -924,15 +939,22 @@ inside_shares <- function(m) {
 #'   and event.
 #' @param niche_level Chi-squared quantile that bounds the niche ellipsoid.
 #' @param access_threshold Share of the least accessed cells left out of M.
+#' @param past Optional layers of a glacial climate with the names of
+#'   `env` (on its grid, or resampled to it), for a glacial cycle.
+#' @param periods Durations (thousands of years) of the transition to
+#'   glacial conditions, the glacial period, the transition back and the
+#'   current period.
+#' @param span_ka Duration of one climatic scenario (thousands of years).
 #' @param pc_cumvar,max_pc Principal components used for the niche.
 #' @param max_cells Largest grid simulated; larger grids are aggregated.
 #' @param coords,points_crs Coordinate columns and their CRS.
 #' @param seed Random seed.
 #' @return An object of class `m_simulation`: `m` (M as polygons, `sfc` in
 #'   the CRS of `env`), `access` (raster of the mean number of accesses),
-#'   `suitability` (the niche suitability), `m_raster` (1 in M), `report`
-#'   (records, starting records inside the niche, records added, cells and
-#'   area) and `settings`.
+#'   `suitability` (the niche suitability today), `m_raster` (1 in M),
+#'   `report` (records, starting records inside the niche, records added,
+#'   cells and area, cells accessed that have no values today, replicates
+#'   in which the species went extinct) and `settings`.
 #' @references Machado-Stredel, F., Cobos, M.E., Peterson, A.T. (2021) A
 #'   simulation-based method for selecting calibration areas for ecological
 #'   niche models and species distribution models. *Frontiers of
@@ -956,8 +978,12 @@ inside_shares <- function(m) {
 m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
                        n_events = 20, kernel_sd = 1, max_dispersers = 4,
                        niche_level = 0.95, access_threshold = 0.05,
-                       pc_cumvar = 0.95, max_pc = 3, max_cells = 2e6,
-                       coords = NULL, points_crs = "EPSG:4326", seed = 1) {
+                       past = NULL,
+                       periods = c(to_glacial = 5, glacial = 10,
+                                   to_current = 5, current = 10),
+                       span_ka = 1, pc_cumvar = 0.95, max_pc = 3,
+                       max_cells = 2e6, coords = NULL,
+                       points_crs = "EPSG:4326", seed = 1) {
   r <- as_grid(env)
   fact <- 1
   if (terra::ncell(r) > max_cells) {
@@ -970,12 +996,29 @@ m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
   nc <- terra::ncol(r)
   V <- terra::values(r)
   valid <- stats::complete.cases(V)
+  Pv <- NULL
+  if (!is.null(past)) {
+    P <- as_grid(past)
+    miss <- setdiff(names(r), names(P))
+    if (length(miss)) {
+      stop("`past` lacks layer(s) of `env`: ", paste(miss, collapse = ", "),
+           call. = FALSE)
+    }
+    P <- P[[names(r)]]
+    if (fact > 1) P <- aggregate_on_disk(P, fact, "average",
+                                         tempfile("preENM_msim_past"))
+    if (!terra::compareGeom(P, r, stopOnError = FALSE)) {
+      P <- terra::resample(P, r, method = "bilinear")
+    }
+    Pv <- terra::values(P)
+  }
+  bar <- rep(FALSE, nr * nc)
   if (!is.null(barrier)) {
     b <- if (inherits(barrier, "SpatRaster") || (is.character(barrier) &&
            grepl("\\.(tif|tiff|grd|asc|nc)$", barrier[1],
                  ignore.case = TRUE))) {
       br <- as_grid(barrier)[[1]]
-      if (!terra::compareGeom(br, r, stop = FALSE)) {
+      if (!terra::compareGeom(br, r, stopOnError = FALSE)) {
         br <- terra::resample(br, r, method = "near")
       }
       bv <- terra::values(br, mat = FALSE)
@@ -987,6 +1030,7 @@ m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
                           mat = FALSE)
       !is.na(bv)
     }
+    bar <- b
     valid <- valid & !b
   }
   # records
@@ -1023,19 +1067,67 @@ m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
   if (k == 1) cv <- matrix(cv, 1, 1)
   icv <- tryCatch(solve(cv), error = function(e) MASS_ginv(cv))
   limit <- stats::qchisq(niche_level, df = k)
-  S <- numeric(nr * nc)
-  for (s0 in seq(1, length(vc), by = 2e5)) {
-    i <- vc[s0:min(length(vc), s0 + 2e5 - 1)]
-    d <- sweep(scores(i), 2, ctr)
-    md2 <- rowSums((d %*% icv) * d)
-    S[i] <- ifelse(md2 <= limit, exp(-0.5 * md2), 0)
+  # suitability of every valid cell of a climate X (rows = cells); the
+  # past is projected with the current PCA, as in Machado-Stredel et al.
+  suit_of <- function(X, ok) {
+    out <- numeric(nr * nc)
+    idx <- which(ok)
+    for (s0 in seq(1, length(idx), by = 2e5)) {
+      i <- idx[s0:min(length(idx), s0 + 2e5 - 1)]
+      d <- sweep(stats::predict(pc, X[i, , drop = FALSE])[, seq_len(k),
+                                                          drop = FALSE],
+                 2, ctr)
+      md2 <- rowSums((d %*% icv) * d)
+      out[i] <- ifelse(md2 <= limit, exp(-0.5 * md2), 0)
+    }
+    out
   }
+  S <- suit_of(V, valid)
   start <- rec_ok[S[rec_ok] > 0]
   if (!length(start)) stop("No record lies inside the niche ellipsoid.",
                            call. = FALSE)
 
+  # climatic scenarios: the present only, or a glacial cycle interpolated
+  # between the present and `past` (weight of the present: 1 in current
+  # conditions, 0 in glacial ones), each kept for `n_events` events; a cell
+  # with values only in the past (e.g. an exposed shelf) is land when the
+  # weight of the past dominates, and vice versa
+  scen <- if (is.null(Pv)) {
+    list(list(w = 1, S = S, valid = valid))
+  } else {
+    need <- c("to_glacial", "glacial", "to_current", "current")
+    if (!all(need %in% names(periods))) {
+      stop("`periods` must be named ", paste(need, collapse = ", "), ".",
+           call. = FALSE)
+    }
+    nper <- round(periods[need] / span_ka)
+    nper[nper < 0] <- 0
+    wd <- c(rev(seq_len(nper[["to_glacial"]])) / (nper[["to_glacial"]] + 1),
+            rep(0, nper[["glacial"]]),
+            seq_len(nper[["to_current"]]) / (nper[["to_current"]] + 1),
+            rep(1, nper[["current"]]))
+    okc <- stats::complete.cases(V)
+    okp <- stats::complete.cases(Pv)
+    lapply(wd, function(w) {
+      X <- V
+      both <- okc & okp
+      X[both, ] <- w * V[both, ] + (1 - w) * Pv[both, ]
+      only_p <- okp & !okc
+      X[only_p, ] <- Pv[only_p, ]
+      ok <- (both | (only_p & w < 0.5) | (okc & !okp & w >= 0.5)) & !bar
+      St <- suit_of(X, ok)
+      list(w = w, idx = which(St > 0), val = St[St > 0], valid = ok)
+    })
+  }
+  s_of <- function(sc) {
+    if (!is.null(sc$S)) return(sc$S)
+    out <- numeric(nr * nc)
+    out[sc$idx] <- sc$val
+    out
+  }
+
   # dispersal
-  move <- function(cells, n) {
+  move <- function(cells, n, valid) {
     rc <- cbind((cells - 1) %/% nc + 1, (cells - 1) %% nc + 1)
     d <- stats::rnorm(n, 0, kernel_sd)
     a <- stats::runif(n, 0, 2 * pi)
@@ -1048,6 +1140,7 @@ m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
     out
   }
   Dsum <- numeric(nr * nc)
+  extinct <- 0L
   with_seed(seed, {
     for (rep_i in seq_len(n_rep)) {
       st <- start[sample.int(length(start), max(1, ceiling(length(start) /
@@ -1056,22 +1149,30 @@ m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
       col[st] <- TRUE
       D <- numeric(nr * nc)
       D[st] <- 1
-      for (ev in seq_len(n_events)) {
-        cl <- which(col)
-        nd <- pmin(max_dispersers, pmax(1, ceiling(S[cl] * max_dispersers)))
-        from <- rep(cl, nd)
-        to <- move(from, length(from))
-        to <- to[!is.na(to)]
-        if (!length(to)) next
-        tab <- tabulate(to, nbins = nr * nc)
-        D <- D + tab
-        col[to[S[to] > 0]] <- TRUE
+      for (sc in scen) {
+        St <- s_of(sc)
+        col[col & St <= 0] <- FALSE        # extinction where unsuitable
+        for (ev in seq_len(n_events)) {
+          cl <- which(col)
+          if (!length(cl)) break
+          nd <- pmin(max_dispersers, pmax(1, ceiling(St[cl] *
+                                                       max_dispersers)))
+          from <- rep(cl, nd)
+          to <- move(from, length(from), sc$valid)
+          to <- to[!is.na(to)]
+          if (!length(to)) next
+          D <- D + tabulate(to, nbins = nr * nc)
+          col[to[St[to] > 0]] <- TRUE
+        }
       }
+      if (!any(col)) extinct <- extinct + 1L
       Dsum <- Dsum + D
     }
   })
   Dm <- Dsum / n_rep
-  acc <- Dm > 0
+  # M is a calibration area for today: cells with present-day values
+  not_today <- sum(Dm > 0 & !valid)
+  acc <- Dm > 0 & valid
   thr <- stats::quantile(Dm[acc], access_threshold, names = FALSE)
   inM <- acc & Dm >= thr
   outside <- setdiff(unique(rec_cell), which(inM))
@@ -1096,8 +1197,13 @@ m_simulate <- function(points, env, barrier = NULL, n_rep = 10,
                         in_niche = length(start),
                         added_to_m = length(outside),
                         cells_accessed = sum(acc), cells_in_m = sum(inM),
-                        area_km2 = round(area)),
+                        area_km2 = round(area),
+                        accessed_not_today = not_today,
+                        extinct_replicates = extinct),
     settings = list(n_rep = n_rep, n_events = n_events,
+                    n_scenarios = length(scen), past = !is.null(Pv),
+                    periods = if (is.null(Pv)) NULL else periods,
+                    span_ka = span_ka,
                     kernel_sd = kernel_sd, max_dispersers = max_dispersers,
                     niche_level = niche_level,
                     access_threshold = access_threshold, n_pc = k,
@@ -1120,6 +1226,7 @@ print.m_simulation <- function(x, ...) {
   say <- function(txt) cat(strwrap(txt, width = 76, initial = "- ",
                                    exdent = 2), sep = "\n")
   cat("Simulated accessible area (M): ", s$n_rep, " replicates x ",
+      if (isTRUE(s$past)) paste0(s$n_scenarios, " climatic scenarios x "),
       s$n_events, " dispersal events, kernel SD ", s$kernel_sd,
       " cell(s)\n\nIN SHORT\n", sep = "")
   say(paste0("M covers ", formatC(rp$area_km2, format = "d", big.mark = " "),
@@ -1131,6 +1238,19 @@ print.m_simulation <- function(x, ...) {
              if (rp$records > rp$in_niche) paste0("; the other ",
                rp$records - rp$in_niche, " are outside it (extreme ",
                "conditions) and could not colonise") else "", "."))
+  if (isTRUE(s$past)) {
+    say(paste0("Simulated through a glacial cycle of ",
+               sum(s$periods), " thousand years (", s$n_scenarios,
+               " scenarios of ", s$span_ka, " ka).",
+               if (rp$extinct_replicates > 0) paste0(
+                 " The species went extinct in ", rp$extinct_replicates,
+                 " of ", s$n_rep, " replicates: the niche ellipsoid finds ",
+                 "no glacial refugium from those starting points.") else "",
+               if (rp$accessed_not_today > 0) paste0(
+                 " ", rp$accessed_not_today, " accessed cells have no ",
+                 "values today (e.g. shelves exposed at low sea level) and ",
+                 "are not part of M.") else ""))
+  }
   if (rp$added_to_m > 0) {
     say(paste0(rp$added_to_m, " record cell(s) were not reached by the ",
                "simulation and were added to M: consider more events, a ",
@@ -1144,7 +1264,8 @@ print.m_simulation <- function(x, ...) {
     "quantile; up to ", s$max_dispersers, " dispersers per cell and event",
     if (s$aggregated > 1) paste0("; grid aggregated by ", s$aggregated)
     else "", if (s$barrier) "; with barriers" else "",
-    ". Method of Machado-Stredel et al. (2021), stable climate."),
+    ". Method of Machado-Stredel et al. (2021), ",
+    if (isTRUE(s$past)) "glacial cycle." else "stable climate."),
     width = 76), sep = "\n")
   invisible(x)
 }

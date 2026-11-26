@@ -280,12 +280,24 @@ move over `n_events` steps with a normal kernel (`kernel_sd` cells), and
 the cells reached most often, without the 5% least accessed, form M. Cells
 without values and `barrier` polygons cannot be crossed, so M stops at a
 barrier wider than the kernel allows; the cells of all records are always
-added. The grid is aggregated on disk when it is very large, and only the
-stable-climate version of the method is implemented.
+added. The grid is aggregated on disk when it is very large.
+
+With `past` (the same layers for a glacial climate, e.g. the Last Glacial
+Maximum), the simulation runs through a glacial cycle, as in their
+"changing framework": a transition to glacial conditions, a glacial
+period, a transition back and a current period (5, 10, 5 and 10 thousand
+years by default, `periods`), in scenarios of 1 ka, each a weighted mean of
+the two climates projected with the present PCA. Populations go extinct
+where a new scenario is unsuitable; cells that had values only in the past
+(shelves exposed at low sea level) can carry dispersal while the glacial
+climate dominates, so land bridges are crossed. M is the accessed cells
+with values today.
 
 ```r
 ms <- m_simulate(occ, env_region, barrier = "mountain_ranges.gpkg",
                  kernel_sd = 2, n_events = 30)
+ms_lgm <- m_simulate(occ, env_region, past = env_lgm,   # glacial cycle
+                     kernel_sd = 2, n_events = 5)
 ms; plot(ms)
 sc <- m_scenarios(occ, scenarios = list(
   delaunay = list(),
@@ -665,7 +677,7 @@ subset (e.g. one lineage) in exactly the same space.
 
 ### 9. Background strategies and recording effort
 
-`sample_background(method = ...)` offers five ways to draw background
+`sample_background(method = ...)` offers six ways to draw background
 points (each with `n_sets` reproducible sets):
 
 | `method` | Background | Use |
@@ -675,6 +687,7 @@ points (each with `n_sets` reproducible sets):
 | `"effort"` | cells weighted by recording effort | like a target-group background: corrects the sampling bias of presences |
 | `"enveffort"` | environmental bins with equal weight, effort-weighted cells within each bin | both corrections at once |
 | `"target_group"` | cells weighted by the records of a target group (genus, family, ... recorded by the same people), raw or kernel-smoothed, optionally weighted by observer and stratified by environment | the dominant bias correction; see below |
+| `"aggregation"` | cells weighted by how densely the presences themselves cluster around them in environmental and geographic space (Xu et al. 2024) | bias correction without a target group; see below |
 
 No strategy is best for every species: which one gives the most
 transferable models depends on how biased the records are and on how the
@@ -743,6 +756,21 @@ bg <- sample_background(env, n = 10000, method = "target_group",
   PW-OOA method, the best when checked against independent data).
 - `target_stratify = TRUE` combines the target density with the
   environmental bins of `"enveffort"`.
+
+**Aggregation background.** Without a target group, the sampling bias can
+be estimated from the presences themselves. `method = "aggregation"`
+weights each cell by the kernel density of the presences on each
+standardised layer, each presence weighted by the inverse of its
+geographic distance (`aggregation_k = 1`; `0` uses the environment only,
+their "similarity background"), averaged over the layers (Xu et al. 2024,
+*Ecological Informatics* 81, 102604). In their simulations it was more
+accurate than the target-group background, and better than spatial
+filtering with up to about 70 presences:
+
+```r
+bg <- sample_background(env, n = 10000, method = "aggregation",
+                        presences = pres, seed = 123)
+```
 
 **How many background points?** The number and the spread of background
 points change presence-background models in a species-dependent way

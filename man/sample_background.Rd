@@ -11,7 +11,7 @@ sample_background(
   exclude = NULL,
   seed = NULL,
   crs = "EPSG:4326",
-  method = c("uniform", "envstrat", "effort", "enveffort", "target_group"),
+  method = c("uniform", "envstrat", "effort", "enveffort", "target_group", "aggregation"),
   effort = NULL,
   effort_floor = 1,
   effort_power = 1,
@@ -21,6 +21,8 @@ sample_background(
   target_observer = NULL,
   presences = NULL,
   target_stratify = FALSE,
+  aggregation_k = 1,
+  aggregation_r_km = NULL,
   env_pool = 1e+06,
   env_cumvar = 0.95,
   env_axes = NULL,
@@ -74,11 +76,17 @@ without target records are never drawn when the bandwidth is 0).}
 \item{target_observer}{Name of the observer column (e.g. \code{recordedBy})
 in \code{target} and \code{presences}, for observer weighting.}
 
-\item{presences}{Records of your species, with the observer column, for
-the observer weights.}
+\item{presences}{Records of your species: with the observer column, for
+the observer weights of \code{"target_group"}; their coordinates, for
+\code{"aggregation"}.}
 
 \item{target_stratify}{Combine the target density with the environmental
 bins (as \code{"enveffort"} does with \code{effort}).}
+
+\item{aggregation_k, aggregation_r_km}{For \code{"aggregation"}: the exponent
+of the geographic distance weighting (1 = aggregation background, 0 =
+similarity background) and the distance (km) added to it (default:
+one cell).}
 
 \item{env_pool}{Size of the random pool of cells for the weighted methods.}
 
@@ -145,6 +153,20 @@ et al. (2025), which was best when checked against independent data.
 bins of \code{"enveffort"}: every occupied bin keeps the same total
 probability and the target density decides within it (bins without
 target records are not sampled unless \code{target_floor > 0}).
+\item \code{"aggregation"}: the "aggregation background" of Xu et al. (2024),
+which estimates the sampling bias from the presences themselves, for
+when no target group is available: each cell is weighted by the
+kernel density of the presences on each standardised layer
+(bandwidth \verb{sd * (4 / (3 n))^0.2}), each presence weighted by
+\code{1 / d^aggregation_k}, \code{d} its geographic distance from the cell (with
+\code{aggregation_r_km}, default one cell, added to avoid division by 0);
+the densities are averaged over the layers and rescaled to 0-1. With
+\code{aggregation_k = 0} only environmental similarity counts (their
+"similarity background"). It outperformed the target-group background
+in their simulations and spatial filtering with up to about 70
+presences; it puts background where presences are dense in both
+spaces, so read the models for overcompensation as with any bias
+correction.
 }
 
 No method is best for every species and data set; compare the
@@ -179,4 +201,9 @@ Rocchini, D., Simova, P. (2025) Species-observer link and kernel
 density estimation of background points allow for sampling bias
 correction in bird species distribution models. \emph{Ecography} 2025,
 e08202. \doi{10.1002/ecog.08202}
+
+Xu, Q., Wang, X., Yi, J., Wang, Y. (2024) Bias correction in species
+distribution models based on geographic and environmental
+characteristics. \emph{Ecological Informatics} 81, 102604.
+\doi{10.1016/j.ecoinf.2024.102604}
 }

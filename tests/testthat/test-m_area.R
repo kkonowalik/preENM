@@ -349,3 +349,52 @@ test_that("m_availability() flags a truncated and a skewed predictor", {
   rp <- m_report(mm, env = env)
   expect_s3_class(attr(rp, "availability"), "m_availability")
 })
+
+test_that("m_simulate() with past climate: land bridges and extinction", {
+  # two land masses separated by 2 degrees of sea today; in the past the
+  # gap was land (an exposed shelf)
+  r <- terra::rast(nrows = 40, ncols = 80, xmin = 0, xmax = 8, ymin = 44,
+                   ymax = 48, crs = "EPSG:4326")
+  set.seed(5)
+  now <- c(terra::rast(r, vals = stats::rnorm(terra::ncell(r), 0, 0.1)),
+           terra::rast(r, vals = stats::rnorm(terra::ncell(r), 0, 0.1)))
+  names(now) <- c("a", "b")
+  past <- now
+  xs <- terra::xFromCell(r, seq_len(terra::ncell(r)))
+  now[xs > 3 & xs < 5] <- NA
+  pts <- data.frame(lon = stats::runif(30, 0.5, 2.5),
+                    lat = stats::runif(30, 44.5, 47.5))
+  stable <- m_simulate(pts, now, n_rep = 3, n_events = 30, kernel_sd = 3,
+                       seed = 1)
+  expect_lt(sf::st_bbox(sf::st_transform(stable$m, 4326))[["xmax"]], 3.1)
+  cyc <- m_simulate(pts, now, past = past, n_rep = 3, n_events = 3,
+                    kernel_sd = 3, seed = 1)
+  expect_gt(sf::st_bbox(sf::st_transform(cyc$m, 4326))[["xmax"]], 5)
+  expect_gt(cyc$report$accessed_not_today, 0)
+  expect_equal(cyc$settings$n_scenarios, 30)
+  # M is today's land only
+  expect_false(any(!is.na(terra::extract(
+    cyc$m_raster, cbind(4, 46))[[1]])))
+  expect_output(print(cyc), "glacial cycle")
+  # a glacial climate far outside the niche: extinction in every replicate
+  cold <- now - 10
+  names(cold) <- names(now)
+  ext <- m_simulate(pts, now, past = cold, n_rep = 3, n_events = 2,
+                    kernel_sd = 1, seed = 1)
+  expect_equal(ext$report$extinct_replicates, 3)
+  expect_error(m_simulate(pts, now, past = cold[[1]]), "lacks")
+})
+
+test_that("m_simulate() takes a raster barrier on another grid", {
+  env <- sim_landscape()
+  set.seed(2)
+  pts <- data.frame(lon = stats::runif(30, 1, 3), lat = stats::runif(30, 46,
+                                                                      48))
+  br <- terra::rast(nrows = 12, ncols = 18, xmin = 0, xmax = 9, ymin = 44,
+                    ymax = 50, crs = "EPSG:4326", vals = 0)
+  xs <- terra::xFromCell(br, seq_len(terra::ncell(br)))
+  br[xs > 4 & xs < 5.5] <- 1
+  ms <- m_simulate(pts, env, barrier = br, n_rep = 3, n_events = 40,
+                   kernel_sd = 1, seed = 1)
+  expect_lte(sf::st_bbox(sf::st_transform(ms$m, 4326))[["xmax"]], 4 + 1e-6)
+})

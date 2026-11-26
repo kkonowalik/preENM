@@ -14,6 +14,9 @@ m_simulate(
   max_dispersers = 4,
   niche_level = 0.95,
   access_threshold = 0.05,
+  past = NULL,
+  periods = c(to_glacial = 5, glacial = 10, to_current = 5, current = 10),
+  span_ka = 1,
   pc_cumvar = 0.95,
   max_pc = 3,
   max_cells = 2e+06,
@@ -44,6 +47,15 @@ and event.}
 
 \item{access_threshold}{Share of the least accessed cells left out of M.}
 
+\item{past}{Optional layers of a glacial climate with the names of
+\code{env} (on its grid, or resampled to it), for a glacial cycle.}
+
+\item{periods}{Durations (thousands of years) of the transition to
+glacial conditions, the glacial period, the transition back and the
+current period.}
+
+\item{span_ka}{Duration of one climatic scenario (thousands of years).}
+
 \item{pc_cumvar, max_pc}{Principal components used for the niche.}
 
 \item{max_cells}{Largest grid simulated; larger grids are aggregated.}
@@ -55,17 +67,18 @@ and event.}
 \value{
 An object of class \code{m_simulation}: \code{m} (M as polygons, \code{sfc} in
 the CRS of \code{env}), \code{access} (raster of the mean number of accesses),
-\code{suitability} (the niche suitability), \code{m_raster} (1 in M), \code{report}
-(records, starting records inside the niche, records added, cells and
-area) and \code{settings}.
+\code{suitability} (the niche suitability today), \code{m_raster} (1 in M),
+\code{report} (records, starting records inside the niche, records added,
+cells and area, cells accessed that have no values today, replicates
+in which the species went extinct) and \code{settings}.
 }
 \description{
 M is the area that has been accessible to the species over a relevant
 period. Instead of drawing a hull or buffers around the records,
 \code{m_simulate()} simulates that history, following the method of
-Machado-Stredel et al. (2021) in a stable climate (their "stable
-framework"), which is conceptually closer to the definition of M than
-any geometry:
+Machado-Stredel et al. (2021), in a stable climate or through a glacial
+cycle (\code{past}), which is conceptually closer to the definition of M
+than any geometry:
 }
 \details{
 \enumerate{
@@ -92,12 +105,27 @@ accessed least often, form M. The cells of all records are always
 added, and their number is reported.
 }
 
+\strong{Past climate} (their "changing framework"). With \code{past} (the same
+layers for a glacial period, e.g. the Last Glacial Maximum from
+CHELSA-TraCE21k), the simulation runs through a cycle of climatic
+scenarios of \code{span_ka} thousand years each: a transition from
+current-like to glacial conditions, a glacial period, a transition back
+and a current period (\code{periods}, in thousands of years; default 5, 10,
+5 and 10, as in their paper). Transitional climates are weighted means
+of the two layers, projected with the PCA of the present, and each
+scenario lasts \code{n_events} events. Populations go extinct where a new
+scenario is unsuitable, so the records' areas may have been reached
+from refugia. Cells with values only in the past (e.g. shelves exposed
+at low sea level) are land while the glacial weight dominates and can
+carry dispersal; M itself is the accessed cells that have values today
+(the others are counted in the report).
+
 The simulation works on the whole grid, so it needs the layers in
 memory: grids with more than \code{max_cells} cells are first aggregated on
 disk (as in \code{\link[=grain_sensitivity]{grain_sensitivity()}}). The kernel is in cells of the grid
 used, so choose \code{kernel_sd} and \code{n_events} together with the resolution:
 a disperser moves about \code{kernel_sd} cells per event, and M grows with
-both. Past climates (their "changing framework") are not simulated.
+both.
 
 The result can be compared with the other delimitations in
 \code{\link[=m_scenarios]{m_scenarios()}} (\code{method = "simulation"} in \code{\link[=delimit_m]{delimit_m()}}, with \code{env}).

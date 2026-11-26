@@ -190,3 +190,31 @@ test_that("target density can be stratified by environment", {
   expect_true("bin" %in% names(bg))
   expect_true(attr(bg, "background")$target$stratify)
 })
+
+test_that("aggregation background follows the presences in both spaces", {
+  sim <- simulate_enm_data(seed = 1, n_presence = 60)
+  pres <- sim$presence[sim$presence$lon < 17, ]
+  bg <- suppressMessages(sample_background(sim$env, n = 500,
+                                           method = "aggregation",
+                                           presences = pres, seed = 1))
+  u <- suppressMessages(sample_background(sim$env, n = 500, seed = 1))
+  expect_gt(mean(bg$lon < 17), 2 * mean(u$lon < 17))
+  expect_equal(attr(bg, "background")$aggregation$k, 1)
+  expect_error(sample_background(sim$env, n = 10, method = "aggregation"),
+               "presences")
+  # k = 0: the weight depends on the environment only, so cells with the
+  # same values get the same weight wherever they are
+  r <- terra::rast(nrows = 10, ncols = 20, xmin = 0, xmax = 20, ymin = 40,
+                   ymax = 50, crs = "EPSG:4326")
+  v <- rep(c(1, 2), each = 100)           # north half 1, south half 2
+  env <- c(terra::rast(r, vals = v), terra::rast(r, vals = v))
+  names(env) <- c("a", "b")
+  pres2 <- data.frame(lon = c(1.5, 2.5, 3.5), lat = c(48.5, 48.5, 47.5))
+  cells <- terra::cellFromXY(r, cbind(c(1.5, 18.5), c(49.5, 49.5)))
+  w0 <- aggregation_weights(env, cells, pres2, k = 0, r_km = NULL,
+                            log_vars = character(0))$weight
+  expect_equal(w0[1], w0[2])
+  w1 <- aggregation_weights(env, cells, pres2, k = 1, r_km = NULL,
+                            log_vars = character(0))$weight
+  expect_gt(w1[1], w1[2])                 # nearer the presences
+})

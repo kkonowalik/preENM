@@ -9,7 +9,8 @@
 #' * [delimit_m()], [linking_distance()], [m_scenarios()], [plot_m_area()],
 #'   [write_m_area()], [crop_to_m()]: the accessible area (M); compare
 #'   several with [m_scenarios()] as a matter of course.
-#' * [m_simulate()]: M by simulated dispersal; [m_minimal()]: the smallest
+#' * [m_simulate()]: M by simulated dispersal, in a stable climate or
+#'   through a glacial cycle; [m_minimal()]: the smallest
 #'   extent whose environment has stabilised; [m_availability()],
 #'   [plot_m_availability()]: how evenly M offers the records' conditions.
 #' * [crop_rasters()]: cut folders of raster files to M, keeping values exact.
@@ -52,7 +53,8 @@
 #'   thinning in environmental space without truncating the niche.
 #' * [sample_background()]: background points, uniform, stratified in
 #'   environmental space, by recording effort, or both, or a target-group
-#'   background (raw, kernel-smoothed, observer-weighted); effort layers
+#'   background (raw, kernel-smoothed, observer-weighted), or an
+#'   aggregation background from the presences themselves; effort layers
 #'   and target-group records from GBIF with [gbif_effort_sql()],
 #'   [gbif_target_group_sql()], [download_gbif_effort()] and
 #'   [gbif_effort_rasters()].

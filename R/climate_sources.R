@@ -499,8 +499,9 @@ print.climate_source_compare <- function(x, digits = 2, ...) {
 #' @param source Products shown in the map and scatter views (default: all
 #'   but the reference).
 #' @param base_size Base font size.
-#' @param file Optional file name(s) to save the figure (see
-#'   [save_figure()]).
+#' @param file Optional file(s) to save the plot to, e.g. `"fig.pdf"` or
+#'   `c("fig.png", "fig.pdf")`; the format follows the extension, and a
+#'   name without extension is saved as PNG and PDF.
 #' @param width,height Figure size in inches when saving.
 #' @return A ggplot object.
 #' @seealso [climate_source_compare()]

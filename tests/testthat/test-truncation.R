@@ -71,3 +71,90 @@ test_that("projections beyond a truncated end are flagged", {
   expect_error(niche_truncation(occ[1:5, ], env, coords = c("x", "y"),
                                 points_crs = "EPSG:3035"), "Fewer than 10")
 })
+
+# A temperature gradient west-east and a north-south gradient; the species
+# occupies temp 6-14 (lon 6-14) and lat 46-50 (not truncated)
+remedy_fixture <- function() {
+  r <- terra::rast(nrows = 60, ncols = 200, xmin = 0, xmax = 20, ymin = 45,
+                   ymax = 51, crs = "EPSG:4326")
+  xy <- terra::crds(r, na.rm = FALSE)
+  set.seed(1)
+  env <- c(terra::rast(r, vals = xy[, 1] + stats::rnorm(nrow(xy), 0, 0.1)),
+           terra::rast(r, vals = xy[, 2] + stats::rnorm(nrow(xy), 0, 0.1)))
+  names(env) <- c("temp", "north")
+  pres <- data.frame(lon = stats::runif(300, 6, 14),
+                     lat = stats::runif(300, 46, 50))
+  list(r = r, xy = xy, env = env, pres = pres)
+}
+box <- function(x0, x1) {
+  sf::st_sfc(sf::st_polygon(list(rbind(c(x0, 45), c(x1, 45), c(x1, 51),
+                                       c(x0, 51), c(x0, 45)))), crs = 4326)
+}
+
+test_that("a truncated niche is extended towards the missing conditions", {
+  f <- remedy_fixture()
+  m <- box(2, 10)                         # M cuts the range at lon 10
+  p <- f$pres[f$pres$lon < 10, ]
+  tr <- niche_truncation(p, crop_to_m(f$env, m))
+  rem <- truncation_remedy(tr, p, f$env, m)
+  e <- rem$ends
+  expect_equal(e$layer, "temp")           # the right variable ...
+  expect_equal(e$end, "high")             # ... and direction
+  expect_equal(rem$remedy, "extend")
+  expect_lte(rem$extension$increase, 3)
+  # the proposed extent contains the missing range of temperature
+  ext <- terra::vect(sf::st_transform(rem$extension$extent, 4326))
+  v <- terra::values(terra::mask(terra::crop(f$env[["temp"]], ext), ext))
+  # every quarter of the missing band is represented in it
+  brk <- seq(e$band_lo, e$band_hi, length.out = 5)
+  part <- cut(v[!is.na(v) & v > e$band_lo & v <= e$band_hi], brk)
+  expect_true(all(table(part) >= 5))
+  # and grows only eastwards
+  bb <- sf::st_bbox(sf::st_transform(rem$extension$extent, 4326))
+  expect_gte(bb[["xmin"]], 2 - 1e-6)
+  expect_gt(bb[["xmax"]], 10.5)
+  expect_output(print(rem), "Extend the calibration area")
+  expect_s3_class(plot_truncation_remedy(rem), "ggplot")
+  out <- write_truncation_remedy(rem, tempfile())
+  expect_true(all(file.exists(out)))
+  expect_equal(nrow(utils::read.csv(out[["child"]])), nrow(p))
+})
+
+test_that("distant conditions point to donor regions; absent ones to accept", {
+  f <- remedy_fixture()
+  m <- box(2, 10)
+  p <- f$pres[f$pres$lon < 10, ]
+  tr <- niche_truncation(p, crop_to_m(f$env, m))
+  # warm conditions only far east, beyond a cold gap
+  e2 <- f$env
+  v <- terra::values(e2[["temp"]])[, 1]
+  x <- f$xy[, 1]
+  v[x > 10 & x < 16] <- 1
+  v[x >= 16] <- x[x >= 16] - 6
+  terra::values(e2[["temp"]]) <- v
+  rem <- truncation_remedy(tr, p, e2, m)
+  expect_equal(rem$remedy, "donors")
+  expect_gt(rem$donors$distance_km[1], 300)
+  expect_match(rem$donors$supplies[1], "temp high")
+  expect_s3_class(rem$donor_cells, "sf")
+  expect_output(print(rem), "Integrate donor regions")
+  # nowhere warmer than M: accept
+  e3 <- f$env
+  v3 <- terra::values(e3[["temp"]])[, 1]
+  v3[x > 10] <- 2
+  terra::values(e3[["temp"]]) <- v3
+  rem3 <- truncation_remedy(tr, p, e3, m)
+  expect_equal(rem3$remedy, "accept")
+  expect_output(print(rem3), "Accept the truncation")
+})
+
+test_that("an untruncated niche needs no remedy", {
+  f <- remedy_fixture()
+  m <- box(0, 20)
+  tr <- niche_truncation(f$pres, crop_to_m(f$env, m))
+  rem <- truncation_remedy(tr, f$pres, f$env, m)
+  expect_equal(rem$remedy, "none")
+  expect_equal(nrow(rem$ends), 0)
+  expect_output(print(rem), "no remedy is needed")
+  expect_error(plot_truncation_remedy(rem), "nothing")
+})

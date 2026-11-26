@@ -68,6 +68,12 @@ coverage_levels <- c("filled", "elsewhere, available", "elsewhere, absent",
 #' [classify_points()] shows how much of the region is in that situation.
 #' This assumes no strong local adaptation of the regional populations.
 #'
+#' **Related.** [niche_truncation()] detects truncation from the records of
+#' the region alone (do they crowd against the limits of M?);
+#' [truncation_remedy()] then locates the missing conditions (adjacent to
+#' the region or in donor regions) and prepares the parent and child
+#' datasets of a nested model.
+#'
 #' **Memory.** Values are read only at the records and at `n` random
 #' locations in the region, so large (e.g. global 30 arc-second) layers can
 #' be used.
@@ -149,6 +155,7 @@ coverage_levels <- c("filled", "elsewhere, available", "elsewhere, absent",
 #'   distributions in Britain: a hierarchical integration of climate and
 #'   land-cover data. *Ecography* 27, 285-298.
 #' @seealso [plot_niche_coverage()], [classify_points()],
+#'   [truncation_remedy()],
 #'   [unfilled_records()], [niche_truncation()]
 #' @export
 #' @examples

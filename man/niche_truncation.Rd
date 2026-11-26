@@ -82,6 +82,13 @@ The flags are a screening aid, not a test: a species may truly live up
 to the edge of M because M ends at a coast or a mountain crest. Records
 concentrated near an edge because of sampling bias inflate \verb{edge_*};
 run it on thinned records (\code{\link[=thin_by_cell]{thin_by_cell()}}, \code{\link[=thin_environment]{thin_environment()}}).
+
+\strong{What next.} \code{\link[=truncation_remedy]{truncation_remedy()}} takes this result and layers
+extending beyond M, and proposes what to do: extend M towards the
+missing conditions, look for records in donor regions, or accept the
+truncation; it also prepares the datasets of a spatially nested model.
+With records of the whole range, \code{\link[=niche_coverage]{niche_coverage()}} measures how much of
+the niche a region misses.
 }
 \examples{
 sim <- simulate_enm_data(seed = 1, n_presence = 150)
@@ -103,5 +110,6 @@ projections of species distribution. \emph{Ecological Applications} 31,
 e02427.
 }
 \seealso{
-\code{\link[=plot_niche_truncation]{plot_niche_truncation()}}
+\code{\link[=plot_niche_truncation]{plot_niche_truncation()}}, \code{\link[=truncation_remedy]{truncation_remedy()}},
+\code{\link[=niche_coverage]{niche_coverage()}}
 }

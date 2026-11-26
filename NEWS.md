@@ -1,3 +1,26 @@
+# preENM 2.41.0
+
+Acting on a truncated niche (Chevalier et al. 2021, *Ecological
+Applications* 31, e02427; Goicolea et al. 2025, *Ecography* e07328;
+Rousseau & Betts 2022, *Ecography* e06060; Liu et al. 2022, *Ecology* 103,
+e3719; Nguyen & Leung 2022, *Global Ecology and Biogeography* 31,
+1051-1065):
+
+* `truncation_remedy()`: from a `niche_truncation()` result, the records,
+  layers reaching beyond M and M itself, finds for each truncated end the
+  missing conditions (a band beyond M's limit with the other variables in
+  the records' range), proposes an extension of M towards them and reports
+  how much larger it is, finds donor regions where they occur farther
+  away, and advises per end: extend M when the conditions are adjacent,
+  integrate donor regions when they are not, accept the truncation when
+  they occur nowhere in the layers. It also prepares the parent (whole
+  range, coarser) and child (M) datasets of a spatially nested model.
+* `plot_truncation_remedy()` maps M, the extension and the donor regions;
+  `write_truncation_remedy()` writes the parent and child records, the
+  extents and a README of the nested workflow.
+* `niche_truncation()` and `niche_coverage()` point to each other and to
+  `truncation_remedy()`.
+
 # preENM 2.40.0
 
 * `m_simulate()` gains `past`, `periods` and `span_ka`: the "changing

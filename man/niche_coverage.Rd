@@ -155,6 +155,12 @@ predicts losses there that the whole-range model does not.
 \code{\link[=classify_points]{classify_points()}} shows how much of the region is in that situation.
 This assumes no strong local adaptation of the regional populations.
 
+\strong{Related.} \code{\link[=niche_truncation]{niche_truncation()}} detects truncation from the records of
+the region alone (do they crowd against the limits of M?);
+\code{\link[=truncation_remedy]{truncation_remedy()}} then locates the missing conditions (adjacent to
+the region or in donor regions) and prepares the parent and child
+datasets of a nested model.
+
 \strong{Memory.} Values are read only at the records and at \code{n} random
 locations in the region, so large (e.g. global 30 arc-second) layers can
 be used.
@@ -203,5 +209,6 @@ land-cover data. \emph{Ecography} 27, 285-298.
 }
 \seealso{
 \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}, \code{\link[=classify_points]{classify_points()}},
+\code{\link[=truncation_remedy]{truncation_remedy()}},
 \code{\link[=unfilled_records]{unfilled_records()}}, \code{\link[=niche_truncation]{niche_truncation()}}
 }

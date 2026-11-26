@@ -26,6 +26,10 @@
 #'   into the models.
 #' * [niche_truncation()], [plot_niche_truncation()]: is the niche cut off
 #'   by the calibration area, and do projections go beyond it?
+#' * [truncation_remedy()], [plot_truncation_remedy()],
+#'   [write_truncation_remedy()]: what to do about a truncated niche
+#'   (extend M, donor regions, or accept) and the datasets of a spatially
+#'   nested model.
 #' * [niche_coverage()], [plot_niche_coverage()], [classify_points()],
 #'   [unfilled_records()]: how much of a widespread species' niche a region
 #'   of interest contains; is a nested (hierarchical) model needed, and

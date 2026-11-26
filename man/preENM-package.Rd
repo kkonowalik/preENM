@@ -33,6 +33,10 @@ datasets with records moved within their uncertainty, to propagate it
 into the models.
 \item \code{\link[=niche_truncation]{niche_truncation()}}, \code{\link[=plot_niche_truncation]{plot_niche_truncation()}}: is the niche cut off
 by the calibration area, and do projections go beyond it?
+\item \code{\link[=truncation_remedy]{truncation_remedy()}}, \code{\link[=plot_truncation_remedy]{plot_truncation_remedy()}},
+\code{\link[=write_truncation_remedy]{write_truncation_remedy()}}: what to do about a truncated niche
+(extend M, donor regions, or accept) and the datasets of a spatially
+nested model.
 \item \code{\link[=niche_coverage]{niche_coverage()}}, \code{\link[=plot_niche_coverage]{plot_niche_coverage()}}, \code{\link[=classify_points]{classify_points()}},
 \code{\link[=unfilled_records]{unfilled_records()}}: how much of a widespread species' niche a region
 of interest contains; is a nested (hierarchical) model needed, and

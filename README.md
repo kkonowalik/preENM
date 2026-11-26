@@ -43,7 +43,7 @@ step can be used on its own.
 | Before | [8](#8-environmental-thinning) | **Environmental thinning** (without truncating the niche) | `thin_environment()`, `plot_env_thinning()`, `write_env_thinning()` |
 | Before | [9](#9-background-strategies-and-recording-effort) | **Background strategies and recording effort**, target-group background, how many background points | `sample_background(method = ...)`, `gbif_effort_sql()`, `gbif_target_group_sql()`, `download_gbif_effort()`, `gbif_effort_rasters()`, `background_sufficiency()`, `plot_background_sufficiency()` |
 | Before | [10](#10-which-bias-correction-sensitivity-of-the-data-design) | **Bias-correction sensitivity** (thinning method and radius, background strategy and size: records kept, environmental coverage against random removal, spatial clustering, niche kept, background coverage and overlap) | `bias_sensitivity()`, `plot_bias_sensitivity()` |
-| Before | [11](#11-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()`, `classify_points()`, `unfilled_records()` |
+| Before | [11](#11-checking-that-the-niche-is-not-truncated-by-m) | **Niche truncation check** (is M large enough? is a nested model needed?) and **what to do about it** (extend M, donor regions, nested datasets) | `niche_truncation()`, `plot_niche_truncation()`, `niche_coverage()`, `plot_niche_coverage()`, `classify_points()`, `unfilled_records()`, `truncation_remedy()`, `plot_truncation_remedy()`, `write_truncation_remedy()` |
 | Before | [12](#12-selecting-predictor-variables-across-periods-and-regions) | **Correlation analysis and variable selection** (across periods, scenarios and regions) | `sample_environment()`, `select_variables()`, `best_sets()`, `recommend_sets()`, `correlation_by_region()`, `plot_variable_tree()`, `plot_correlation()`, `plot_variable_sets()`, `write_variable_selection()` |
 | Before | [13](#13-are-the-selected-predictors-better-than-random-variables) | **Predictors against random variables** | `variable_relevance()`, `random_variables()`, `compare_to_random()` |
 | Before | [14](#14-does-the-design-depend-on-the-grain) | **Grain sensitivity** (records kept, records too uncertain, correlation structure and the selected variable set at coarser grains) | `grain_sensitivity()`, `plot_grain_sensitivity()`, `write_grain_sensitivity()` |
@@ -1001,6 +1001,43 @@ New values must be in the units of the layers used in `niche_coverage()`;
 points that land far beyond the whole range in the niche space, or
 variables with a median far from that of the records (e.g. Kelvin against
 degrees Celsius), give a warning.
+
+**Acting on truncation.** Ignoring truncation is costly: models lose
+accuracy when transferred over distance and with extrapolation (Rousseau &
+Betts 2022, *Ecography* e06060), when the niche has changed (Liu et al.
+2022, *Ecology* 103, e3719), and in invaded ranges (Nguyen & Leung 2022,
+*Global Ecology and Biogeography* 31, 1051-1065). `truncation_remedy()`
+takes the result of `niche_truncation()`, the records, layers that reach
+beyond M and M itself, and proposes a remedy for each truncated end:
+
+- **Extend M** when the missing conditions are adjacent: the band of
+  conditions just beyond M's limit (a quarter of M's range, with the other
+  variables within the records' range) begins next to M, and a modest
+  extension towards it (at most three times M's area) samples every part
+  of the band. The printout says how far and how much larger.
+- **Integrate donor regions** when the conditions occur only farther away:
+  regions where they do, with their distance and the ends they supply, so
+  that you can look for records there and combine the data (Chevalier et
+  al. 2021, *Ecological Applications* 31, e02427).
+- **Accept the truncation**, and state it, when the conditions occur
+  nowhere in the layers (e.g. only in a future climate): projections into
+  them extrapolate.
+
+It also prepares a spatially nested design: a *parent* dataset (records of
+the whole range, `parent_records`, within the extended extent and the donor
+regions, to be modelled at a coarser resolution with climatic variables) and
+a *child* dataset (the records in M at full resolution). Fit the parent
+first, project it onto the child's grid, and use the projection as a
+covariate of the child model, or multiply the two predictions (geometric
+mean); the covariate strategy was the more accurate (Goicolea et al. 2025).
+
+```r
+rem <- truncation_remedy(tr, occ, env_europe, m,
+                         parent_records = gbif_whole_range)
+rem                                  # remedy per truncated end, in plain words
+plot_truncation_remedy(rem)          # M, the extension, the donor regions
+write_truncation_remedy(rem, "nested")   # parent/child CSV, extents, README
+```
 
 ### 12. Selecting predictor variables across periods and regions
 

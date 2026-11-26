@@ -93,6 +93,10 @@ passing, Pareto and top sets), \code{reference_sets}, \code{consistency} (the tw
 \code{agreement} data sets compared per variable), \code{structure_agreement}
 (similarity of the correlation structure between data sets), \code{tree},
 \code{rho} and \code{regional_rho}.
+\strong{Flagged variables.} A top-ranked set containing a composite
+variable flagged in \code{\link[=climate_index_names]{climate_index_names()}} (bio8, bio9, bio18, bio19,
+\code{sri}, \code{synchronicity}: temperature and precipitation over a period that
+switches between cells) gives a warning (Booth 2022).
 }
 \description{
 A systematic, transparent alternative to picking predictors by hand from a
@@ -152,6 +156,11 @@ vs <- select_variables(es, sizes = 2:3)
 best_sets(vs)
 }
 \references{
+Booth, T.H. (2022) Checking bioclimatic variables that
+combine temperature and precipitation data before their use in species
+distribution models. \emph{Austral Ecology} 47, 1506-1514.
+\doi{10.1111/aec.13234}
+
 Elith, J., Kearney, M., Phillips, S. (2010) The art of
 modelling range-shifting species. \emph{Methods in Ecology and Evolution} 1,
 330-342. \doi{10.1111/j.2041-210X.2010.00036.x}

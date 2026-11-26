@@ -4,7 +4,13 @@
 \alias{climate_index_names}
 \title{Names of the climate indices, by group}
 \usage{
-climate_index_names(groups = NULL, drop = NULL, table = FALSE)
+climate_index_names(
+  groups = NULL,
+  drop = NULL,
+  table = FALSE,
+  flagged = FALSE,
+  source = NULL
+)
 }
 \arguments{
 \item{groups}{Groups to return (default: all).}

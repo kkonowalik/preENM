@@ -2811,7 +2811,7 @@ od <- odmap_table(filter = res, m = m, thinning = th, records = occ_final,
 ```
 
 ## Citation
-The package is still under development. You can use it but some functions may be upgraded or added in near future. Therefore we do not have a formal publication desribing the package. But if you wish to use it, especially if you use the model-selection method, please cite the paper
+The package is still under development. You can use it but some functions may be upgraded or added in near future. Therefore we do not have a formal publication desribing the package yet. But if you wish to use it, especially if you use the model-selection method, please cite the paper
 (`citation("preENM")`):
 
 > Konowalik, K., Nosol, A. (2021). Evaluation metrics and validation of

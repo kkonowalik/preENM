@@ -1634,7 +1634,7 @@ One finding of the paper was that **AUC and MAE used together** are a reliable
 way to compare models (Figure 6 in the paper). AUC measures how well a model
 *ranks* presences above absences. MAE measures how *close* the predicted
 suitability values are to what was observed. A model can have an excellent
-AUC and still be badly calibrated, and MAE reveals this.
+AUC and still be badly calibrated, and MAE reveals this (see section 18 as well).
 
 On top of this, the package offers:
 

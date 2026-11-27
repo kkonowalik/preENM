@@ -1,3 +1,21 @@
+# preENM 2.43.0
+
+Soil predictors (Roe et al. 2022, *Journal of Biogeography* 49, 753-766;
+Poggio et al. 2021, *SOIL* 7, 217-240):
+
+* `download_soilgrids()`: SoilGrids 2.0 layers (pH, organic carbon,
+  nitrogen, CEC, clay, sand, silt; bulk density, coarse fragments and
+  organic carbon density on request) for a region only, at any of the six
+  depth intervals (top 5 cm by default) and as the mean, median, 5% or 95%
+  quantile or uncertainty. Values are converted to conventional units, the
+  C:N ratio is added, and the depth to bedrock comes from SoilGrids 2017.
+  With `template` the layers are warped onto the climate grid by
+  averaging. The server is checked first; failed layers give a warning
+  and are fetched again on the next run.
+* The layers form the `soil` group of `climate_index_names(table = TRUE)`
+  (`source = "soilgrids"`); `climate_indices()` points to
+  `download_soilgrids()` when asked for them.
+
 # preENM 2.42.0
 
 Three additions to the predictor layer (Booth 2022, *Austral Ecology* 47,

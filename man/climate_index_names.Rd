@@ -24,7 +24,8 @@ index instead of the names.}
 \item{flagged}{Include the flagged composite variables?}
 
 \item{source}{\code{"monthly"} for indices of \code{\link[=climate_indices]{climate_indices()}}, \code{"dem"}
-for those of \code{\link[=topo_indices]{topo_indices()}}, or \code{NULL} (both).}
+for those of \code{\link[=topo_indices]{topo_indices()}}, \code{"soilgrids"} for the layers of
+\code{\link[=download_soilgrids]{download_soilgrids()}}, or \code{NULL} (all).}
 }
 \value{
 A character vector of index names, or a data.frame.
@@ -43,6 +44,7 @@ all of them, those of some groups, or all but some.
    \code{light} \tab \code{ra}, \code{ra_gs}, \code{daylength_start}, \code{daylength_end}, \code{daylength_gs}, \code{daylight_gs}, \code{daylength_max}, \code{days_to_solstice} \cr
    \code{bioclim} \tab \code{bio1} to \code{bio19}; flagged: \code{bio8}, \code{bio9}, \code{bio18}, \code{bio19} \cr
    \code{terrain} \tab \code{slope}, \code{northness}, \code{eastness}, \code{tri}, \code{tpi}, \code{dev}, \code{twi}, \code{hli}: from an elevation raster with \code{\link[=topo_indices]{topo_indices()}} \cr
+   \code{soil} \tab \code{phh2o}, \code{soc}, \code{nitrogen}, \code{cn}, \code{cec}, \code{clay}, \code{sand}, \code{silt}, \code{bdod}, \code{cfvo}, \code{ocd}, \code{bedrock_depth}: from SoilGrids with \code{\link[=download_soilgrids]{download_soilgrids()}} \cr
 }
 
 

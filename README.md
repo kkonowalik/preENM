@@ -36,7 +36,7 @@ step can be used on its own.
 | Before | [1](#1-point-filtering) | **Name matching and point filtering** (especially GBIF) | `read_gbif()`, `match_names()`, `filter_occurrences()`, `filter_settings()`, `filter_layers()` |
 | Before | [2](#2-accessible-area-m) | **Accessible area (M)** | `linking_distance()`, `delimit_m()` (incl. spatially adaptive buffers and simulated dispersal), `m_scenarios()` (the default practice), `m_simulate()`, `m_minimal()`, `m_availability()`, `plot_m_area()`, `m_report()`, `write_m_area()`, `crop_to_m()` |
 | Before | [3](#3-cutting-raster-files-to-m) | **Cutting raster files to M** | `crop_rasters()`, `crop_to_m()` |
-| Before | [4](#4-computing-derived-climate-and-terrain-variables) | **Derived climate and terrain variables** (indices of water balance, heat, cold, season and light, the 19 bioclim variables with the composite ones flagged and smooth substitutes; terrain indices from a DEM; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()`, `topo_indices()` |
+| Before | [4](#4-computing-derived-climate-terrain-and-soil-variables) | **Derived climate, terrain and soil variables** (indices of water balance, heat, cold, season and light, the 19 bioclim variables with the composite ones flagged and smooth substitutes; terrain indices from a DEM; SoilGrids soil layers for a region; present, future and past) | `download_chelsa_monthly()`, `download_chelsa_trace21k()`, `monthly_files()`, `climate_indices()`, `climate_index_names()`, `topo_indices()`, `download_soilgrids()` |
 | Before | [4](#which-climate-product-comparing-sources-before-choosing-one) | **Comparing climate products** at the records and across M (agreement, correlation, offset, distributions, collinearity structure, map of disagreement) | `climate_source_compare()`, `plot_climate_sources()`, `write_climate_sources()` |
 | Before | [5](#5-checks-before-modelling) | **Checks** (sample size, record years vs climate period) | `check_sample_size()`, `match_climate_period()` |
 | Before | [6](#6-imprecise-records-keep-propagate-or-drop) | **Coordinate uncertainty in environmental terms**: keep, propagate (replicate datasets jittered within each record's uncertainty) or drop | `uncertainty_environment()`, `jitter_uncertainty()`, `plot_jitter()`, `write_jitter()` |
@@ -356,7 +356,7 @@ up to 0.95 deg C. `crop_rasters()` keeps the raw values, the data type, the
 scale/offset and NoData, on exactly the input grid (nothing is resampled). For
 a single raster in memory, `crop_to_m()` is enough.
 
-### 4. Computing derived climate and terrain variables
+### 4. Computing derived climate, terrain and soil variables
 
 Bioclimatic variables describe temperature and precipitation, but not the
 water balance, the heat and cold stress, the length of the season or the
@@ -517,6 +517,40 @@ Compared with `terra::terrain()`, `topo_indices()` adds:
 The TWI needs the whole DEM in memory, so it stops above `max_cells`
 (clip or aggregate the DEM first). The other indices are computed in
 blocks and can be written straight to disk.
+
+#### Soil variables
+
+Soil is missing from climate grids, yet for plants it can matter as much
+as topography: in-situ soil chemistry (B-horizon C:N, exchangeable
+calcium) predicted forest understorey plants as well as topographic
+variables did (Roe et al. 2022, *Journal of Biogeography* 49, 753–766).
+`download_soilgrids()` fetches the mapped counterparts from SoilGrids 2.0
+(Poggio et al. 2021, about 250 m): pH, organic carbon, nitrogen, CEC,
+clay, sand and silt by default, plus bulk density, coarse fragments and
+organic carbon density on request. It adds the C:N ratio and the depth to
+bedrock from SoilGrids 2017 (Shangguan et al. 2017; not mapped in
+SoilGrids 2.0). As with the CHELSA download, only your region is read from
+the global files. Values are converted to the usual units (pH, g/kg, %,
+cmol(c)/kg).
+
+```r
+# top 5 cm (the default), on its own 250 m grid
+soil <- download_soilgrids("soil", extent = c(5, 30, 45, 56))
+# 5-15 cm, warped onto the climate grid (averaging the 250 m cells)
+soil <- download_soilgrids("soil", depth = "5-15cm",
+                           template = "chelsa/CHELSA_bio1_1981-2010_V.2.1.tif")
+climate_index_names("soil", table = TRUE)   # meanings, units, sources
+```
+
+SoilGrids maps six depth intervals: 0–5, 5–15, 15–30, 30–60, 60–100 and
+100–200 cm. The top one or two suit most plants. The layers are
+themselves predictions with large uncertainty where soil profiles are
+few: download `stat = "Q0.05"` and `"Q0.95"`, or `"uncertainty"`, to see
+where. Exchangeable cations, the strongest soil predictors in Roe et al.,
+are not mapped, and pH is a poor indicator of fertility in acidic soils,
+so C:N and CEC are worth keeping alongside it. If the server cannot be
+reached, the function stops with an explanation; layers already
+downloaded are kept, and an interrupted run continues where it stopped.
 
 **1. Get the monthly files.** They can be downloaded automatically from
 CHELSA V2.1 (no account needed). With `extent`, only your region is read

@@ -29,6 +29,9 @@ replaced by smooth substitutes; see \code{\link[=climate_index_names]{climate_in
 monthly climatologies of the present, the future or the past.
 \item \code{\link[=topo_indices]{topo_indices()}}: terrain predictors from an elevation raster (slope,
 northness, eastness, TRI, TPI and DEV at several radii, TWI, HLI).
+\item \code{\link[=download_soilgrids]{download_soilgrids()}}: SoilGrids soil layers (pH, organic carbon,
+nitrogen, C:N, CEC, texture, depth to bedrock) for a region and depth,
+optionally on the grid of the climate layers.
 \item \code{\link[=climate_source_compare]{climate_source_compare()}}, \code{\link[=plot_climate_sources]{plot_climate_sources()}},
 \code{\link[=write_climate_sources]{write_climate_sources()}}: how much two or more climate products
 disagree at the records and across M, before choosing one.

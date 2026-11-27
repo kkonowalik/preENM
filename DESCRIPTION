@@ -2,7 +2,7 @@ Package: preENM
 Type: Package
 Title: Data Preparation and Model Selection for Ecological Niche and Species
     Distribution Models
-Version: 2.42.0
+Version: 2.43.0
 Authors@R:
     person("Kamil", "Konowalik", role = c("aut", "cre", "cph"),
            email = "kamil.konowalik@gmail.com")
@@ -36,7 +36,8 @@ Description: Tools for the steps around fitting ecological niche models /
     download of 'CHELSA' and 'CHELSA-TraCE21k' data for a region; terrain
     predictors from an elevation model (slope, northness, eastness,
     ruggedness, topographic position at several radii, wetness and heat
-    load); comparison of climate products at the records and across the
+    load); soil layers from 'SoilGrids' for a region and depth, on the
+    climate grid; comparison of climate products at the records and across the
     accessible area before choosing one; selection of
     predictor variables uncorrelated in every period, scenario and region,
     ranked by transferability; sensitivity of records kept, coordinate

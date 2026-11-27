@@ -493,6 +493,11 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
     stop("Terrain indices (", paste(dem, collapse = ", "), ") come from an ",
          "elevation raster: use topo_indices().", call. = FALSE)
   }
+  soil <- intersect(indices, tab$index[tab$source == "soilgrids"])
+  if (length(soil)) {
+    stop("Soil layers (", paste(soil, collapse = ", "), ") come from ",
+         "SoilGrids: use download_soilgrids().", call. = FALSE)
+  }
   fl <- intersect(indices, tab$index[nzchar(tab$flag)])
   if (length(fl)) {
     message("Computing flagged variable(s) ", paste(fl, collapse = ", "),
@@ -743,6 +748,7 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
 #' | `light` | `ra`, `ra_gs`, `daylength_start`, `daylength_end`, `daylength_gs`, `daylight_gs`, `daylength_max`, `days_to_solstice` |
 #' | `bioclim` | `bio1` to `bio19`; flagged: `bio8`, `bio9`, `bio18`, `bio19` |
 #' | `terrain` | `slope`, `northness`, `eastness`, `tri`, `tpi`, `dev`, `twi`, `hli`: from an elevation raster with [topo_indices()] |
+#' | `soil` | `phh2o`, `soc`, `nitrogen`, `cn`, `cec`, `clay`, `sand`, `silt`, `bdod`, `cfvo`, `ocd`, `bedrock_depth`: from SoilGrids with [download_soilgrids()] |
 #'
 #' **Flagged variables.** bio8, bio9, bio18 and bio19 combine temperature
 #' and precipitation over a quarter chosen anew in every cell; where two
@@ -763,7 +769,8 @@ climate_indices <- function(tmax, tmin, prec, tmean = NULL,
 #'   index instead of the names.
 #' @param flagged Include the flagged composite variables?
 #' @param source `"monthly"` for indices of [climate_indices()], `"dem"`
-#'   for those of [topo_indices()], or `NULL` (both).
+#'   for those of [topo_indices()], `"soilgrids"` for the layers of
+#'   [download_soilgrids()], or `NULL` (all).
 #' @return A character vector of index names, or a data.frame.
 #' @references Booth, T.H. (2022) Checking bioclimatic variables that
 #'   combine temperature and precipitation data before their use in species
@@ -781,7 +788,7 @@ climate_index_names <- function(groups = NULL, drop = NULL, table = FALSE,
                                 flagged = FALSE, source = NULL) {
   tab <- climate_index_table()
   if (!is.null(source)) {
-    source <- match.arg(source, c("monthly", "dem"))
+    source <- match.arg(source, c("monthly", "dem", "soilgrids"))
     tab <- tab[tab$source == source, , drop = FALSE]
   }
   known <- unique(tab$group)
@@ -971,12 +978,14 @@ climate_index_table <- function() {
   tab <- data.frame(index = m[, 1], group = m[, 2], meaning = m[, 3],
                     unit = m[, 4], relevance = m[, 5], reference = m[, 6],
                     stringsAsFactors = FALSE)
-  tab <- rbind(tab, smooth_season_table(), bioclim_table(), terrain_table())
+  tab <- rbind(tab, smooth_season_table(), bioclim_table(), terrain_table(),
+               soil_table())
   comp <- paste0("combines temperature and precipitation over a period ",
                  "that switches between cells (artefacts; Booth 2022)")
   tab$flag <- ifelse(tab$index %in% c("bio8", "bio9", "bio18", "bio19",
                                       "sri", "synchronicity"), comp, "")
-  tab$source <- ifelse(tab$group == "terrain", "dem", "monthly")
+  tab$source <- ifelse(tab$group == "terrain", "dem",
+                       ifelse(tab$group == "soil", "soilgrids", "monthly"))
   rownames(tab) <- NULL
   tab
 }
@@ -1065,6 +1074,39 @@ terrain_table <- function() {
       "this package; after Guisan et al. 1999", "Riley et al. 1999",
       "Weiss 2001; Guisan et al. 1999", "De Reu et al. 2013",
       "Beven & Kirkby 1979", "McCune & Keon 2002"),
+    stringsAsFactors = FALSE)
+}
+
+# Soil layers of download_soilgrids() (internal)
+soil_table <- function() {
+  data.frame(
+    index = c("phh2o", "soc", "nitrogen", "cn", "cec", "clay", "sand",
+              "silt", "bdod", "cfvo", "ocd", "bedrock_depth"),
+    group = "soil",
+    meaning = c(
+      "soil pH in water", "soil organic carbon", "total nitrogen",
+      "carbon to nitrogen ratio, soc / nitrogen",
+      "cation exchange capacity at pH 7", "clay content", "sand content",
+      "silt content", "bulk density of the fine earth",
+      "coarse fragments (> 2 mm)", "organic carbon density",
+      "absolute depth to bedrock"),
+    unit = c("pH", "g/kg", "g/kg", "-", "cmol(c)/kg", "%", "%", "%",
+             "kg/dm3", "vol%", "kg/m3", "cm"),
+    relevance = c(
+      "calcicole against calcifuge plants; nutrient availability",
+      "humus and fertility; peat and forest soils",
+      "nitrogen supply: nitrophilous plants",
+      "fertility and litter quality; low C:N = fast nutrient turnover",
+      "capacity to hold nutrient cations: fertility beyond pH",
+      "water holding and drainage; heavy soils",
+      "drainage and drought; sand and dune specialists",
+      "water holding; loess soils",
+      "compaction and rooting", "stony and shallow soils, scree",
+      "carbon stock per volume",
+      "rooting depth and water storage; rock outcrops"),
+    reference = c(rep("Poggio et al. 2021", 3),
+                  "Poggio et al. 2021; Roe et al. 2022",
+                  rep("Poggio et al. 2021", 7), "Shangguan et al. 2017"),
     stringsAsFactors = FALSE)
 }
 
